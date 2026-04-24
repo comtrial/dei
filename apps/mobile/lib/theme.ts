@@ -1,0 +1,71 @@
+import { DarkTheme, DefaultTheme, type Theme } from '@react-navigation/native';
+
+export const THEME = {
+  light: {
+    background: 'hsl(0 0% 100%)',
+    foreground: 'hsl(200 9% 10%)',
+    card: 'hsl(0 0% 100%)',
+    cardForeground: 'hsl(200 9% 10%)',
+    popover: 'hsl(0 0% 100%)',
+    popoverForeground: 'hsl(200 9% 10%)',
+    primary: 'hsl(193 82% 34%)',
+    primaryForeground: 'hsl(0 0% 100%)',
+    secondary: 'hsl(200 6% 90%)',
+    secondaryForeground: 'hsl(200 9% 10%)',
+    muted: 'hsl(200 6% 90%)',
+    mutedForeground: 'hsl(200 4% 46%)',
+    accent: 'hsl(200 6% 90%)',
+    accentForeground: 'hsl(200 9% 10%)',
+    destructive: 'hsl(0 84% 60%)',
+    border: 'hsl(200 6% 90%)',
+    input: 'hsl(200 6% 90%)',
+    ring: 'hsl(193 82% 34%)',
+    radius: '0.5rem',
+  },
+  dark: {
+    background: 'hsl(200 6% 9%)',
+    foreground: 'hsl(200 6% 93%)',
+    card: 'hsl(200 6% 9%)',
+    cardForeground: 'hsl(200 6% 93%)',
+    popover: 'hsl(200 6% 9%)',
+    popoverForeground: 'hsl(200 6% 93%)',
+    primary: 'hsl(0 0% 100%)',
+    primaryForeground: 'hsl(200 9% 10%)',
+    secondary: 'hsl(200 4% 26%)',
+    secondaryForeground: 'hsl(200 6% 93%)',
+    muted: 'hsl(200 4% 26%)',
+    mutedForeground: 'hsl(200 4% 64%)',
+    accent: 'hsl(200 4% 26%)',
+    accentForeground: 'hsl(200 6% 93%)',
+    destructive: 'hsl(0 72% 51%)',
+    border: 'hsl(200 4% 26%)',
+    input: 'hsl(200 4% 26%)',
+    ring: 'hsl(0 0% 100%)',
+    radius: '0.5rem',
+  },
+};
+
+export const NAV_THEME: Record<'light' | 'dark', Theme> = {
+  light: {
+    ...DefaultTheme,
+    colors: {
+      background: THEME.light.background,
+      border: THEME.light.border,
+      card: THEME.light.card,
+      notification: THEME.light.destructive,
+      primary: THEME.light.primary,
+      text: THEME.light.foreground,
+    },
+  },
+  dark: {
+    ...DarkTheme,
+    colors: {
+      background: THEME.dark.background,
+      border: THEME.dark.border,
+      card: THEME.dark.card,
+      notification: THEME.dark.destructive,
+      primary: THEME.dark.primary,
+      text: THEME.dark.foreground,
+    },
+  },
+};
