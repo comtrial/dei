@@ -13,7 +13,7 @@
     "db:gen-types": "supabase gen types typescript --local > packages/api/src/database.types.ts"
   },
   "devDependencies": {
-    "eas-cli": "^18.8.1",
+    "supabase": "^2.95.2",
     "turbo": "^2.9.6",
     "typescript": "^5.9.3"
   }

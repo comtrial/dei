@@ -6,6 +6,7 @@ dist/
 *.log
 .DS_Store
 .turbo/
+.codex-setup/
 
 # Supabase
 supabase/.branches
