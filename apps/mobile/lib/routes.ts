@@ -12,7 +12,10 @@ export const ROUTES = {
   profile: '/profile',
   firstVideo: '/first-video',
   videoReview: '/video-review',
+  home: '/home',
   discovery: '/discovery',
+  record: '/record',
+  result: '/result',
   matches: '/matches',
   messages: '/messages',
   settings: '/settings',
@@ -24,7 +27,10 @@ export type Eligibility =
   Database['public']['Functions']['get_my_eligibility']['Returns'][number];
 
 const APP_ROUTES = new Set<string>([
+  ROUTES.home,
   ROUTES.discovery,
+  ROUTES.record,
+  ROUTES.result,
   ROUTES.matches,
   ROUTES.messages,
   ROUTES.settings,
@@ -70,7 +76,7 @@ export const routeForEligibility = (eligibility: Eligibility): AppRoute => {
     case 'video_review':
       return ROUTES.videoReview;
     case 'complete':
-      return ROUTES.discovery;
+      return ROUTES.home;
     default:
       return ROUTES.terms;
   }
