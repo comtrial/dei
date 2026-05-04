@@ -1,0 +1,6 @@
+# Maestro project config.
+# Run locally:   pnpm --filter mobile test:e2e
+# Run a single:  maestro test apps/mobile/.maestro/flows/sign-in.yaml
+#
+# Cloud (CI):    EAS Build → Maestro Cloud, see .github/workflows/e2e.yml
+appId: com.comtrial.dei

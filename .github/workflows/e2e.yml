@@ -1,0 +1,38 @@
+name: E2E (Maestro)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  maestro-cloud:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'needs-e2e') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+
+      # Build a development client suitable for Maestro to drive.
+      # Requires EXPO_TOKEN secret.
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: EAS build (preview)
+        working-directory: apps/mobile
+        run: eas build --platform android --profile preview --non-interactive --wait
+        env:
+          EAS_BUILD_AUTOCOMMIT: 1
+
+      - name: Upload to Maestro Cloud
+        uses: mobile-dev-inc/action-maestro-cloud@v1
+        with:
+          api-key: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+          app-file: apps/mobile/build/app.apk
+          workspace: apps/mobile/.maestro

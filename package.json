@@ -7,14 +7,22 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:integration": "turbo test:integration",
+    "test:e2e": "turbo test:e2e",
+    "smoke:sentry": "tsx apps/mobile/scripts/smoke-sentry.ts",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:gen-types": "supabase gen types typescript --local > packages/api/src/database.types.ts"
   },
   "devDependencies": {
+    "@sentry/node": "^8.45.0",
+    "@vitest/coverage-v8": "^2.1.8",
     "supabase": "^2.95.2",
+    "tsx": "^4.19.2",
     "turbo": "^2.9.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.8"
   }
 }

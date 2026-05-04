@@ -31,6 +31,10 @@ dei/
 | `pnpm dev` | 전체 워크스페이스 dev 서버 |
 | `pnpm build` | 전체 빌드 |
 | `pnpm lint` | 전체 린트 |
+| `pnpm test` | 단위 + 컴포넌트 테스트 (Vitest + Jest) |
+| `pnpm test:integration` | 로컬 Supabase 띄우고 통합 테스트 |
+| `pnpm test:e2e` | Maestro E2E 시나리오 |
+| `pnpm smoke:sentry` | Sentry 연동 확인용 1회성 이벤트 발송 |
 | `pnpm db:start` | Supabase 로컬 시작 |
 | `pnpm db:stop` | Supabase 로컬 중지 |
 | `pnpm db:reset` | Supabase DB 리셋 |
@@ -120,6 +124,44 @@ logger.setUser({ id: session.user.id });
 
 > 참고: `SENTRY_CLIENT_ID` / `SENTRY_CLIENT_SECRET` 은 OAuth/Internal Integration
 > 자격이며 SDK 의 DSN 과 다르다. SDK 초기화에는 사용하지 않는다.
+
+## Testing (CRITICAL)
+
+테스트는 **계층별로 도구가 다릅니다.** 새 코드를 짤 때 어느 계층에 테스트를
+넣어야 할지 먼저 정하고 시작하세요.
+
+| 계층 | 대상 | 도구 | 위치 | 실행 |
+|---|---|---|---|---|
+| Unit | 순수 로직 (logger, utils, supabase client glue) | **Vitest** | `__tests__/*.test.ts` 코드 옆 | `pnpm test` |
+| Component | RN 컴포넌트 / screen | **Jest + jest-expo + RNTL** | `components/**/__tests__/*.test.tsx` | `pnpm test` |
+| Integration | 실제 Supabase 쿼리, RLS, auth flow | **Vitest** + 로컬 supabase | `apps/mobile/__tests__/integration/` | `pnpm test:integration` |
+| Contract | admin ↔ mobile API 스키마 | **Vitest + MSW + zod** | `packages/api/src/__tests__/contract*.test.ts` | `pnpm test` |
+| E2E | 사용자 시나리오 (회원가입~신고 등) | **Maestro** | `apps/mobile/.maestro/flows/` | `pnpm test:e2e` |
+
+### 반드시 지켜야 할 규칙
+
+1. **Vitest 와 Jest 영역을 섞지 말 것.** Vitest = `lib/`, `packages/*`. Jest = RN
+   컴포넌트만. `apps/mobile/jest.config.js` 의 `testPathIgnorePatterns` 가
+   이미 `lib/` 를 제외하도록 잡혀있음 — 이걸 깨뜨리지 마세요.
+2. **로깅 / Sentry 테스트는 항상 mock.** 자동 테스트가 실제 Sentry 로 이벤트를
+   보내면 dashboard 가 더러워집니다. `apps/mobile/jest.setup.ts` 에서 글로벌
+   mock 처리 + Vitest 쪽은 `vi.mock('@sentry/react-native', ...)`.
+3. **Integration 테스트는 `it.skipIf` 로 docker 없는 환경에서 자동 스킵.** 패턴은
+   `apps/mobile/__tests__/integration/setup.ts` 의 `isSupabaseReachable` 참고.
+4. **Contract 테스트는 zod schema 를 단일 source of truth 로.** 새 admin
+   엔드포인트가 생기면 `packages/api/src/schemas/` 에 zod 추가 → mobile 도
+   동일 schema import. 스키마 없이 응답 파싱 금지.
+5. **E2E 셀렉터는 `testID` 우선.** 텍스트만으로 찾으면 i18n / copy 변경에 깨짐.
+
+### Sentry 가 실제로 붙었는지 확인하는 법
+
+```bash
+pnpm smoke:sentry
+```
+
+→ `environment=smoke-test` 로 1건 발송. 결과는
+`https://deai-13.sentry.io/projects/react-native/?environment=smoke-test`
+에서 즉시 확인.
 
 ## Supabase
 
