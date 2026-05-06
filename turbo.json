@@ -4,6 +4,25 @@
     "dev": { "cache": false, "persistent": true },
     "build": { "dependsOn": ["^build"] },
     "lint": {},
-    "typecheck": { "dependsOn": ["^build"] }
+    "typecheck": { "dependsOn": ["^build"] },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"],
+      "inputs": [
+        "src/**",
+        "lib/**",
+        "components/**",
+        "vitest.config.ts",
+        "vitest.setup.ts",
+        "jest.config.js",
+        "jest.setup.ts",
+        "package.json"
+      ]
+    },
+    "test:integration": {
+      "cache": false,
+      "env": ["EXPO_PUBLIC_SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_ANON_KEY", "RUN_INTEGRATION"]
+    },
+    "test:e2e": { "cache": false, "dependsOn": [] }
   }
 }

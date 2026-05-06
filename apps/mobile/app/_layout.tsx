@@ -10,12 +10,15 @@ import { AccountGateProvider } from '@/providers/account-gate-provider';
 import { AuthProvider } from '@/providers/auth-provider';
 import { RootGate } from '@/providers/root-gate';
 import { NAV_THEME } from '@/lib/theme';
+import { Sentry, initSentry } from '@/lib/sentry';
+
+initSentry();
 
 export const unstable_settings = {
   anchor: '(auth)',
 };
 
-export default function RootLayout() {
+function RootLayout() {
   const colorScheme = useColorScheme();
   const themeName = colorScheme === 'dark' ? 'dark' : 'light';
 
@@ -40,3 +43,5 @@ export default function RootLayout() {
     </AuthProvider>
   );
 }
+
+export default Sentry.wrap(RootLayout);

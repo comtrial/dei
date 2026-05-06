@@ -1,0 +1,19 @@
+# Sign-in happy path. Uses the dev-only OTP shortcut wired in
+# apps/mobile/lib/dev-auth.ts so this flow runs against local Supabase.
+appId: com.comtrial.dei
+---
+- launchApp:
+    clearState: true
+- assertVisible: '로그인'   # Sign-in screen heading; adjust to match the real label.
+- tapOn:
+    id: 'email-input'
+- inputText: 'dev@local.test'
+- tapOn:
+    text: '인증번호 받기'
+- assertVisible: '인증번호'
+- tapOn:
+    id: 'otp-input'
+- inputText: '123456'
+- tapOn:
+    text: '확인'
+- assertVisible: '홈'        # Lands on the app shell.
