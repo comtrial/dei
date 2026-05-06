@@ -15,9 +15,10 @@ import { useAuth } from '@/providers/auth-provider';
 export default function PhoneScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { completeLocalDevIdentityVerification, eligibility, refresh } = useAccountGate();
+  const { completeLocalDevIdentityVerification, skipLocalDevOnboarding, eligibility, refresh } = useAccountGate();
   const [message, setMessage] = useState<string | null>(null);
   const [isCompletingDevVerification, setIsCompletingDevVerification] = useState(false);
+  const [isSkipping, setIsSkipping] = useState(false);
   const canUseDevVerification = canUseLocalDevOtp(user?.email ?? '');
 
   const handleLocalDevVerification = async () => {
@@ -35,6 +36,22 @@ export default function PhoneScreen() {
       );
     } finally {
       setIsCompletingDevVerification(false);
+    }
+  };
+
+  const handleSkipToHome = async () => {
+    setIsSkipping(true);
+    setMessage(null);
+
+    try {
+      await skipLocalDevOnboarding();
+      router.replace(ROUTES.home as never);
+    } catch (skipError) {
+      setMessage(
+        skipError instanceof Error ? skipError.message : '홈 이동에 실패했어요.',
+      );
+    } finally {
+      setIsSkipping(false);
     }
   };
 
@@ -70,12 +87,21 @@ export default function PhoneScreen() {
         {message ? <Text className="text-muted-foreground text-sm">{message}</Text> : null}
 
         {canUseDevVerification ? (
-          <Button
-            disabled={isCompletingDevVerification}
-            onPress={handleLocalDevVerification}
-            size="lg">
-            <Text>{isCompletingDevVerification ? '처리 중...' : '개발용 인증 통과'}</Text>
-          </Button>
+          <>
+            <Button
+              disabled={isCompletingDevVerification || isSkipping}
+              onPress={handleLocalDevVerification}
+              size="lg">
+              <Text>{isCompletingDevVerification ? '처리 중...' : '개발용 인증 통과'}</Text>
+            </Button>
+            <Button
+              disabled={isCompletingDevVerification || isSkipping}
+              onPress={handleSkipToHome}
+              size="lg"
+              variant="outline">
+              <Text>{isSkipping ? '이동 중...' : '홈으로 바로 이동 (온보딩 스킵)'}</Text>
+            </Button>
+          </>
         ) : null}
 
         <Button

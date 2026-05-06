@@ -4,12 +4,8 @@ export const LOCAL_DEV_PASSWORD = 'dei-local-dev-password';
 
 export function isLocalDevAuthEnabled() {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-
-  return (
-    supabaseUrl.startsWith('http://127.0.0.1:54321') ||
-    supabaseUrl.startsWith('http://localhost:54321') ||
-    supabaseUrl.startsWith('http://10.0.2.2:54321')
-  );
+  // 로컬 Supabase는 항상 54321 포트 사용 (LAN IP 접속 포함)
+  return supabaseUrl.includes(':54321');
 }
 
 export function canUseLocalDevOtp(email: string) {
