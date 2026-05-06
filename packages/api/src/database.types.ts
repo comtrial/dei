@@ -155,7 +155,9 @@ export type Database = {
         Row: {
           adult_verified: boolean | null
           birth_year: number | null
+          ci_hash: string | null
           created_at: string
+          di_hash: string | null
           expires_at: string | null
           failed_at: string | null
           failure_code: string | null
@@ -175,7 +177,9 @@ export type Database = {
         Insert: {
           adult_verified?: boolean | null
           birth_year?: number | null
+          ci_hash?: string | null
           created_at?: string
+          di_hash?: string | null
           expires_at?: string | null
           failed_at?: string | null
           failure_code?: string | null
@@ -195,7 +199,9 @@ export type Database = {
         Update: {
           adult_verified?: boolean | null
           birth_year?: number | null
+          ci_hash?: string | null
           created_at?: string
+          di_hash?: string | null
           expires_at?: string | null
           failed_at?: string | null
           failure_code?: string | null
@@ -259,7 +265,9 @@ export type Database = {
       private_profiles: {
         Row: {
           birth_date: string | null
+          ci_hash: string | null
           created_at: string
+          di_hash: string | null
           phone_country_code: string | null
           phone_hash: string | null
           updated_at: string
@@ -267,7 +275,9 @@ export type Database = {
         }
         Insert: {
           birth_date?: string | null
+          ci_hash?: string | null
           created_at?: string
+          di_hash?: string | null
           phone_country_code?: string | null
           phone_hash?: string | null
           updated_at?: string
@@ -275,7 +285,9 @@ export type Database = {
         }
         Update: {
           birth_date?: string | null
+          ci_hash?: string | null
           created_at?: string
+          di_hash?: string | null
           phone_country_code?: string | null
           phone_hash?: string | null
           updated_at?: string

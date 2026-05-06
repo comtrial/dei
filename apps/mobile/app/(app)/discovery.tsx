@@ -12,13 +12,13 @@ export default function DiscoveryScreen() {
     <Screen
       eyebrow="Discover"
       title="오늘의 2초 프로필"
-      description="승인된 성인 프로필만 이 화면에 들어옵니다.">
+      description="본인 확인과 영상 승인을 마친 프로필만 이 화면에 들어옵니다.">
       <View className="gap-6">
         <View>
           <StatusRow
-            label="성인 인증"
-            tone={eligibility?.age_eligible ? 'success' : 'warning'}
-            value={eligibility?.age_eligible ? '완료' : '대기'}
+            label="본인 확인"
+            tone={eligibility?.identity_verified ? 'success' : 'warning'}
+            value={eligibility?.identity_verified ? '완료' : '대기'}
           />
           <StatusRow
             label="영상 승인"

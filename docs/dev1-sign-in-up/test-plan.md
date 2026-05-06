@@ -23,14 +23,14 @@
 
 | Area | Needed Test |
 | --- | --- |
-| Phone sign in | `+82` phone number validation, 11 digit input, resend cooldown |
-| OTP | 3 minute timer, 60 second resend lock, wrong code dialog, repeated failure lockout |
+| Kakao sign in | Kakao OAuth opens and exchanges callback code for Supabase session |
+| OAuth callback | Deep link callback handles success, cancellation, and provider errors |
 | Returning user | Existing verified account routes to app area |
 | New user | New account routes to profile onboarding |
-| Device takeover | One account / one device warning and previous device revocation |
+| Device takeover | One account / one device warning and previous device revocation, if kept for MVP |
 | PortOne | Start verification through Edge Function only |
 | PortOne | Confirm verification through Edge Function only |
-| Age gate | Underage result blocks onboarding |
+| Identity gate | Profile creation is blocked until `identity_verified_at` exists |
 | Approved user gate | Matching/DM reads approved-user status from the shared eligibility contract |
 | Reports | Report creates `reports` row and moderation case |
 | Blocks | Block prevents future discovery/DM exposure |
