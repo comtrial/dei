@@ -31,6 +31,12 @@ The current concept file (`dei - Sign Flow _standalone_.html`) defines a phone-f
 8. New profile collects name, DOB, gender, then asks for the first 2-second log.
 9. First log is part of the ideal onboarding, but the concept allows postponing it.
 
+## Current Implementation Decision
+
+As of 2026-05-01, the active implementation slice uses Kakao Login through Supabase Auth for app login/session and PortOne identity verification for confirming a user-owned phone identity. PortOne adult verification is intentionally excluded from this slice.
+
+See `docs/kakao-portone-auth-scope.md`.
+
 ## Corrected Work Order
 
 1. Expo app hardening
@@ -156,8 +162,8 @@ create table public.profile_videos (
 
 ## Open Decisions
 
-- Whether MVP uses Supabase phone OTP directly, a custom SMS provider, or PortOne-first verification.
-- Whether PortOne is mandatory before profile creation or before discovery.
-- Whether DOB from the concept remains self-entered only, or is reconciled against PortOne verified age.
+- Whether Kakao remains the only production sign-in method for MVP, or phone OTP is added later.
+- Whether PortOne identity verification remains mandatory before profile creation or moves closer to discovery.
+- Whether DOB remains self-entered only, or is reconciled against a future adult-verification result.
 - Whether the camera module should stay `expo-camera` for MVP or move to `react-native-vision-camera` after a 2-second/H.264 spike.
 - Whether first log is required before Home or only before appearing in discovery.

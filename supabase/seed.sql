@@ -116,20 +116,10 @@ set search_path = public
 as $$
 declare
   current_user_id uuid := auth.uid();
-  current_email text;
   updated_account public.account_status;
 begin
   if current_user_id is null then
     raise exception 'authentication required';
-  end if;
-
-  select email
-    into current_email
-    from auth.users
-    where id = current_user_id;
-
-  if current_email is distinct from 'dev@dei.local' then
-    raise exception 'local dev verification is only available for dev@dei.local';
   end if;
 
   insert into public.identity_verifications (
@@ -139,8 +129,6 @@ begin
     status,
     phone_country_code,
     phone_hash,
-    adult_verified,
-    birth_year,
     verified_at,
     provider_metadata
   )
@@ -151,8 +139,6 @@ begin
     'verified',
     '+82',
     'local-dev-phone-hash',
-    true,
-    1990,
     now(),
     '{"source":"local_dev"}'::jsonb
   )
@@ -160,7 +146,6 @@ begin
   where provider_verification_id is not null
   do update
     set status = 'verified',
-        adult_verified = true,
         verified_at = now(),
         failed_at = null,
         failure_code = null,
@@ -180,8 +165,6 @@ begin
 
   update public.account_status
      set identity_verified_at = coalesce(identity_verified_at, now()),
-         age_verified_at = coalesce(age_verified_at, now()),
-         age_eligible = true,
          onboarding_state = case
            when onboarding_state in ('terms', 'phone', 'identity_verification') then 'profile'::public.onboarding_state
            else onboarding_state

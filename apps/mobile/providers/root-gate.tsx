@@ -39,7 +39,7 @@ export function RootGate({ children }: { children: React.ReactNode }) {
     }
 
     if (isOnboardingRoute(pathname) && eligibility.account_state === 'active') {
-      if (pathname === ROUTES.profile && eligibility.identity_verified && eligibility.age_eligible) {
+      if (pathname === ROUTES.profile && eligibility.identity_verified) {
         return;
       }
 

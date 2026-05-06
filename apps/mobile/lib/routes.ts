@@ -3,6 +3,7 @@ import type { Database } from '@dei/api';
 export const ROUTES = {
   root: '/',
   welcome: '/welcome',
+  authCallback: '/callback',
   signIn: '/sign-in',
   otp: '/otp',
   terms: '/terms',
@@ -38,6 +39,7 @@ const ONBOARDING_ROUTES = new Set<string>([
 
 const AUTH_ROUTES = new Set<string>([
   ROUTES.welcome,
+  ROUTES.authCallback,
   ROUTES.signIn,
   ROUTES.otp,
   ROUTES.terms,

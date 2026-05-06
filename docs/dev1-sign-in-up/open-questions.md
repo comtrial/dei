@@ -9,9 +9,9 @@
 
 ## Sign Flow
 
-- Is production sign in PortOne-first, Supabase phone OTP, or custom SMS OTP plus PortOne identity verification?
-- Is phone verification required before profile creation, or only before discovery?
-- Should DOB be self-entered, PortOne-derived, or both with reconciliation?
+- Production sign in is Kakao Login through Supabase Auth for the current implementation slice.
+- PortOne identity verification is required before profile creation.
+- PortOne adult verification is excluded from the current implementation slice.
 - Is the HTML rule "1 account / 1 device" confirmed for MVP?
 - Should first 2 second video be required before Home, or only before appearing in discovery?
 
@@ -23,8 +23,8 @@
 
 ## External Services
 
-- PortOne contract status and API environment?
+- Kakao Developers app keys and redirect URI?
+- PortOne contract status, store id, identity channel key, and API secret?
 - Slack workspace/webhook for moderation alerts?
 - Expo push project and notification permission copy?
 - RevenueCat project, products, entitlements, and store account readiness?
-

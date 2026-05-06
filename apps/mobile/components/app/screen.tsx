@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Platform, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
@@ -17,9 +17,12 @@ export function Screen({ children, className, description, eyebrow, title }: Scr
   return (
     <SafeAreaView className="bg-background flex-1">
       <ScrollView
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         bounces={false}
         contentContainerClassName={cn('flex-grow px-4 pb-8 pt-10', className)}
-        keyboardShouldPersistTaps="handled">
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        keyboardShouldPersistTaps="always"
+        showsVerticalScrollIndicator={false}>
         <View className="mb-7 gap-3">
           {eyebrow ? (
             <Text className="text-accent text-xs font-semibold uppercase tracking-[2.4px]">

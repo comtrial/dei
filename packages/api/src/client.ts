@@ -21,5 +21,6 @@ export const createSupabaseClient = (
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
+      flowType: 'pkce',
     },
   });

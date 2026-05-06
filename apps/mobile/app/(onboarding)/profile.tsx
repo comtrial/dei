@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
@@ -94,7 +94,12 @@ export default function ProfileScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         className="flex-1">
-        <View className="flex-1 px-7 pb-8 pt-10">
+        <ScrollView
+          bounces={false}
+          contentContainerClassName="flex-grow px-7 pb-8 pt-10"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}>
           <View className="mb-8 gap-4">
             <Text className="text-muted-foreground text-xs font-semibold uppercase tracking-[4px]">
               Step {stepIndex + 1} / 4
@@ -220,7 +225,7 @@ export default function ProfileScreen() {
             size="lg">
             {isSubmitting ? <ActivityIndicator color="#ffffff" /> : <Text>다음</Text>}
           </Button>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
