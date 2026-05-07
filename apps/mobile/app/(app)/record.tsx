@@ -1,11 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { RotateCcw, X, Zap } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle } from 'react-native-svg';
 
 import { Text } from '@/components/ui/text';
 import { useTodayClip } from '@/hooks/useTodayClip';
@@ -23,10 +22,6 @@ const ZOOM_LEVELS = [
 
 const RECORD_DURATION_MS = 2000;
 const RING_SIZE = 92;
-const RING_RADIUS = 38;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export default function RecordScreen() {
   const router = useRouter();
@@ -50,11 +45,6 @@ export default function RecordScreen() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const barAnim = useRef(new Animated.Value(0)).current;
-
-  const strokeDashoffset = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [RING_CIRCUMFERENCE, 0],
-  });
 
   const stopAnimations = useCallback(() => {
     if (timerRef.current) {
@@ -276,7 +266,7 @@ export default function RecordScreen() {
           style={{ opacity: isRecording ? 0.3 : 1 }}
           disabled={isRecording}>
           <View className="h-9 w-9 items-center justify-center rounded-full bg-black/30">
-            <X size={18} color="white" />
+            <Ionicons name="close" size={20} color="white" />
           </View>
         </TouchableOpacity>
 
@@ -307,7 +297,7 @@ export default function RecordScreen() {
           style={{ opacity: isRecording ? 0.3 : 1 }}
           disabled={isRecording}>
           <View className="h-9 w-9 items-center justify-center rounded-full bg-black/30">
-            <Zap size={18} color={flashOn ? '#FFD700' : 'white'} fill={flashOn ? '#FFD700' : 'none'} />
+            <Ionicons name={flashOn ? 'flash' : 'flash-outline'} size={18} color={flashOn ? '#FFD700' : 'white'} />
           </View>
         </TouchableOpacity>
       </View>
@@ -362,42 +352,36 @@ export default function RecordScreen() {
           style={{ opacity: isRecording ? 0.3 : 1 }}
           disabled={isRecording}>
           <View className="h-12 w-12 items-center justify-center rounded-full bg-white/20">
-            <RotateCcw size={22} color="white" />
+            <Ionicons name="camera-reverse-outline" size={24} color="white" />
           </View>
         </TouchableOpacity>
 
-        {/* Shutter with progress ring */}
+        {/* Shutter with progress indicator */}
         <View style={{ width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' }}>
-          {/* SVG progress ring (recording state) */}
           {isRecording && (
-            <Svg
-              width={RING_SIZE}
-              height={RING_SIZE}
-              style={{ position: 'absolute' }}>
-              {/* Background track */}
-              <Circle
-                cx={RING_SIZE / 2}
-                cy={RING_SIZE / 2}
-                r={RING_RADIUS}
-                stroke="rgba(255,255,255,0.15)"
-                strokeWidth={3}
-                fill="none"
-              />
-              {/* Progress arc */}
-              <AnimatedCircle
-                cx={RING_SIZE / 2}
-                cy={RING_SIZE / 2}
-                r={RING_RADIUS}
-                stroke="#C0432A"
-                strokeWidth={3}
-                fill="none"
-                strokeDasharray={`${RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
-                strokeDashoffset={strokeDashoffset}
-                strokeLinecap="round"
-                rotation="-90"
-                origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
-              />
-            </Svg>
+            <Animated.View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                width: RING_SIZE,
+                height: RING_SIZE,
+                borderRadius: RING_SIZE / 2,
+                borderWidth: 3,
+                borderColor: '#C0432A',
+                opacity: progressAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.35, 1],
+                }),
+                transform: [
+                  {
+                    scale: progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.92, 1],
+                    }),
+                  },
+                ],
+              }}
+            />
           )}
 
           {/* Shutter button */}

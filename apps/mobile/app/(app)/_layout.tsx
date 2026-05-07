@@ -1,4 +1,4 @@
-import { Camera, Heart, Home, MessageCircle } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 
 import { HapticTab } from '@/components/haptic-tab';
@@ -21,21 +21,21 @@ export default function AppLayout() {
         name="home"
         options={{
           title: '홈',
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="matches"
         options={{
           title: 'Matches',
-          tabBarIcon: ({ color, size }) => <Heart color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="heart-outline" color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="record"
         options={{
           title: 'REC',
-          tabBarIcon: ({ color, size }) => <Camera color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="camera-outline" color={color} size={size} />,
           tabBarStyle: { display: 'none' },
         }}
       />
@@ -43,7 +43,7 @@ export default function AppLayout() {
         name="messages"
         options={{
           title: 'DM',
-          tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-outline" color={color} size={size} />,
         }}
       />
       <Tabs.Screen name="settings" options={{ href: null }} />
