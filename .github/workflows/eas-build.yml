@@ -1,0 +1,58 @@
+name: EAS Build (manual)
+
+# Manual EAS build for installing the current branch on a phone via QR.
+# After the build finishes, the QR code appears at
+# https://expo.dev/accounts/cmdsoftware_developer/projects/dei/builds/<build-id>.
+#
+# iOS internal-distribution builds require the test device's UDID to be
+# pre-registered with `eas device:create`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Target platform
+        type: choice
+        required: true
+        default: android
+        options:
+          - android
+          - ios
+          - all
+      profile:
+        description: EAS build profile (eas.json)
+        type: choice
+        required: true
+        default: preview
+        options:
+          - development
+          - preview
+          - production
+
+concurrency:
+  group: eas-build-${{ github.ref }}-${{ github.event.inputs.platform }}-${{ github.event.inputs.profile }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: EAS build
+        working-directory: apps/mobile
+        run: eas build --platform ${{ github.event.inputs.platform }} --profile ${{ github.event.inputs.profile }} --non-interactive --no-wait
