@@ -7,18 +7,30 @@ import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
+import { useSaveProfileVideo } from '@/hooks/useSaveProfileVideo';
 import { useSaveLog } from '@/hooks/useSaveLog';
 import { formatDuration } from '@/lib/formatDuration';
+import { ROUTES } from '@/lib/routes';
 import { getTimeOfDay } from '@/lib/timeOfDay';
+import { useAccountGate } from '@/providers/account-gate-provider';
 
 export default function ResultScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { uri, durationMs } = useLocalSearchParams<{ uri: string; durationMs: string }>();
+  const { uri, durationMs, purpose } = useLocalSearchParams<{
+    durationMs: string;
+    purpose?: 'daily' | 'profile';
+    uri: string;
+  }>();
   const [muted, setMuted] = useState(true);
   const { saveLog, loading } = useSaveLog();
+  const { saveProfileVideo, loading: profileVideoLoading } = useSaveProfileVideo();
+  const { eligibility, refresh } = useAccountGate();
 
-  const recordedMs = Number(durationMs ?? 3000);
+  const recordedMs = Number(durationMs ?? 2000);
+  const isProfileVideoFlow =
+    purpose === 'profile' || eligibility?.next_step === 'first_video';
+  const isSaving = loading || profileVideoLoading;
   const timeLabel = getTimeOfDay(new Date().getHours());
 
   // uri가 없으면 null 전달 (시뮬레이터 테스트용 또는 에러 방지)
@@ -45,16 +57,28 @@ export default function ResultScreen() {
   };
 
   const handleSave = async () => {
-    // 시뮬레이터: uri 없으면 저장 없이 홈으로 이동
-    if (!uri) {
-      router.replace('/(app)/home');
+    if (isProfileVideoFlow) {
+      const result = await saveProfileVideo({ tempVideoUri: uri || undefined, recordedMs });
+      if (result.success) {
+        await refresh();
+        router.replace(ROUTES.videoReview as never);
+      } else {
+        Alert.alert('저장 실패', result.message || '저장에 실패했어요. 다시 시도해주세요.');
+      }
       return;
     }
+
+    // 시뮬레이터: 데일리 로그 uri가 없으면 저장 없이 홈으로 이동
+    if (!uri) {
+      router.replace(ROUTES.home as never);
+      return;
+    }
+
     const result = await saveLog({ tempVideoUri: uri, recordedMs });
     if (result.success) {
-      router.replace('/(app)/home');
+      router.replace(ROUTES.home as never);
     } else {
-      Alert.alert('저장 실패', '저장에 실패했어요. 다시 시도해주세요.');
+      Alert.alert('저장 실패', result.message || '저장에 실패했어요. 다시 시도해주세요.');
     }
   };
 
@@ -100,14 +124,14 @@ export default function ResultScreen() {
           <TouchableOpacity
             style={styles.btnSecondary}
             onPress={handleRedo}
-            disabled={loading}>
+            disabled={isSaving}>
             <Text style={styles.btnSecondaryText}>다시 촬영</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.btnPrimary, loading && { opacity: 0.6 }]}
+            style={[styles.btnPrimary, isSaving && { opacity: 0.6 }]}
             onPress={handleSave}
-            disabled={loading}>
-            <Text style={styles.btnPrimaryText}>{loading ? '저장 중...' : '저장'}</Text>
+            disabled={isSaving}>
+            <Text style={styles.btnPrimaryText}>{isSaving ? '저장 중...' : '저장'}</Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>

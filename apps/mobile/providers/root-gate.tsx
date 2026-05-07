@@ -38,6 +38,14 @@ export function RootGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    if (
+      targetRoute === ROUTES.firstVideo
+      && pathname === ROUTES.result
+      && eligibility.profile_complete
+    ) {
+      return;
+    }
+
     if (isOnboardingRoute(pathname) && eligibility.account_state === 'active') {
       if (pathname === ROUTES.profile && targetRoute === ROUTES.profile && eligibility.identity_verified) {
         return;
@@ -47,7 +55,11 @@ export function RootGate({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (pathname === ROUTES.firstVideo && targetRoute === ROUTES.firstVideo && eligibility.profile_complete) {
+      if (
+        targetRoute === ROUTES.firstVideo
+        && eligibility.profile_complete
+        && (pathname === ROUTES.firstVideo || pathname === ROUTES.result)
+      ) {
         return;
       }
 

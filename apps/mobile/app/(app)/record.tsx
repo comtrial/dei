@@ -9,7 +9,9 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { Text } from '@/components/ui/text';
 import { useTodayClip } from '@/hooks/useTodayClip';
+import { isLocalDevAuthEnabled } from '@/lib/dev-auth';
 import { formatDuration } from '@/lib/formatDuration';
+import { useAccountGate } from '@/providers/account-gate-provider';
 
 type CameraFacing = 'front' | 'back';
 
@@ -32,6 +34,7 @@ export default function RecordScreen() {
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
+  const { eligibility } = useAccountGate();
   const { hasClipToday, currentSlotLabel, isLoading: clipLoading } = useTodayClip();
 
   const [facing, setFacing] = useState<CameraFacing>('back');
@@ -144,6 +147,22 @@ export default function RecordScreen() {
     router.back();
   };
 
+  const canUseDevRecordingFallback = isLocalDevAuthEnabled();
+
+  const navigateToResult = useCallback(
+    (uri?: string) => {
+      router.push({
+        pathname: '/result',
+        params: {
+          uri: uri ?? '',
+          durationMs: String(RECORD_DURATION_MS),
+          purpose: eligibility?.next_step === 'first_video' ? 'profile' : 'daily',
+        },
+      });
+    },
+    [eligibility?.next_step, router],
+  );
+
   const handleShutterPress = async () => {
     console.log('[RecordScreen] Shutter pressed. cameraRef:', !!cameraRef.current, 'isRecording:', isRecording);
 
@@ -171,28 +190,39 @@ export default function RecordScreen() {
       await new Promise<void>((resolve) => setTimeout(resolve, RECORD_DURATION_MS));
       stopAnimations();
       setIsRecording(false);
-      router.push({
-        pathname: '/result',
-        params: { uri: '', durationMs: String(RECORD_DURATION_MS) },
-      });
+      navigateToResult('');
       return;
     }
 
+    let stopTimer: ReturnType<typeof setTimeout> | null = null;
+
     try {
+      stopTimer = setTimeout(() => {
+        cameraRef.current?.stopRecording();
+      }, RECORD_DURATION_MS);
       const result = await cameraRef.current.recordAsync({ maxDuration: RECORD_DURATION_MS / 1000 });
+
+      if (stopTimer) {
+        clearTimeout(stopTimer);
+        stopTimer = null;
+      }
+
       stopAnimations();
       setIsRecording(false);
 
-      if (result?.uri) {
-        router.push({
-          pathname: '/result',
-          params: { uri: result.uri, durationMs: String(elapsedMsRef.current || RECORD_DURATION_MS) },
-        });
+      if (result?.uri || canUseDevRecordingFallback) {
+        navigateToResult(result?.uri ?? '');
       }
     } catch (e) {
+      if (stopTimer) {
+        clearTimeout(stopTimer);
+      }
       console.error('[RecordScreen] recordAsync failed:', e);
       stopAnimations();
       setIsRecording(false);
+      if (canUseDevRecordingFallback) {
+        navigateToResult('');
+      }
     }
   };
 
