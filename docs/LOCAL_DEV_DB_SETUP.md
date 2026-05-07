@@ -60,10 +60,10 @@ supabase db query --file supabase/seed_h2_test.sql
 
 ```bash
 supabase db query "
-INSERT INTO public.logs (user_id, video_url, hour_slot, duration_sec, 검수_yn, 검수_상태, recorded_at)
+INSERT INTO public.logs (user_id, video_url, hour_slot, duration_sec, "검수_YN", "검수_상태", recorded_at)
 VALUES (
   '00000000-0000-4000-8000-000000000001',
-  '', 14, 3, 'N', 'PENDING',
+  '', 14, 2, 'N', 'PENDING',
   '$(date -u +%Y-%m-%d)T14:00:00+00'
 );"
 ```

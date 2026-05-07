@@ -28,8 +28,8 @@ async function fetchCurationPool(
     .select('id, user_id, log_id, video_path, logs(video_url)')
     .eq('pool_date', poolDate)
     .neq('user_id', userId)
-    .eq('검수_yn', 'Y')
-    .eq('차단_yn', 'N')
+    .eq('검수_YN', 'Y')
+    .eq('차단_YN', 'N')
     .limit(3);
 
   if (excludeUserIds.length > 0) {
@@ -42,10 +42,10 @@ async function fetchCurationPool(
   const userIds = poolData.map((p) => p.user_id);
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, display_name, gender')
-    .in('id', userIds);
+    .select('user_id, nickname, gender')
+    .in('user_id', userIds);
 
-  const profileMap = new Map(profiles?.map((p) => [p.id, p]) ?? []);
+  const profileMap = new Map(profiles?.map((p) => [p.user_id, p]) ?? []);
 
   return poolData.map((entry) => {
     const profile = profileMap.get(entry.user_id);
@@ -59,7 +59,7 @@ async function fetchCurationPool(
       userId: entry.user_id,
       logId: entry.log_id,
       videoUrl,
-      displayName: profile?.display_name ?? '—',
+      displayName: profile?.nickname ?? '—',
       gender: profile?.gender ?? null,
     };
   });

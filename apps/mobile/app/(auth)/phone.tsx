@@ -1,6 +1,6 @@
 import { IdentityVerification } from '@portone/react-native-sdk';
 import type { IdentityVerificationRequest } from '@portone/browser-sdk/v2';
-import { ShieldCheck } from 'lucide-react-native';
+import { AlertTriangle, ShieldCheck } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -9,6 +9,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Screen } from '@/components/app/screen';
 import { StatusRow } from '@/components/app/status-row';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Text } from '@/components/ui/text';
 import { isLocalDevAuthEnabled } from '@/lib/dev-auth';
 import {
@@ -18,10 +26,49 @@ import {
 import { ROUTES } from '@/lib/routes';
 import { useAccountGate } from '@/providers/account-gate-provider';
 
+type FailureDialogState = {
+  title: string;
+  message: string;
+};
+
+const getFailureDialog = (message: string): FailureDialogState => {
+  if (
+    message.includes('EXISTING_MEMBER_FOUND')
+    || message.includes('IDENTITY_ALREADY_REGISTERED')
+    || message.includes('이미 가입')
+  ) {
+    return {
+      title: '기존 회원 정보가 확인됐습니다',
+      message:
+        '이 본인확인 정보로 가입된 계정이 있어요. 보안상 현재 임시 세션에서 바로 연결하지 않고, 기존 계정 연결/복구 흐름으로 이어가야 합니다.',
+    };
+  }
+
+  if (message.includes('canceled') || message.includes('cancel')) {
+    return {
+      title: '본인확인이 취소되었습니다',
+      message: '다시 시도하면 본인확인 창을 새로 열 수 있어요.',
+    };
+  }
+
+  if (message.includes('설정값') || message.includes('configured')) {
+    return {
+      title: '본인확인 설정이 필요합니다',
+      message: '실제 키가 아직 없어 본인확인을 시작할 수 없어요. 로컬 개발 중이면 개발자 전용 버튼으로 다음 단계까지 확인할 수 있습니다.',
+    };
+  }
+
+  return {
+    title: '인증 실패',
+    message: message || '본인확인을 완료할 수 없어요. 잠시 후 다시 시도해 주세요.',
+  };
+};
+
 export default function PhoneScreen() {
   const router = useRouter();
   const { completeLocalDevIdentityVerification, eligibility, refresh } = useAccountGate();
   const [message, setMessage] = useState<string | null>(null);
+  const [failureDialog, setFailureDialog] = useState<FailureDialogState | null>(null);
   const [isCompletingDevVerification, setIsCompletingDevVerification] = useState(false);
   const [isStartingVerification, setIsStartingVerification] = useState(false);
   const [isConfirmingVerification, setIsConfirmingVerification] = useState(false);
@@ -37,11 +84,11 @@ export default function PhoneScreen() {
       await completeLocalDevIdentityVerification();
       router.replace(ROUTES.profile as never);
     } catch (devVerificationError) {
-      setMessage(
+      const errorMessage =
         devVerificationError instanceof Error
           ? devVerificationError.message
-          : '개발용 인증 통과에 실패했어요.',
-      );
+          : '개발용 인증 통과에 실패했어요.';
+      setFailureDialog(getFailureDialog(errorMessage));
     } finally {
       setIsCompletingDevVerification(false);
     }
@@ -55,11 +102,9 @@ export default function PhoneScreen() {
       const request = await startIdentityVerification();
       setVerificationRequest(request);
     } catch (startError) {
-      setMessage(
-        startError instanceof Error
-          ? startError.message
-          : '본인확인을 시작할 수 없어요.',
-      );
+      const errorMessage =
+        startError instanceof Error ? startError.message : '본인확인을 시작할 수 없어요.';
+      setFailureDialog(getFailureDialog(errorMessage));
     } finally {
       setIsStartingVerification(false);
     }
@@ -92,18 +137,18 @@ export default function PhoneScreen() {
                 setVerificationRequest(null);
                 router.replace(ROUTES.profile as never);
               } catch (confirmError) {
-                setMessage(
+                const errorMessage =
                   confirmError instanceof Error
                     ? confirmError.message
-                    : '본인확인 결과를 저장할 수 없어요.',
-                );
+                    : '본인확인 결과를 저장할 수 없어요.';
+                setFailureDialog(getFailureDialog(errorMessage));
                 setVerificationRequest(null);
               } finally {
                 setIsConfirmingVerification(false);
               }
             }}
             onError={(verificationError) => {
-              setMessage(verificationError.message);
+              setFailureDialog(getFailureDialog(verificationError.message));
               setVerificationRequest(null);
             }}
             request={verificationRequest}
@@ -116,17 +161,17 @@ export default function PhoneScreen() {
 
   return (
     <Screen
-      eyebrow="04 · IDENTITY"
-      title="본인 명의 확인이 필요합니다"
-      description="본인 명의 휴대폰 확인을 완료하면 프로필을 작성할 수 있어요.">
+      eyebrow="L5 · IDENTITY"
+      title="휴대폰 본인확인을 진행해 주세요"
+      description="본인 명의 휴대폰 확인을 완료하면 기존 회원 여부를 확인하고, 신규 회원은 프로필 작성으로 이동합니다.">
       <View className="gap-6">
         <View className="border-border bg-card items-center gap-4 rounded-md border p-6">
           <View className="bg-muted h-14 w-14 items-center justify-center rounded-full">
             <ShieldCheck color="#8F6A2C" size={30} />
           </View>
-          <Text className="text-center text-lg font-semibold">PortOne 본인확인 게이트</Text>
+          <Text className="text-center text-lg font-semibold">본인확인 요청</Text>
           <Text className="text-muted-foreground text-center leading-6">
-            앱은 인증창만 열고, 인증 결과는 Supabase Edge Function이 PortOne 서버에 다시 확인합니다.
+            앱은 인증창을 열고, 인증 결과는 서버에서 다시 확인합니다. 같은 본인확인 정보가 있으면 기존 회원 안내로 전환합니다.
           </Text>
         </View>
 
@@ -142,7 +187,7 @@ export default function PhoneScreen() {
         {isConfirmingVerification ? (
           <View className="border-border bg-card flex-row items-center gap-3 rounded-md border p-4">
             <ActivityIndicator />
-            <Text className="text-muted-foreground flex-1 text-sm">인증 결과를 저장하고 있어요.</Text>
+            <Text className="text-muted-foreground flex-1 text-sm">L6 · 본인확인 결과를 확인하고 있어요.</Text>
           </View>
         ) : null}
 
@@ -151,7 +196,7 @@ export default function PhoneScreen() {
           onPress={handleStartIdentityVerification}
           size="lg"
           variant="default">
-          {isStartingVerification ? <ActivityIndicator color="#F2EADA" /> : <Text>PortOne 본인확인 시작</Text>}
+          {isStartingVerification ? <ActivityIndicator color="#F2EADA" /> : <Text>본인확인 시작</Text>}
         </Button>
 
         {canUseDevVerification ? (
@@ -167,6 +212,23 @@ export default function PhoneScreen() {
         <Button onPress={() => refresh()} variant="outline">
           <Text>상태 새로고침</Text>
         </Button>
+
+        <Dialog open={Boolean(failureDialog)} onOpenChange={(open) => !open && setFailureDialog(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <View className="bg-destructive/10 mb-2 h-12 w-12 items-center justify-center rounded-full">
+                <AlertTriangle color="#A85A4A" size={24} />
+              </View>
+              <DialogTitle>{failureDialog?.title ?? '인증 실패'}</DialogTitle>
+              <DialogDescription>{failureDialog?.message ?? ''}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onPress={() => setFailureDialog(null)} size="lg">
+                <Text>확인</Text>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </View>
     </Screen>
   );

@@ -2,7 +2,6 @@ import { Camera, Heart, Home, MessageCircle } from 'lucide-react-native';
 import { Tabs } from 'expo-router';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { THEME } from '@/lib/theme';
 
 export default function AppLayout() {
   return (

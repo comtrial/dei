@@ -151,7 +151,7 @@ Border radius:  12px (다이얼로그), 8px (버튼)
 2. **권한 분기**: `permission.status === 'undetermined'` → 01B, `denied` → R1(설정 유도), `granted` → 클립 존재 확인
 3. **클립 존재 확인**: Supabase `logs` 테이블에서 오늘 날짜 + 현재 유저 조회
 4. **다이얼로그**: `Modal` 컴포넌트 + `backdropColor` 딤 처리
-5. **셔터 버튼**: `LongPressGestureHandler` 사용 (3초 이상 누를 때 촬영 시작)
+5. **셔터 버튼**: 탭하면 정확히 2초 촬영 시작
 6. **포커스 프레임**: SVG rect or `View` border로 중앙 배치
 
 ---

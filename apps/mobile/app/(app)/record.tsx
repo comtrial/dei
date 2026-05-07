@@ -19,7 +19,7 @@ const ZOOM_LEVELS = [
   { label: '2', value: 0.07 },
 ] as const;
 
-const RECORD_DURATION_MS = 3000;
+const RECORD_DURATION_MS = 2000;
 const RING_SIZE = 92;
 const RING_RADIUS = 38;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -53,6 +53,15 @@ export default function RecordScreen() {
     outputRange: [RING_CIRCUMFERENCE, 0],
   });
 
+  const stopAnimations = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    progressAnim.stopAnimation();
+    barAnim.stopAnimation();
+  }, [barAnim, progressAnim]);
+
   useFocusEffect(
     useCallback(() => {
       didInitRef.current = false;
@@ -64,7 +73,7 @@ export default function RecordScreen() {
         setIsRecording(false);
         setDisplayMs(0);
       };
-    }, [])
+    }, [stopAnimations])
   );
 
   useFocusEffect(
@@ -84,16 +93,7 @@ export default function RecordScreen() {
 
   useEffect(() => {
     return () => stopAnimations();
-  }, []);
-
-  const stopAnimations = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    progressAnim.stopAnimation();
-    barAnim.stopAnimation();
-  };
+  }, [stopAnimations]);
 
   const startAnimations = () => {
     elapsedMsRef.current = 0;
@@ -166,7 +166,7 @@ export default function RecordScreen() {
     setIsRecording(true);
     startAnimations();
 
-    // 시뮬레이터: 녹화 불가 → 3초 대기 후 결과 화면으로 이동 (UI 테스트용)
+    // 시뮬레이터: 녹화 불가 → 2초 대기 후 결과 화면으로 이동 (UI 테스트용)
     if (!Constants.isDevice) {
       await new Promise<void>((resolve) => setTimeout(resolve, RECORD_DURATION_MS));
       stopAnimations();
@@ -197,7 +197,7 @@ export default function RecordScreen() {
   };
 
   const handleStopPress = () => {
-    // 3초 미만이면 무시; 자동 정지가 먼저 트리거되므로 실질적으로 동작 안 함
+    // 2초 미만이면 무시; 자동 정지가 먼저 트리거되므로 실질적으로 동작 안 함
     if (elapsedMsRef.current < RECORD_DURATION_MS) return;
     cameraRef.current?.stopRecording();
   };

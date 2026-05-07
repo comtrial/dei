@@ -28,5 +28,5 @@ export type AccountState = Enums<'account_state'>;
 export type OnboardingState = Enums<'onboarding_state'>;
 export type VerificationStatus = Enums<'verification_status'>;
 export type ModerationStatus = Enums<'moderation_status'>;
-export type ReportReason = Enums<'report_reason'>;
-export type ReportStatus = Enums<'report_status'>;
+export type ReportReason = Report['reason'];
+export type ReportStatus = Report['처리상태'];

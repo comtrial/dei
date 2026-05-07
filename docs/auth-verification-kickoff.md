@@ -33,9 +33,9 @@ The current concept file (`dei - Sign Flow _standalone_.html`) defines a phone-f
 
 ## Current Implementation Decision
 
-As of 2026-05-01, the active implementation slice uses Kakao Login through Supabase Auth for app login/session and PortOne identity verification for confirming a user-owned phone identity. PortOne adult verification is intentionally excluded from this slice.
+As of 2026-05-06, the active implementation slice follows the HTML L1-L7 flow without Kakao Login. The app creates a Supabase anonymous session after required terms, then uses PortOne identity verification for confirming a user-owned phone identity. PortOne adult verification is intentionally excluded from this slice.
 
-See `docs/kakao-portone-auth-scope.md`.
+See `docs/portone-auth-scope.md`.
 
 ## Corrected Work Order
 
@@ -51,7 +51,7 @@ See `docs/kakao-portone-auth-scope.md`.
    - Admin/moderation system of record; Slack is only an alert channel.
 
 3. Auth and eligibility foundation
-   - Phone/OTP-oriented auth wrapper matching the concept flow.
+   - Supabase anonymous session wrapper matching the PortOne-first concept flow.
    - Session provider and root gate.
    - Server-readable onboarding/eligibility state.
    - 1-account-1-device state if the product keeps that rule.
@@ -162,7 +162,7 @@ create table public.profile_videos (
 
 ## Open Decisions
 
-- Whether Kakao remains the only production sign-in method for MVP, or phone OTP is added later.
+- Whether PortOne-only onboarding needs a production-grade existing-account login/recovery design.
 - Whether PortOne identity verification remains mandatory before profile creation or moves closer to discovery.
 - Whether DOB remains self-entered only, or is reconciled against a future adult-verification result.
 - Whether the camera module should stay `expo-camera` for MVP or move to `react-native-vision-camera` after a 2-second/H.264 spike.

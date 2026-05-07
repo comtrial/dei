@@ -12,9 +12,9 @@
 | Area | Test | Status |
 | --- | --- | --- |
 | App boot | Expo dev client launches and routes away from `/` | Pass |
-| Auth | Local dev login works with fixed development code | Pass |
+| Auth | Anonymous session is created after required terms | Pass |
 | Terms | Required consent saves to Supabase local DB | Pass |
-| Adult gate | Local dev verification bypass advances to profile | Pass |
+| Identity gate | Local dev verification bypass advances to profile | Pass |
 | Profile | Korean text input works on Android emulator after enabling Korean Gboard | Pass |
 | Profile | Profile save advances to first video gate | Pass |
 | Discovery | Gate blocks access until eligibility is complete | Partial |
@@ -23,8 +23,7 @@
 
 | Area | Needed Test |
 | --- | --- |
-| Kakao sign in | Kakao OAuth opens and exchanges callback code for Supabase session |
-| OAuth callback | Deep link callback handles success, cancellation, and provider errors |
+| Anonymous session | Required terms creates a Supabase session before identity verification |
 | Returning user | Existing verified account routes to app area |
 | New user | New account routes to profile onboarding |
 | Device takeover | One account / one device warning and previous device revocation, if kept for MVP |

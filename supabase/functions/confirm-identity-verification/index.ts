@@ -22,6 +22,14 @@ type PortOneIdentityVerification = {
   };
 };
 
+type ExistingAccountSnapshot = {
+  accountState: string | null;
+  discoveryEnabled: boolean;
+  firstVideoUploaded: boolean;
+  onboardingState: string | null;
+  profileComplete: boolean;
+};
+
 const toSafeProviderMetadata = (
   identityVerification: PortOneIdentityVerification,
   identityVerificationTxId?: string,
@@ -240,6 +248,25 @@ Deno.serve(async (req) => {
       }
 
       if (existingProfile) {
+        const { data: existingAccount, error: existingAccountError } = await supabase
+          .from('account_status')
+          .select('account_state, onboarding_state, profile_completed_at, first_video_uploaded_at, discovery_enabled_at')
+          .eq('user_id', existingProfile.user_id)
+          .maybeSingle();
+
+        if (existingAccountError) {
+          throw existingAccountError;
+        }
+
+        const existingAccountSnapshot: ExistingAccountSnapshot | null = existingAccount
+          ? {
+              accountState: existingAccount.account_state,
+              discoveryEnabled: Boolean(existingAccount.discovery_enabled_at),
+              firstVideoUploaded: Boolean(existingAccount.first_video_uploaded_at),
+              onboardingState: existingAccount.onboarding_state,
+              profileComplete: Boolean(existingAccount.profile_completed_at),
+            }
+          : null;
         const matchedKeys = getMatchedKeys({
           ciHash,
           diHash,
@@ -270,8 +297,11 @@ Deno.serve(async (req) => {
           .eq('id', pendingVerification.id);
 
         return errorResponse(failureMessage, 409, {
-          code: 'IDENTITY_ALREADY_REGISTERED',
+          code: 'EXISTING_MEMBER_FOUND',
+          existingAccount: existingAccountSnapshot,
+          legacyCode: 'IDENTITY_ALREADY_REGISTERED',
           matchedKeys,
+          resolution: 'existing_member_recovery_required',
         });
       }
     }

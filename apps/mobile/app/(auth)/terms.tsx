@@ -14,13 +14,14 @@ import { useAuth } from '@/providers/auth-provider';
 const REQUIRED_TERMS = [
   { detailType: 'service', label: '[필수] 서비스 이용약관' },
   { detailType: 'privacy', label: '[필수] 개인정보 처리방침' },
-  { detailType: 'age', label: '[필수] 만 19세 이상' },
+  { detailType: 'age', label: '[필수] 본인확인 및 연령 정책' },
+  { detailType: 'community', label: '[필수] 커뮤니티 가이드라인' },
 ];
 
 export default function TermsScreen() {
   const router = useRouter();
   const { acceptConsents } = useAccountGate();
-  const { user } = useAuth();
+  const { ensureAnonymousSession } = useAuth();
   const [acceptedIndexes, setAcceptedIndexes] = useState<number[]>([]);
   const [marketingPushOptIn, setMarketingPushOptIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +30,7 @@ export default function TermsScreen() {
   const allAccepted = acceptedIndexes.length === REQUIRED_TERMS.length;
 
   const toggleRequired = (index: number) => {
+    setError(null);
     setAcceptedIndexes((current) =>
       current.includes(index) ? current.filter((item) => item !== index) : [...current, index],
     );
@@ -36,20 +38,16 @@ export default function TermsScreen() {
 
   const handleAccept = async () => {
     setError(null);
+
+    if (!allAccepted) {
+      setError('필수 약관을 모두 동의해 주세요.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      if (!user) {
-        router.replace({
-          pathname: ROUTES.signIn as never,
-          params: {
-            marketingPushOptIn: marketingPushOptIn ? '1' : '0',
-            termsAccepted: '1',
-          },
-        });
-        return;
-      }
-
+      await ensureAnonymousSession();
       await acceptConsents({ marketingPushOptIn });
       router.replace(ROUTES.phone as never);
     } catch (submitError) {
@@ -74,11 +72,13 @@ export default function TermsScreen() {
               if (allAccepted && marketingPushOptIn) {
                 setAcceptedIndexes([]);
                 setMarketingPushOptIn(false);
+                setError(null);
                 return;
               }
 
               setAcceptedIndexes(REQUIRED_TERMS.map((_, index) => index));
               setMarketingPushOptIn(true);
+              setError(null);
             }}>
             <View
               className={cn(
@@ -149,8 +149,8 @@ export default function TermsScreen() {
 
         {error ? <Text className="text-destructive mt-2 text-sm">{error}</Text> : null}
 
-        <Button className="mt-8" disabled={!allAccepted || isSubmitting} onPress={handleAccept} size="lg">
-          {isSubmitting ? <ActivityIndicator color="#F2EADA" /> : <Text>동의하고 계속</Text>}
+        <Button className="mt-8" disabled={isSubmitting} onPress={handleAccept} size="lg">
+          {isSubmitting ? <ActivityIndicator color="#F2EADA" /> : <Text>동의하고 진행</Text>}
         </Button>
       </View>
     </SafeAreaView>

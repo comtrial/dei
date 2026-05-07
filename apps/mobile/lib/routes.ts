@@ -3,15 +3,13 @@ import type { Database } from '@dei/api';
 export const ROUTES = {
   root: '/',
   welcome: '/welcome',
-  authCallback: '/callback',
-  signIn: '/sign-in',
-  otp: '/otp',
   terms: '/terms',
   termsDetail: '/terms-detail',
   phone: '/phone',
   accountStatus: '/account-status',
   profile: '/profile',
-  firstVideo: '/first-video',
+  logIntro: '/log-intro',
+  firstVideo: '/record',
   videoReview: '/video-review',
   home: '/home',
   discovery: '/discovery',
@@ -39,15 +37,13 @@ const APP_ROUTES = new Set<string>([
 
 const ONBOARDING_ROUTES = new Set<string>([
   ROUTES.profile,
+  ROUTES.logIntro,
   ROUTES.firstVideo,
   ROUTES.videoReview,
 ]);
 
 const AUTH_ROUTES = new Set<string>([
   ROUTES.welcome,
-  ROUTES.authCallback,
-  ROUTES.signIn,
-  ROUTES.otp,
   ROUTES.terms,
   ROUTES.termsDetail,
   ROUTES.phone,
@@ -73,6 +69,8 @@ export const routeForEligibility = (eligibility: Eligibility): AppRoute => {
       return ROUTES.phone;
     case 'profile':
       return ROUTES.profile;
+    case 'log_intro':
+      return ROUTES.logIntro;
     case 'first_video':
       return ROUTES.firstVideo;
     case 'video_review':

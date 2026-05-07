@@ -23,7 +23,7 @@ pnpm dev
 - `packages/shared`: 공통 유틸/타입
 - `supabase/`: migrations, edge functions
 - 상세 기술 스택 결정안: `docs/tech-stack.md`
-- 인증 구현 범위: `docs/kakao-portone-auth-scope.md`
+- 인증 구현 범위: `docs/portone-auth-scope.md`
 
 ## 환경 분리 전략
 - 현재: 로컬 Supabase 1개

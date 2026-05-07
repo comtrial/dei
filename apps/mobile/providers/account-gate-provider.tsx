@@ -15,6 +15,12 @@ type ProfileInput = {
   bio?: string;
   displayName: string;
   gender?: string;
+  interestCategories?: string[];
+  interestTags?: string[];
+  mbti?: string;
+  profileImagePath?: string;
+  regionSido?: string;
+  regionSigungu?: string;
 };
 
 type AccountGateContextValue = {
@@ -23,7 +29,7 @@ type AccountGateContextValue = {
   isLoading: boolean;
   acceptConsents: (input?: ConsentInput) => Promise<void>;
   completeLocalDevIdentityVerification: () => Promise<AccountStatus>;
-  skipLocalDevOnboarding: () => Promise<AccountStatus>;
+  completeLogIntro: () => Promise<AccountStatus>;
   completeProfile: (input: ProfileInput) => Promise<AccountStatus>;
   refresh: () => Promise<Eligibility | null>;
 };
@@ -106,19 +112,6 @@ export function AccountGateProvider({ children }: { children: React.ReactNode })
     return data;
   }, [refresh]);
 
-  const skipLocalDevOnboarding = useCallback(async () => {
-    const { data, error: skipError } = await supabase
-      .rpc('skip_local_dev_onboarding')
-      .single();
-
-    if (skipError) {
-      throw skipError;
-    }
-
-    await refresh();
-    return data;
-  }, [refresh]);
-
   const completeProfile = useCallback(
     async (input: ProfileInput) => {
       const { data, error: profileError } = await supabase
@@ -127,6 +120,12 @@ export function AccountGateProvider({ children }: { children: React.ReactNode })
           p_bio: input.bio || undefined,
           p_display_name: input.displayName,
           p_gender: input.gender || undefined,
+          p_interest_categories: input.interestCategories ?? [],
+          p_interest_tags: input.interestTags ?? [],
+          p_mbti: input.mbti || undefined,
+          p_profile_image_path: input.profileImagePath || undefined,
+          p_region_sido: input.regionSido || undefined,
+          p_region_sigungu: input.regionSigungu || undefined,
         })
         .single();
 
@@ -140,6 +139,17 @@ export function AccountGateProvider({ children }: { children: React.ReactNode })
     [refresh],
   );
 
+  const completeLogIntro = useCallback(async () => {
+    const { data, error: logIntroError } = await supabase.rpc('complete_log_intro').single();
+
+    if (logIntroError) {
+      throw logIntroError;
+    }
+
+    await refresh();
+    return data;
+  }, [refresh]);
+
   const value = useMemo<AccountGateContextValue>(
     () => ({
       eligibility,
@@ -147,11 +157,20 @@ export function AccountGateProvider({ children }: { children: React.ReactNode })
       isLoading,
       acceptConsents,
       completeLocalDevIdentityVerification,
-      skipLocalDevOnboarding,
+      completeLogIntro,
       completeProfile,
       refresh,
     }),
-    [acceptConsents, completeLocalDevIdentityVerification, skipLocalDevOnboarding, completeProfile, eligibility, error, isLoading, refresh],
+    [
+      acceptConsents,
+      completeLocalDevIdentityVerification,
+      completeLogIntro,
+      completeProfile,
+      eligibility,
+      error,
+      isLoading,
+      refresh,
+    ],
   );
 
   return <AccountGateContext.Provider value={value}>{children}</AccountGateContext.Provider>;

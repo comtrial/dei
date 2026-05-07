@@ -9,9 +9,10 @@
 
 ## Sign Flow
 
-- Production sign in is Kakao Login through Supabase Auth for the current implementation slice.
+- Production sign in currently uses Supabase anonymous auth before PortOne identity verification.
 - PortOne identity verification is required before profile creation.
 - PortOne adult verification is excluded from the current implementation slice.
+- Existing-user login/account recovery with PortOne-only identity still needs a server-side decision.
 - Is the HTML rule "1 account / 1 device" confirmed for MVP?
 - Should first 2 second video be required before Home, or only before appearing in discovery?
 
@@ -23,7 +24,6 @@
 
 ## External Services
 
-- Kakao Developers app keys and redirect URI?
 - PortOne contract status, store id, identity channel key, and API secret?
 - Slack workspace/webhook for moderation alerts?
 - Expo push project and notification permission copy?

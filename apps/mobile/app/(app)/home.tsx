@@ -31,7 +31,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (screen === 'H2') checkLikeUsed();
-  }, [screen]);
+  }, [checkLikeUsed, screen]);
 
   const handleLike = async (toUserId: string) => {
     const ok = await sendLike(toUserId);

@@ -56,7 +56,7 @@ export function useSaveLog() {
         video_url: uploadData.path,
         hour_slot: hourSlot,
         duration_sec: Math.round(recordedMs / 1000),
-        검수_yn: 'N',
+        검수_YN: 'N',
         검수_상태: 'PENDING',
         recorded_at: new Date().toISOString(),
       });

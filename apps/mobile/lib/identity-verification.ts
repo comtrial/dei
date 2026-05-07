@@ -44,10 +44,21 @@ const getFunctionErrorMessage = async (
   if (error.context) {
     try {
       const payload = await error.context.clone().json() as {
+        code?: string;
         error?: string;
+        legacyCode?: string;
         message?: string;
         msg?: string;
+        resolution?: string;
       };
+
+      if (
+        payload.code === 'EXISTING_MEMBER_FOUND'
+        || payload.legacyCode === 'IDENTITY_ALREADY_REGISTERED'
+      ) {
+        return 'EXISTING_MEMBER_FOUND: 이미 가입된 본인확인 정보예요. 기존 계정 연결/복구 흐름으로 이어가야 합니다.';
+      }
+
       const message = payload.error ?? payload.message ?? payload.msg;
 
       if (message) {

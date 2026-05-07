@@ -48,42 +48,42 @@ begin
   -- ──────────────────────────────────────────────
   -- 내 프로필 (dev user)
   update public.profiles
-     set display_name = '승태', gender = 'M'
-   where id = dev_user_id;
+     set nickname = '승태', gender = 'M'
+   where user_id = dev_user_id;
 
   -- 큐레이션 유저 프로필
-  insert into public.profiles (id, display_name, gender, created_at, updated_at)
+  insert into public.profiles (user_id, nickname, gender, created_at, updated_at)
   values
     (user1_id, '민준', 'M', now(), now()),
     (user2_id, '지현', 'F', now(), now()),
     (user3_id, '서연', 'F', now(), now())
-  on conflict (id) do update
-    set display_name = excluded.display_name,
+  on conflict (user_id) do update
+    set nickname = excluded.nickname,
         gender       = excluded.gender,
         updated_at   = now();
 
   -- ──────────────────────────────────────────────
   -- 3. 큐레이션 유저 로그 (각 1건)
   -- ──────────────────────────────────────────────
-  insert into public.logs (user_id, video_url, hour_slot, duration_sec, 검수_yn, 검수_상태, recorded_at)
+  insert into public.logs (user_id, video_url, hour_slot, duration_sec, "검수_YN", "검수_상태", recorded_at)
   values
-    (user1_id, '', 14, 3, 'Y', 'APPROVED', (today_date || 'T14:00:00+00')::timestamptz)
+    (user1_id, '', 14, 2, 'Y', 'APPROVED', (today_date || 'T14:00:00+00')::timestamptz)
   returning id into log1_id;
 
-  insert into public.logs (user_id, video_url, hour_slot, duration_sec, 검수_yn, 검수_상태, recorded_at)
+  insert into public.logs (user_id, video_url, hour_slot, duration_sec, "검수_YN", "검수_상태", recorded_at)
   values
-    (user2_id, '', 10, 3, 'Y', 'APPROVED', (today_date || 'T10:00:00+00')::timestamptz)
+    (user2_id, '', 10, 2, 'Y', 'APPROVED', (today_date || 'T10:00:00+00')::timestamptz)
   returning id into log2_id;
 
-  insert into public.logs (user_id, video_url, hour_slot, duration_sec, 검수_yn, 검수_상태, recorded_at)
+  insert into public.logs (user_id, video_url, hour_slot, duration_sec, "검수_YN", "검수_상태", recorded_at)
   values
-    (user3_id, '', 19, 3, 'Y', 'APPROVED', (today_date || 'T19:00:00+00')::timestamptz)
+    (user3_id, '', 19, 2, 'Y', 'APPROVED', (today_date || 'T19:00:00+00')::timestamptz)
   returning id into log3_id;
 
   -- ──────────────────────────────────────────────
   -- 4. 큐레이션 풀 등록 (오늘 날짜)
   -- ──────────────────────────────────────────────
-  insert into public.curation_pool (user_id, log_id, pool_date, 검수_yn, 차단_yn)
+  insert into public.curation_pool (user_id, log_id, pool_date, "검수_YN", "차단_YN")
   values
     (user1_id, log1_id, today_date, 'Y', 'N'),
     (user2_id, log2_id, today_date, 'Y', 'N'),
@@ -93,10 +93,10 @@ begin
   -- ──────────────────────────────────────────────
   -- 5. 내 로그 2건 (새벽 + 오전 = H2-A 미완성)
   -- ──────────────────────────────────────────────
-  insert into public.logs (user_id, video_url, hour_slot, duration_sec, 검수_yn, 검수_상태, recorded_at)
+  insert into public.logs (user_id, video_url, hour_slot, duration_sec, "검수_YN", "검수_상태", recorded_at)
   values
-    (dev_user_id, '', 2,  3, 'N', 'PENDING', (today_date || 'T02:00:00+00')::timestamptz),
-    (dev_user_id, '', 8,  3, 'N', 'PENDING', (today_date || 'T08:00:00+00')::timestamptz)
+    (dev_user_id, '', 2,  2, 'N', 'PENDING', (today_date || 'T02:00:00+00')::timestamptz),
+    (dev_user_id, '', 8,  2, 'N', 'PENDING', (today_date || 'T08:00:00+00')::timestamptz)
   on conflict do nothing;
 
   raise notice '✅ H2 테스트 데이터 삽입 완료';

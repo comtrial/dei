@@ -121,6 +121,80 @@ export type Database = {
         }
         Relationships: []
       }
+      admins: {
+        Row: {
+          auth_user_id: string | null
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean
+          last_login_at: string | null
+          name: string | null
+          role: string
+        }
+        Insert: {
+          auth_user_id?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          is_active?: boolean
+          last_login_at?: string | null
+          name?: string | null
+          role?: string
+        }
+        Update: {
+          auth_user_id?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          is_active?: boolean
+          last_login_at?: string | null
+          name?: string | null
+          role?: string
+        }
+        Relationships: []
+      }
+      audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          meta: Json | null
+          operator_email: string | null
+          operator_id: string | null
+          target_id: string | null
+          target_type: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          operator_email?: string | null
+          operator_id?: string | null
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          operator_email?: string | null
+          operator_id?: string | null
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
+            referencedRelation: "admins"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blocks: {
         Row: {
           blocked_user_id: string
@@ -159,8 +233,8 @@ export type Database = {
           pool_date: string
           user_id: string
           video_path: string | null
-          검수_yn: string
-          차단_yn: string
+          검수_YN: string
+          차단_YN: string
         }
         Insert: {
           created_at?: string
@@ -169,8 +243,8 @@ export type Database = {
           pool_date: string
           user_id: string
           video_path?: string | null
-          검수_yn?: string
-          차단_yn?: string
+          검수_YN?: string
+          차단_YN?: string
         }
         Update: {
           created_at?: string
@@ -179,8 +253,8 @@ export type Database = {
           pool_date?: string
           user_id?: string
           video_path?: string | null
-          검수_yn?: string
-          차단_yn?: string
+          검수_YN?: string
+          차단_YN?: string
         }
         Relationships: [
           {
@@ -321,7 +395,7 @@ export type Database = {
           recorded_at: string
           user_id: string
           video_url: string
-          검수_yn: string
+          검수_YN: string
           검수_상태: string
         }
         Insert: {
@@ -332,7 +406,7 @@ export type Database = {
           recorded_at: string
           user_id: string
           video_url: string
-          검수_yn?: string
+          검수_YN?: string
           검수_상태?: string
         }
         Update: {
@@ -343,7 +417,7 @@ export type Database = {
           recorded_at?: string
           user_id?: string
           video_url?: string
-          검수_yn?: string
+          검수_YN?: string
           검수_상태?: string
         }
         Relationships: []
@@ -387,6 +461,45 @@ export type Database = {
           status?: Database["public"]["Enums"]["moderation_case_status"]
           subject_user_id?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          external_tx_id: string | null
+          id: string
+          payment_method: string | null
+          product_type: string
+          updated_at: string
+          user_id: string
+          결제상태: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string
+          external_tx_id?: string | null
+          id?: string
+          payment_method?: string | null
+          product_type?: string
+          updated_at?: string
+          user_id: string
+          결제상태?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          external_tx_id?: string | null
+          id?: string
+          payment_method?: string | null
+          product_type?: string
+          updated_at?: string
+          user_id?: string
+          결제상태?: string
         }
         Relationships: []
       }
@@ -479,73 +592,203 @@ export type Database = {
       }
       profiles: {
         Row: {
-          bio: string | null
+          birth_date: string | null
+          blocked_until: string | null
           created_at: string
-          display_name: string | null
           gender: string | null
-          id: string
-          profile_status: Database["public"]["Enums"]["moderation_status"]
+          interest_categories: string[]
+          interest_tags: string[]
+          intro: string | null
+          mbti: string | null
+          nickname: string | null
+          phone: string | null
+          photo_url: string | null
+          region_sido: string | null
+          region_sigungu: string | null
+          suspend_reason: string | null
           updated_at: string
+          user_id: string
+          사진_검수_YN: string
+          차단_YN: string
+          회원상태: string
         }
         Insert: {
-          bio?: string | null
+          birth_date?: string | null
+          blocked_until?: string | null
           created_at?: string
-          display_name?: string | null
           gender?: string | null
-          id: string
-          profile_status?: Database["public"]["Enums"]["moderation_status"]
+          interest_categories?: string[]
+          interest_tags?: string[]
+          intro?: string | null
+          mbti?: string | null
+          nickname?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          region_sido?: string | null
+          region_sigungu?: string | null
+          suspend_reason?: string | null
           updated_at?: string
+          user_id: string
+          사진_검수_YN?: string
+          차단_YN?: string
+          회원상태?: string
         }
         Update: {
-          bio?: string | null
+          birth_date?: string | null
+          blocked_until?: string | null
           created_at?: string
-          display_name?: string | null
           gender?: string | null
-          id?: string
-          profile_status?: Database["public"]["Enums"]["moderation_status"]
+          interest_categories?: string[]
+          interest_tags?: string[]
+          intro?: string | null
+          mbti?: string | null
+          nickname?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          region_sido?: string | null
+          region_sigungu?: string | null
+          suspend_reason?: string | null
           updated_at?: string
+          user_id?: string
+          사진_검수_YN?: string
+          차단_YN?: string
+          회원상태?: string
         }
         Relationships: []
       }
       reports: {
         Row: {
+          action_taken: string | null
+          block_days: number | null
           created_at: string
           description: string | null
           id: string
-          reason: Database["public"]["Enums"]["report_reason"]
-          reported_user_id: string
-          reporter_user_id: string
+          log_id: string | null
+          operator_comment: string | null
+          operator_email: string | null
+          operator_id: string | null
+          reason: string
+          reason_category: string
+          reported_id: string
+          reporter_id: string
           resolved_at: string | null
-          status: Database["public"]["Enums"]["report_status"]
-          target_id: string | null
-          target_type: Database["public"]["Enums"]["moderation_source_type"]
-          updated_at: string
+          처리상태: string
+        }
+        Insert: {
+          action_taken?: string | null
+          block_days?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          log_id?: string | null
+          operator_comment?: string | null
+          operator_email?: string | null
+          operator_id?: string | null
+          reason: string
+          reason_category: string
+          reported_id: string
+          reporter_id: string
+          resolved_at?: string | null
+          처리상태?: string
+        }
+        Update: {
+          action_taken?: string | null
+          block_days?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          log_id?: string | null
+          operator_comment?: string | null
+          operator_email?: string | null
+          operator_id?: string | null
+          reason?: string
+          reason_category?: string
+          reported_id?: string
+          reporter_id?: string
+          resolved_at?: string | null
+          처리상태?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_log_id_fkey"
+            columns: ["log_id"]
+            isOneToOne: false
+            referencedRelation: "logs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_history: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          log_id: string | null
+          operator_email: string | null
+          operator_id: string | null
+          reason: string | null
+          target_type: string
+          target_user: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          log_id?: string | null
+          operator_email?: string | null
+          operator_id?: string | null
+          reason?: string | null
+          target_type: string
+          target_user?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          log_id?: string | null
+          operator_email?: string | null
+          operator_id?: string | null
+          reason?: string | null
+          target_type?: string
+          target_user?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_history_log_id_fkey"
+            columns: ["log_id"]
+            isOneToOne: false
+            referencedRelation: "logs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sms_log: {
+        Row: {
+          created_at: string
+          id: string
+          ip_address: string | null
+          phone: string
+          result: string
+          send_count: number
+          user_id: string | null
         }
         Insert: {
           created_at?: string
-          description?: string | null
           id?: string
-          reason: Database["public"]["Enums"]["report_reason"]
-          reported_user_id: string
-          reporter_user_id: string
-          resolved_at?: string | null
-          status?: Database["public"]["Enums"]["report_status"]
-          target_id?: string | null
-          target_type?: Database["public"]["Enums"]["moderation_source_type"]
-          updated_at?: string
+          ip_address?: string | null
+          phone: string
+          result?: string
+          send_count?: number
+          user_id?: string | null
         }
         Update: {
           created_at?: string
-          description?: string | null
           id?: string
-          reason?: Database["public"]["Enums"]["report_reason"]
-          reported_user_id?: string
-          reporter_user_id?: string
-          resolved_at?: string | null
-          status?: Database["public"]["Enums"]["report_status"]
-          target_id?: string | null
-          target_type?: Database["public"]["Enums"]["moderation_source_type"]
-          updated_at?: string
+          ip_address?: string | null
+          phone?: string
+          result?: string
+          send_count?: number
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -701,12 +944,44 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      complete_log_intro: {
+        Args: never
+        Returns: {
+          account_state: Database["public"]["Enums"]["account_state"]
+          age_eligible: boolean
+          age_verified_at: string | null
+          banned_at: string | null
+          created_at: string
+          deleted_at: string | null
+          discovery_enabled_at: string | null
+          first_video_approved_at: string | null
+          first_video_uploaded_at: string | null
+          identity_verified_at: string | null
+          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
+          profile_completed_at: string | null
+          suspended_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "account_status"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       complete_profile: {
         Args: {
           p_bio?: string
           p_birth_date?: string
           p_display_name: string
           p_gender?: string
+          p_interest_categories?: string[]
+          p_interest_tags?: string[]
+          p_mbti?: string
+          p_profile_image_path?: string
+          p_region_sido?: string
+          p_region_sigungu?: string
         }
         Returns: {
           account_state: Database["public"]["Enums"]["account_state"]
@@ -753,32 +1028,6 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       recalculate_daily_log: { Args: { p_user_id: string }; Returns: undefined }
-      skip_local_dev_onboarding: {
-        Args: never
-        Returns: {
-          account_state: Database["public"]["Enums"]["account_state"]
-          age_eligible: boolean
-          age_verified_at: string | null
-          banned_at: string | null
-          created_at: string
-          deleted_at: string | null
-          discovery_enabled_at: string | null
-          first_video_approved_at: string | null
-          first_video_uploaded_at: string | null
-          identity_verified_at: string | null
-          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
-          profile_completed_at: string | null
-          suspended_at: string | null
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "account_status"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
     }
     Enums: {
       account_state: "active" | "suspended" | "banned" | "deleted"
@@ -792,21 +1041,11 @@ export type Database = {
         | "phone"
         | "identity_verification"
         | "profile"
+        | "log_intro"
         | "first_video"
         | "video_review"
         | "complete"
       push_provider: "expo" | "apns" | "fcm"
-      report_reason:
-        | "underage"
-        | "harassment"
-        | "hate_or_abuse"
-        | "sexual_content"
-        | "violence"
-        | "spam_or_scam"
-        | "impersonation"
-        | "illegal_activity"
-        | "other"
-      report_status: "open" | "in_review" | "resolved" | "dismissed"
       verification_status:
         | "pending"
         | "verified"
@@ -954,23 +1193,12 @@ export const Constants = {
         "phone",
         "identity_verification",
         "profile",
+        "log_intro",
         "first_video",
         "video_review",
         "complete",
       ],
       push_provider: ["expo", "apns", "fcm"],
-      report_reason: [
-        "underage",
-        "harassment",
-        "hate_or_abuse",
-        "sexual_content",
-        "violence",
-        "spam_or_scam",
-        "impersonation",
-        "illegal_activity",
-        "other",
-      ],
-      report_status: ["open", "in_review", "resolved", "dismissed"],
       verification_status: [
         "pending",
         "verified",
