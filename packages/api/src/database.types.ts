@@ -151,6 +151,74 @@ export type Database = {
         }
         Relationships: []
       }
+      curation_pool: {
+        Row: {
+          created_at: string
+          id: string
+          log_id: string
+          pool_date: string
+          user_id: string
+          video_path: string | null
+          검수_yn: string
+          차단_yn: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          log_id: string
+          pool_date: string
+          user_id: string
+          video_path?: string | null
+          검수_yn?: string
+          차단_yn?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          log_id?: string
+          pool_date?: string
+          user_id?: string
+          video_path?: string | null
+          검수_yn?: string
+          차단_yn?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "curation_pool_log_id_fkey"
+            columns: ["log_id"]
+            isOneToOne: false
+            referencedRelation: "logs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_logs: {
+        Row: {
+          created_at: string
+          id: string
+          log_date: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          log_date: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          log_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       identity_verifications: {
         Row: {
           adult_verified: boolean | null
@@ -217,6 +285,66 @@ export type Database = {
           updated_at?: string
           user_id?: string
           verified_at?: string | null
+        }
+        Relationships: []
+      }
+      likes: {
+        Row: {
+          created_at: string
+          from_user_id: string
+          id: string
+          liked_at: string
+          to_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          from_user_id: string
+          id?: string
+          liked_at: string
+          to_user_id: string
+        }
+        Update: {
+          created_at?: string
+          from_user_id?: string
+          id?: string
+          liked_at?: string
+          to_user_id?: string
+        }
+        Relationships: []
+      }
+      logs: {
+        Row: {
+          created_at: string
+          duration_sec: number
+          hour_slot: number
+          id: string
+          recorded_at: string
+          user_id: string
+          video_url: string
+          검수_yn: string
+          검수_상태: string
+        }
+        Insert: {
+          created_at?: string
+          duration_sec: number
+          hour_slot: number
+          id?: string
+          recorded_at: string
+          user_id: string
+          video_url: string
+          검수_yn?: string
+          검수_상태?: string
+        }
+        Update: {
+          created_at?: string
+          duration_sec?: number
+          hour_slot?: number
+          id?: string
+          recorded_at?: string
+          user_id?: string
+          video_url?: string
+          검수_yn?: string
+          검수_상태?: string
         }
         Relationships: []
       }
@@ -624,6 +752,33 @@ export type Database = {
         }[]
       }
       is_admin: { Args: never; Returns: boolean }
+      recalculate_daily_log: { Args: { p_user_id: string }; Returns: undefined }
+      skip_local_dev_onboarding: {
+        Args: never
+        Returns: {
+          account_state: Database["public"]["Enums"]["account_state"]
+          age_eligible: boolean
+          age_verified_at: string | null
+          banned_at: string | null
+          created_at: string
+          deleted_at: string | null
+          discovery_enabled_at: string | null
+          first_video_approved_at: string | null
+          first_video_uploaded_at: string | null
+          identity_verified_at: string | null
+          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
+          profile_completed_at: string | null
+          suspended_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "account_status"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       account_state: "active" | "suspended" | "banned" | "deleted"

@@ -118,7 +118,7 @@ export default function PhoneScreen() {
     <Screen
       eyebrow="04 · IDENTITY"
       title="본인 명의 확인이 필요합니다"
-      description="카카오 로그인 후 본인 명의 휴대폰 확인을 완료하면 프로필을 작성할 수 있어요.">
+      description="본인 명의 휴대폰 확인을 완료하면 프로필을 작성할 수 있어요.">
       <View className="gap-6">
         <View className="border-border bg-card items-center gap-4 rounded-md border p-6">
           <View className="bg-muted h-14 w-14 items-center justify-center rounded-full">

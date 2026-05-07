@@ -52,7 +52,7 @@ export function RootGate({ children }: { children: React.ReactNode }) {
       }
     }
 
-    if (targetRoute === ROUTES.discovery && isAppRoute(pathname)) {
+    if (targetRoute === ROUTES.home && isAppRoute(pathname)) {
       return;
     }
 

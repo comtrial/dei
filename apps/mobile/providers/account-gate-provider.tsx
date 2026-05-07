@@ -23,6 +23,7 @@ type AccountGateContextValue = {
   isLoading: boolean;
   acceptConsents: (input?: ConsentInput) => Promise<void>;
   completeLocalDevIdentityVerification: () => Promise<AccountStatus>;
+  skipLocalDevOnboarding: () => Promise<AccountStatus>;
   completeProfile: (input: ProfileInput) => Promise<AccountStatus>;
   refresh: () => Promise<Eligibility | null>;
 };
@@ -105,6 +106,19 @@ export function AccountGateProvider({ children }: { children: React.ReactNode })
     return data;
   }, [refresh]);
 
+  const skipLocalDevOnboarding = useCallback(async () => {
+    const { data, error: skipError } = await supabase
+      .rpc('skip_local_dev_onboarding')
+      .single();
+
+    if (skipError) {
+      throw skipError;
+    }
+
+    await refresh();
+    return data;
+  }, [refresh]);
+
   const completeProfile = useCallback(
     async (input: ProfileInput) => {
       const { data, error: profileError } = await supabase
@@ -133,10 +147,11 @@ export function AccountGateProvider({ children }: { children: React.ReactNode })
       isLoading,
       acceptConsents,
       completeLocalDevIdentityVerification,
+      skipLocalDevOnboarding,
       completeProfile,
       refresh,
     }),
-    [acceptConsents, completeLocalDevIdentityVerification, completeProfile, eligibility, error, isLoading, refresh],
+    [acceptConsents, completeLocalDevIdentityVerification, skipLocalDevOnboarding, completeProfile, eligibility, error, isLoading, refresh],
   );
 
   return <AccountGateContext.Provider value={value}>{children}</AccountGateContext.Provider>;
