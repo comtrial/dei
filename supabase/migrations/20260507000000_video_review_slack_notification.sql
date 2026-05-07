@@ -107,9 +107,17 @@ create trigger logs_notify_review_pending
   when (new."검수_상태" = 'PENDING')
   execute function public.notify_video_review_pending('logs');
 
-drop trigger if exists profile_videos_notify_review_pending on public.profile_videos;
-create trigger profile_videos_notify_review_pending
-  after insert on public.profile_videos
-  for each row
-  when (new.moderation_status = 'pending')
-  execute function public.notify_video_review_pending('profile_videos');
+do $$
+begin
+  if to_regclass('public.profile_videos') is not null then
+    execute 'drop trigger if exists profile_videos_notify_review_pending on public.profile_videos';
+    execute $trigger$
+      create trigger profile_videos_notify_review_pending
+        after insert on public.profile_videos
+        for each row
+        when (new.moderation_status = 'pending')
+        execute function public.notify_video_review_pending('profile_videos')
+    $trigger$;
+  end if;
+end;
+$$;

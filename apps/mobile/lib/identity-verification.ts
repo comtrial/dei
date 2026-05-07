@@ -13,6 +13,7 @@ type StartIdentityVerificationResponse = {
 };
 
 type ConfirmIdentityVerificationResponse = {
+  existingMember?: boolean;
   identityVerifiedAt: string;
 };
 
@@ -23,7 +24,7 @@ type FunctionInvokeError = {
 
 const getFriendlyFunctionErrorMessage = (message: string) => {
   if (message === '이미 가입된 본인확인 정보입니다.') {
-    return '이미 가입된 본인확인 정보예요. 기존 계정 복구/연결 흐름으로 이어가야 합니다.';
+    return '기존 회원 정보가 확인됐지만 계정 연결을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.';
   }
 
   if (/PORTONE_|PHONE_HASH_SALT/.test(message) && /configured/.test(message)) {
@@ -56,7 +57,7 @@ const getFunctionErrorMessage = async (
         payload.code === 'EXISTING_MEMBER_FOUND'
         || payload.legacyCode === 'IDENTITY_ALREADY_REGISTERED'
       ) {
-        return 'EXISTING_MEMBER_FOUND: 이미 가입된 본인확인 정보예요. 기존 계정 연결/복구 흐름으로 이어가야 합니다.';
+        return 'EXISTING_MEMBER_FOUND: 기존 회원 정보가 확인됐지만 계정 연결을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.';
       }
 
       const message = payload.error ?? payload.message ?? payload.msg;

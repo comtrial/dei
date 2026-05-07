@@ -23,7 +23,7 @@ import {
   confirmIdentityVerification,
   startIdentityVerification,
 } from '@/lib/identity-verification';
-import { ROUTES } from '@/lib/routes';
+import { ROUTES, routeForEligibility } from '@/lib/routes';
 import { useAccountGate } from '@/providers/account-gate-provider';
 
 type FailureDialogState = {
@@ -38,9 +38,9 @@ const getFailureDialog = (message: string): FailureDialogState => {
     || message.includes('이미 가입')
   ) {
     return {
-      title: '기존 회원 정보가 확인됐습니다',
+      title: '기존 회원 연결에 실패했습니다',
       message:
-        '이 본인확인 정보로 가입된 계정이 있어요. 보안상 현재 임시 세션에서 바로 연결하지 않고, 기존 계정 연결/복구 흐름으로 이어가야 합니다.',
+        '이 본인확인 정보로 가입된 계정이 있지만 연결을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
     };
   }
 
@@ -132,10 +132,18 @@ export default function PhoneScreen() {
               setIsConfirmingVerification(true);
 
               try {
-                await confirmIdentityVerification(response);
-                await refresh();
+                const result = await confirmIdentityVerification(response);
+                const nextEligibility = await refresh();
                 setVerificationRequest(null);
-                router.replace(ROUTES.profile as never);
+                router.replace(
+                  (
+                    nextEligibility
+                      ? routeForEligibility(nextEligibility)
+                      : result.existingMember
+                        ? ROUTES.home
+                        : ROUTES.profile
+                  ) as never,
+                );
               } catch (confirmError) {
                 const errorMessage =
                   confirmError instanceof Error
@@ -171,7 +179,7 @@ export default function PhoneScreen() {
           </View>
           <Text className="text-center text-lg font-semibold">본인확인 요청</Text>
           <Text className="text-muted-foreground text-center leading-6">
-            앱은 인증창을 열고, 인증 결과는 서버에서 다시 확인합니다. 같은 본인확인 정보가 있으면 기존 회원 안내로 전환합니다.
+            앱은 인증창을 열고, 인증 결과는 서버에서 다시 확인합니다. 같은 본인확인 정보가 있으면 기존 회원 계정으로 바로 연결합니다.
           </Text>
         </View>
 

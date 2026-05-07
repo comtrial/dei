@@ -273,16 +273,22 @@ Deno.serve(async (req) => {
           existingProfile,
           phoneHash,
         });
-        const failureMessage = '이미 가입된 본인확인 정보입니다.';
+        const { error: transferError } = await supabase.rpc('transfer_existing_member_account', {
+          p_from_user_id: existingProfile.user_id,
+          p_to_user_id: user.id,
+        });
 
-        await supabase
+        if (transferError) {
+          throw transferError;
+        }
+
+        const { error: transferredVerificationUpdateError } = await supabase
           .from('identity_verifications')
           .update({
             ci_hash: ciHash,
             di_hash: diHash,
-            failed_at: new Date().toISOString(),
-            failure_code: 'IDENTITY_ALREADY_REGISTERED',
-            failure_message: failureMessage,
+            failure_code: null,
+            failure_message: null,
             phone_country_code: phoneCountryCode,
             phone_hash: phoneHash,
             provider_metadata: {
@@ -291,17 +297,89 @@ Deno.serve(async (req) => {
                 matchedKeys,
                 matchedUserId: existingProfile.user_id,
               },
+              existingMemberTransfer: {
+                fromUserId: existingProfile.user_id,
+                toUserId: user.id,
+              },
             },
-            status: 'failed',
+            status: 'verified',
+            verified_at: verifiedAt,
           })
           .eq('id', pendingVerification.id);
 
-        return errorResponse(failureMessage, 409, {
-          code: 'EXISTING_MEMBER_FOUND',
+        if (transferredVerificationUpdateError) {
+          throw transferredVerificationUpdateError;
+        }
+
+        const { error: transferredProfileUpdateError } = await supabase
+          .from('private_profiles')
+          .update({
+            ci_hash: ciHash,
+            di_hash: diHash,
+            phone_country_code: phoneCountryCode,
+            phone_hash: phoneHash,
+          })
+          .eq('user_id', user.id);
+
+        if (transferredProfileUpdateError) {
+          throw transferredProfileUpdateError;
+        }
+
+        const { error: transferredAccountUpdateError } = await supabase
+          .from('account_status')
+          .update({
+            identity_verified_at: verifiedAt,
+          })
+          .eq('user_id', user.id)
+          .is('identity_verified_at', null);
+
+        if (transferredAccountUpdateError) {
+          throw transferredAccountUpdateError;
+        }
+
+        const { data: transferredAccount, error: transferredAccountSelectError } =
+          await supabase
+            .from('account_status')
+            .select('profile_completed_at, first_video_approved_at, discovery_enabled_at')
+            .eq('user_id', user.id)
+            .single();
+
+        if (transferredAccountSelectError) {
+          throw transferredAccountSelectError;
+        }
+
+        if (
+          transferredAccount.profile_completed_at
+          && transferredAccount.first_video_approved_at
+          && !transferredAccount.discovery_enabled_at
+        ) {
+          const { error: transferredDiscoveryUpdateError } = await supabase
+            .from('account_status')
+            .update({
+              discovery_enabled_at: new Date().toISOString(),
+            })
+            .eq('user_id', user.id);
+
+          if (transferredDiscoveryUpdateError) {
+            throw transferredDiscoveryUpdateError;
+          }
+        }
+
+        const { error: oldAuthUserDeleteError } = await supabase.auth.admin.deleteUser(
+          existingProfile.user_id,
+        );
+
+        if (oldAuthUserDeleteError) {
+          console.warn('failed to delete transferred auth user', oldAuthUserDeleteError.message);
+        }
+
+        return jsonResponse({
           existingAccount: existingAccountSnapshot,
-          legacyCode: 'IDENTITY_ALREADY_REGISTERED',
+          existingMember: true,
+          identityVerifiedAt: verifiedAt,
           matchedKeys,
-          resolution: 'existing_member_recovery_required',
+          oldAuthUserDeleted: !oldAuthUserDeleteError,
+          transferredFromUserId: existingProfile.user_id,
         });
       }
     }

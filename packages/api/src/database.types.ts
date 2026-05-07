@@ -881,6 +881,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _video_review_notify_config: { Args: never; Returns: Json }
       accept_required_consents: {
         Args: {
           p_age_policy_version: string
@@ -1028,6 +1029,32 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       recalculate_daily_log: { Args: { p_user_id: string }; Returns: undefined }
+      transfer_existing_member_account: {
+        Args: { p_from_user_id: string; p_to_user_id: string }
+        Returns: {
+          account_state: Database["public"]["Enums"]["account_state"]
+          age_eligible: boolean
+          age_verified_at: string | null
+          banned_at: string | null
+          created_at: string
+          deleted_at: string | null
+          discovery_enabled_at: string | null
+          first_video_approved_at: string | null
+          first_video_uploaded_at: string | null
+          identity_verified_at: string | null
+          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
+          profile_completed_at: string | null
+          suspended_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "account_status"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       account_state: "active" | "suspended" | "banned" | "deleted"
