@@ -469,10 +469,24 @@ export type Database = {
           amount: number
           created_at: string
           currency: string
+          environment: string | null
           external_tx_id: string | null
+          failed_at: string | null
           id: string
+          offering_id: string | null
+          package_id: string | null
           payment_method: string | null
+          product_id: string | null
           product_type: string
+          provider: string
+          purchased_at: string | null
+          raw_payload: Json
+          refunded_at: string | null
+          revenuecat_app_user_id: string | null
+          revenuecat_event_id: string | null
+          revenuecat_original_app_user_id: string | null
+          revenuecat_transaction_id: string | null
+          store: string | null
           updated_at: string
           user_id: string
           결제상태: string
@@ -481,10 +495,24 @@ export type Database = {
           amount: number
           created_at?: string
           currency?: string
+          environment?: string | null
           external_tx_id?: string | null
+          failed_at?: string | null
           id?: string
+          offering_id?: string | null
+          package_id?: string | null
           payment_method?: string | null
+          product_id?: string | null
           product_type?: string
+          provider?: string
+          purchased_at?: string | null
+          raw_payload?: Json
+          refunded_at?: string | null
+          revenuecat_app_user_id?: string | null
+          revenuecat_event_id?: string | null
+          revenuecat_original_app_user_id?: string | null
+          revenuecat_transaction_id?: string | null
+          store?: string | null
           updated_at?: string
           user_id: string
           결제상태?: string
@@ -493,10 +521,24 @@ export type Database = {
           amount?: number
           created_at?: string
           currency?: string
+          environment?: string | null
           external_tx_id?: string | null
+          failed_at?: string | null
           id?: string
+          offering_id?: string | null
+          package_id?: string | null
           payment_method?: string | null
+          product_id?: string | null
           product_type?: string
+          provider?: string
+          purchased_at?: string | null
+          raw_payload?: Json
+          refunded_at?: string | null
+          revenuecat_app_user_id?: string | null
+          revenuecat_event_id?: string | null
+          revenuecat_original_app_user_id?: string | null
+          revenuecat_transaction_id?: string | null
+          store?: string | null
           updated_at?: string
           user_id?: string
           결제상태?: string
@@ -656,6 +698,109 @@ export type Database = {
         }
         Relationships: []
       }
+      refresh_item_grants: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          granted_at: string
+          granted_count: number
+          id: string
+          payment_id: string
+          product_id: string
+          remaining_count: number
+          revoke_reason: string | null
+          revoked_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          granted_at?: string
+          granted_count?: number
+          id?: string
+          payment_id: string
+          product_id: string
+          remaining_count?: number
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          granted_at?: string
+          granted_count?: number
+          id?: string
+          payment_id?: string
+          product_id?: string
+          remaining_count?: number
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refresh_item_grants_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      refresh_redemptions: {
+        Row: {
+          candidate_user_ids: string[]
+          created_at: string
+          failure_reason: string | null
+          grant_id: string | null
+          id: string
+          pool_date: string
+          seen_user_ids: string[]
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          candidate_user_ids?: string[]
+          created_at?: string
+          failure_reason?: string | null
+          grant_id?: string | null
+          id?: string
+          pool_date?: string
+          seen_user_ids?: string[]
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          candidate_user_ids?: string[]
+          created_at?: string
+          failure_reason?: string | null
+          grant_id?: string | null
+          id?: string
+          pool_date?: string
+          seen_user_ids?: string[]
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refresh_redemptions_grant_id_fkey"
+            columns: ["grant_id"]
+            isOneToOne: false
+            referencedRelation: "refresh_item_grants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reports: {
         Row: {
           action_taken: string | null
@@ -717,6 +862,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      revenuecat_webhook_events: {
+        Row: {
+          aliases: string[]
+          app_user_id: string | null
+          created_at: string
+          environment: string | null
+          event_type: string
+          id: string
+          original_app_user_id: string | null
+          payload: Json
+          processed_at: string | null
+          product_id: string | null
+          transaction_id: string | null
+        }
+        Insert: {
+          aliases?: string[]
+          app_user_id?: string | null
+          created_at?: string
+          environment?: string | null
+          event_type: string
+          id: string
+          original_app_user_id?: string | null
+          payload: Json
+          processed_at?: string | null
+          product_id?: string | null
+          transaction_id?: string | null
+        }
+        Update: {
+          aliases?: string[]
+          app_user_id?: string | null
+          created_at?: string
+          environment?: string | null
+          event_type?: string
+          id?: string
+          original_app_user_id?: string | null
+          payload?: Json
+          processed_at?: string | null
+          product_id?: string | null
+          transaction_id?: string | null
+        }
+        Relationships: []
       }
       review_history: {
         Row: {
@@ -1008,6 +1195,23 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      consume_refresh_item: {
+        Args: { p_seen_user_ids?: string[] }
+        Returns: {
+          display_name: string
+          gender: string
+          log_id: string
+          pool_id: string
+          redemption_id: string
+          user_id: string
+          video_path: string
+          video_url: string
+        }[]
+      }
+      get_available_refresh_item_count: {
+        Args: { p_user_id?: string }
+        Returns: number
+      }
       get_my_eligibility: {
         Args: never
         Returns: {
@@ -1027,8 +1231,89 @@ export type Database = {
           profile_complete: boolean
         }[]
       }
+      grant_refresh_item: {
+        Args: {
+          p_granted_count?: number
+          p_payment_id: string
+          p_product_id: string
+          p_user_id: string
+        }
+        Returns: {
+          consumed_at: string | null
+          created_at: string
+          granted_at: string
+          granted_count: number
+          id: string
+          payment_id: string
+          product_id: string
+          remaining_count: number
+          revoke_reason: string | null
+          revoked_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "refresh_item_grants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       is_admin: { Args: never; Returns: boolean }
       recalculate_daily_log: { Args: { p_user_id: string }; Returns: undefined }
+      record_refresh_redemption: {
+        Args: {
+          p_candidate_user_ids?: string[]
+          p_failure_reason?: string
+          p_grant_id?: string
+          p_seen_user_ids?: string[]
+          p_status?: string
+          p_user_id: string
+        }
+        Returns: {
+          candidate_user_ids: string[]
+          created_at: string
+          failure_reason: string | null
+          grant_id: string | null
+          id: string
+          pool_date: string
+          seen_user_ids: string[]
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "refresh_redemptions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      revoke_refresh_item_grant_for_payment: {
+        Args: { p_payment_id: string; p_revoke_reason?: string }
+        Returns: {
+          consumed_at: string | null
+          created_at: string
+          granted_at: string
+          granted_count: number
+          id: string
+          payment_id: string
+          product_id: string
+          remaining_count: number
+          revoke_reason: string | null
+          revoked_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "refresh_item_grants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       transfer_existing_member_account: {
         Args: { p_from_user_id: string; p_to_user_id: string }
         Returns: {

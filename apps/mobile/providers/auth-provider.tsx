@@ -1,6 +1,7 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { configureRevenueCat, logOutRevenueCat } from '@/lib/revenuecat';
 import { supabase } from '@/lib/supabase';
 
 type AuthContextValue = {
@@ -40,6 +41,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    const userId = session?.user.id;
+
+    if (!userId) {
+      return;
+    }
+
+    configureRevenueCat(userId).catch(() => undefined);
+  }, [session?.user.id]);
+
   const ensureAnonymousSession = useCallback(async () => {
     if (session) {
       return session;
@@ -61,6 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 
   const signOut = useCallback(async () => {
+    await logOutRevenueCat();
+
     const { error } = await supabase.auth.signOut();
 
     if (error) {

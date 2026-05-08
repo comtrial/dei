@@ -16,6 +16,32 @@ export interface CurationItem {
   gender: string | null;
 }
 
+type PaidRefreshCurationRow = {
+  display_name: string | null;
+  gender: string | null;
+  log_id: string;
+  pool_id: string;
+  user_id: string;
+  video_path: string | null;
+  video_url: string | null;
+};
+
+function toCurationItem(row: PaidRefreshCurationRow): CurationItem {
+  const rawPath = row.video_path ?? row.video_url ?? '';
+  const videoUrl = rawPath
+    ? supabase.storage.from('logs').getPublicUrl(rawPath).data.publicUrl
+    : '';
+
+  return {
+    displayName: row.display_name ?? '—',
+    gender: row.gender ?? null,
+    logId: row.log_id,
+    poolId: row.pool_id,
+    userId: row.user_id,
+    videoUrl,
+  };
+}
+
 async function fetchCurationPool(
   userId: string,
   excludeUserIds: string[] = []
@@ -148,6 +174,51 @@ export function useHomeScreen(userId: string | undefined) {
     return 'ok';
   }, [userId, seenUserIds]);
 
+  const handleDeveloperPaidRefresh = useCallback(async (): Promise<'ok' | 'failed'> => {
+    if (!userId || !__DEV__) return 'failed';
+
+    const nextPool = await fetchCurationPool(userId, seenUserIds);
+    const fallbackPool = nextPool.length >= 3 ? nextPool : await fetchCurationPool(userId);
+
+    if (fallbackPool.length < 3) return 'failed';
+
+    setPages((prev) => [fallbackPool, ...prev]);
+    setSeenUserIds((prev) =>
+      Array.from(new Set([...prev, ...fallbackPool.map((p) => p.userId)]))
+    );
+
+    return 'ok';
+  }, [userId, seenUserIds]);
+
+  const handlePaidRefresh = useCallback(async (): Promise<'ok' | 'exhausted' | 'failed'> => {
+    if (!userId) return 'failed';
+
+    const { data, error } = await supabase.rpc('consume_refresh_item', {
+      p_seen_user_ids: seenUserIds,
+    });
+
+    if (error) {
+      if (error.message.includes('NO_CANDIDATES') || error.message.includes('NO_AVAILABLE_REFRESH_ITEM')) {
+        return 'exhausted';
+      }
+
+      return 'failed';
+    }
+
+    const nextPool = ((data ?? []) as PaidRefreshCurationRow[]).map(toCurationItem);
+
+    if (nextPool.length < 3) {
+      return 'exhausted';
+    }
+
+    setPages((prev) => [nextPool, ...prev]);
+    setSeenUserIds((prev) =>
+      Array.from(new Set([...prev, ...nextPool.map((p) => p.userId)]))
+    );
+
+    return 'ok';
+  }, [userId, seenUserIds]);
+
   const handleNoonRefresh = useCallback(async () => {
     setNoonBanner(false);
     await fetchAll();
@@ -162,6 +233,8 @@ export function useHomeScreen(userId: string | undefined) {
     logProgress,
     hasLog: todayLogs.length > 0,
     noonBanner,
+    handleDeveloperPaidRefresh,
+    handlePaidRefresh,
     handleRefresh,
     handleNoonRefresh,
     dismissNoonBanner: () => setNoonBanner(false),

@@ -1,0 +1,6 @@
+-- Remote history placeholder.
+--
+-- The linked Supabase project already has migration version 20260507044408
+-- recorded in supabase_migrations.schema_migrations, but the local repo did not
+-- contain a file with this version. Keep this no-op migration so `supabase db push`
+-- can compare local and remote history without repairing remote metadata.

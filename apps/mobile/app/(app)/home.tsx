@@ -6,12 +6,21 @@ import { B2Banner } from '@/components/home/B2Banner';
 import { CurationCard } from '@/components/home/CurationCard';
 import { H3EmptyContent } from '@/components/home/H3EmptyContent';
 import { HomeTopBar } from '@/components/home/HomeTopBar';
+import { PaidRefreshSheet } from '@/components/home/PaidRefreshSheet';
+import { PaymentFailureDialog } from '@/components/home/PaymentFailureDialog';
 import { VideoModal } from '@/components/home/VideoModal';
 import type { CurationItem } from '@/hooks/useHomeScreen';
 import { Text } from '@/components/ui/text';
 import { useHomeScreen } from '@/hooks/useHomeScreen';
 import { useLike } from '@/hooks/useLike';
+import { isLocalDevPaymentEnabled } from '@/lib/dev-auth';
+import {
+  getRefreshOfferingInfo,
+  isRevenueCatPurchaseCancelled,
+  purchaseRefreshItem,
+} from '@/lib/refresh-purchase';
 import { useAuth } from '@/providers/auth-provider';
+import { logger } from '@dei/shared';
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -21,6 +30,8 @@ export default function HomeScreen() {
     currentPool,
     logProgress,
     noonBanner,
+    handleDeveloperPaidRefresh,
+    handlePaidRefresh,
     handleRefresh,
     handleNoonRefresh,
     dismissNoonBanner,
@@ -28,10 +39,43 @@ export default function HomeScreen() {
 
   const { likeUsed, checkLikeUsed, sendLike } = useLike(user?.id);
   const [selectedItem, setSelectedItem] = useState<CurationItem | null>(null);
+  const [isPaidRefreshOpen, setIsPaidRefreshOpen] = useState(false);
+  const [isPaymentFailureOpen, setIsPaymentFailureOpen] = useState(false);
+  const [isPurchasingRefresh, setIsPurchasingRefresh] = useState(false);
+  const [isDeveloperCompletingRefresh, setIsDeveloperCompletingRefresh] = useState(false);
+  const [refreshPriceLabel, setRefreshPriceLabel] = useState('스토어 가격 확인 후 표시');
+  const isDeveloperPaymentEnabled = isLocalDevPaymentEnabled();
 
   useEffect(() => {
     if (screen === 'H2') checkLikeUsed();
   }, [checkLikeUsed, screen]);
+
+  useEffect(() => {
+    if (!isPaidRefreshOpen || !user?.id) {
+      return;
+    }
+
+    let mounted = true;
+
+    getRefreshOfferingInfo(user.id)
+      .then((info) => {
+        if (mounted) {
+          setRefreshPriceLabel(info.priceLabel);
+        }
+      })
+      .catch((error) => {
+        logger.captureException(error, {
+          tags: { feature: 'paid-refresh', action: 'load-offering' },
+        });
+        if (mounted) {
+          setRefreshPriceLabel('스토어 가격 확인 후 표시');
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [isPaidRefreshOpen, user?.id]);
 
   const handleLike = async (toUserId: string) => {
     const ok = await sendLike(toUserId);
@@ -41,7 +85,59 @@ export default function HomeScreen() {
   const handleRefreshPress = async () => {
     const result = await handleRefresh();
     if (result === 'exhausted') {
-      Alert.alert('', '더 이상 새로운 추천이 없어요.');
+      setIsPaidRefreshOpen(true);
+    }
+  };
+
+  const handlePurchaseRefresh = async () => {
+    if (!user?.id) {
+      setIsPaidRefreshOpen(false);
+      setIsPaymentFailureOpen(true);
+      return;
+    }
+
+    setIsPurchasingRefresh(true);
+
+    try {
+      await purchaseRefreshItem(user.id);
+      const refreshResult = await handlePaidRefresh();
+
+      if (refreshResult === 'ok') {
+        setIsPaidRefreshOpen(false);
+      } else {
+        setIsPaidRefreshOpen(false);
+        setIsPaymentFailureOpen(true);
+      }
+    } catch (error) {
+      if (!isRevenueCatPurchaseCancelled(error)) {
+        logger.captureException(error, {
+          tags: { feature: 'paid-refresh', action: 'purchase' },
+        });
+        setIsPaymentFailureOpen(true);
+      }
+    } finally {
+      setIsPurchasingRefresh(false);
+    }
+  };
+
+  const handleDeveloperCompleteRefresh = async () => {
+    setIsDeveloperCompletingRefresh(true);
+
+    try {
+      const result = await handleDeveloperPaidRefresh();
+
+      if (result === 'ok') {
+        setIsPaidRefreshOpen(false);
+      } else {
+        setIsPaymentFailureOpen(true);
+      }
+    } catch (error) {
+      logger.captureException(error, {
+        tags: { feature: 'paid-refresh', screen: 'home' },
+      });
+      setIsPaymentFailureOpen(true);
+    } finally {
+      setIsDeveloperCompletingRefresh(false);
     }
   };
 
@@ -120,6 +216,20 @@ export default function HomeScreen() {
     </SafeAreaView>
 
     <VideoModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+    <PaidRefreshSheet
+      isDeveloperBypassEnabled={isDeveloperPaymentEnabled}
+      isDeveloperCompleting={isDeveloperCompletingRefresh}
+      isOpen={isPaidRefreshOpen}
+      isPurchasing={isPurchasingRefresh}
+      onClose={() => setIsPaidRefreshOpen(false)}
+      onDeveloperComplete={handleDeveloperCompleteRefresh}
+      onPurchase={handlePurchaseRefresh}
+      priceLabel={refreshPriceLabel}
+    />
+    <PaymentFailureDialog
+      isOpen={isPaymentFailureOpen}
+      onClose={() => setIsPaymentFailureOpen(false)}
+    />
     </>
   );
 }
