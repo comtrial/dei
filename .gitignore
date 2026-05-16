@@ -29,3 +29,5 @@ integration-report.json
 playwright-report/
 test-results/
 coverage/
+.claude/settings.local.json
+apps/mobile/e2e/screenshots/
