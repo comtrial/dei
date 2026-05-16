@@ -60,6 +60,9 @@ export function useChatRoom(
   const [sendFailure, setSendFailure] = useState<SendFailureNotice | null>(null);
   const pendingBodies = useRef<Map<string, string>>(new Map());
   const failureSeq = useRef(0);
+  // realtime 채널이 SUBSCRIBED 되어 INSERT 를 수신할 준비가 됐는지.
+  // e2e 에서 확인된 갭(구독 직후 송신 시 INSERT 유실) 방지용 — 송신 전 대기.
+  const realtimeReady = useRef(false);
 
   const clearSendFailure = useCallback(() => setSendFailure(null), []);
 
@@ -98,10 +101,14 @@ export function useChatRoom(
       onConversationEnded: () => {
         if (active) setEnded(true);
       },
+      onReady: () => {
+        realtimeReady.current = true;
+      },
     });
 
     return () => {
       active = false;
+      realtimeReady.current = false;
       unsubscribe();
     };
   }, [conversationId]);
@@ -109,6 +116,14 @@ export function useChatRoom(
   const doSend = useCallback(
     async (clientId: string, body: string) => {
       if (!conversationId) return;
+
+      // realtime 구독 안정화 대기 (e2e 결함: SUBSCRIBED 직후 송신 시 상대가
+      // INSERT 를 못 받는 갭). 최대 ~2s 만 기다리고, 그 안에 안 되면 그대로
+      // 진행 — 송신 자체를 막지는 않되 유실 가능성을 최소화한다.
+      for (let waited = 0; !realtimeReady.current && waited < 2000; waited += 100) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
       const result = await sendMessage(conversationId, body);
 
       if (result.ok) {
