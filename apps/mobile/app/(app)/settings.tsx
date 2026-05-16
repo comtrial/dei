@@ -16,7 +16,7 @@ export default function SettingsScreen() {
       <View className="gap-6">
         <View>
           <StatusRow
-            detail={user?.email ?? undefined}
+            detail={user?.id ?? user?.email ?? undefined}
             label="계정"
             tone={eligibility?.account_state === 'active' ? 'success' : 'warning'}
             value={eligibility?.account_state ?? '확인 중'}
