@@ -161,6 +161,19 @@ logger.setUser({ id: session.user.id });
 6. **E2E-web 하네스는 화면을 재구현하지 않는다.** `apps/mobile/e2e/harness`
    가 *프로덕션 스크린* 을 RN-web 으로 마운트하고 Supabase/router/auth
    경계만 모킹. 새 화면 추가 시 하네스가 깨지면 화면 코드가 잘못된 것.
+7. **DB·realtime 연동 기능은 push 전 실DB e2e 로 관통 검증한다 (CRITICAL).**
+   unit/component/e2e-web 은 전부 mock 이라 "통과해도 실제 동작 보장 안 됨".
+   특히 **realtime 메시지 왕복, 매칭→대화방→메시지 전체 사용자 여정, RLS
+   실제 가시성** 은 mock 으로는 절대 못 잡는다 (실제로 채팅 시스템에서
+   realtime 왕복 미검증·RLS status 갭이 mock 게이트 전부 통과한 뒤에야
+   실DB e2e 에서 발견됨). 패턴: 전용 테스트 유저(이메일 prefix
+   `e2e-*@example.test`)만 생성·사용 → 원격/로컬 Supabase 에 실제 RPC·
+   realtime 구독으로 흐름 관통 → `try/finally` 로 테스트 데이터 전량
+   cleanup (기존 실데이터 무접촉, 시작=끝 카운트 동일 확인). 기준 구현·
+   리포트: `docs/chat-spec/e2e-realdb-report.md`, 스크립트 패턴은 거기
+   참조. **"단위/통합 테스트 다 통과" 를 실DB 동작 검증으로 보고하지 말 것**
+   — 통과율 ≠ 실제 동작. 협업 agent 는 DB/realtime 변경 PR 을 올리기 전
+   해당 흐름의 실DB e2e 를 추가·실행하고 그 결과를 근거로 보고한다.
 
 ## 채팅 검증 게이트 (CRITICAL — "수동 폰 확인 불필요" 의 근거)
 

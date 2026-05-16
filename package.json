@@ -21,7 +21,7 @@
   "devDependencies": {
     "@sentry/node": "^8.45.0",
     "@vitest/coverage-v8": "^2.1.8",
-    "supabase": "^2.95.2",
+    "supabase": "^2.98.2",
     "tsx": "^4.19.2",
     "turbo": "^2.9.6",
     "typescript": "^5.9.3",

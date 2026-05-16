@@ -257,6 +257,12 @@ export function subscribeConversation(
   handlers: {
     onMessage: (m: MessageRow) => void;
     onConversationEnded: () => void;
+    /**
+     * 채널이 SUBSCRIBED 된 시점에 호출. e2e 에서 확인된 갭:
+     * SUBSCRIBED 직후 RLS 바인딩 적용 전 INSERT 는 유실될 수 있으므로,
+     * 호출자는 onReady 이후에 첫 송신/낙관 갱신을 하는 것이 안전하다.
+     */
+    onReady?: () => void;
   },
 ): RealtimeUnsubscribe {
   const channel = (supabase as any)
@@ -289,7 +295,9 @@ export function subscribeConversation(
         }
       },
     )
-    .subscribe();
+    .subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') handlers.onReady?.();
+    });
 
   return () => {
     (supabase as any).removeChannel(channel);
