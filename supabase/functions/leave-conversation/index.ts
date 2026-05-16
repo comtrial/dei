@@ -42,7 +42,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { supabase } = await getAuthenticatedUser(req);
+    // leave_conversation RPC 는 SECURITY DEFINER + auth.uid() 의존 → 호출
+    // 사용자 JWT 클라이언트로 불러야 한다 (service-role 이면 auth.uid() NULL).
+    const { supabaseAsUser: supabase } = await getAuthenticatedUser(req);
 
     let body: LeaveBody = {};
     try {
