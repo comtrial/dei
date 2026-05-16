@@ -16,6 +16,11 @@ export const Colors = {
     icon: '#687076',
     tabIconDefault: '#687076',
     tabIconSelected: tintColorLight,
+    // 디자인 토큰 미러 (global.css 의 --destructive-foreground:
+    // light 40 48% 90%). RN 의 ActivityIndicator `color` 처럼 className 을
+    // 못 받는 네이티브 prop 에서만 토큰값을 코드로 참조하기 위함 — 하드코딩
+    // hex 를 호출부에서 제거하기 위한 단일 출처.
+    destructiveForeground: 'hsl(40, 48%, 90%)',
   },
   dark: {
     text: '#ECEDEE',
@@ -24,6 +29,8 @@ export const Colors = {
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,
+    // global.css 의 --destructive-foreground: dark 40 55% 91%.
+    destructiveForeground: 'hsl(40, 55%, 91%)',
   },
 };
 

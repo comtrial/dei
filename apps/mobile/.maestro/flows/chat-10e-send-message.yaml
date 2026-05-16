@@ -1,0 +1,36 @@
+# 10-E · 메시지 전송 e2e (성공 경로 + 컴포저 경계)
+#
+# DEV-SPEC e2e 10-E (294d0001-...). CH2 컴포저: 1~500자 grapheme,
+# 전송 버튼 활성/비활성, 전송 직전 B-CH2 서버 재검증 후 CH-API1.
+# 성공 시 낙관적 버블 확정 + 입력 초기화. (실패 retry 의 결정적 검증은
+# Playwright room-send-fail-retry 시나리오가 담당 — Maestro 는 실서버라
+# 강제 실패 주입이 비결정적이라 happy path 만 네이티브로 확인.)
+#
+# 셀렉터: testID(id:) 우선.
+# 실행: maestro test apps/mobile/.maestro/flows/chat-10e-send-message.yaml
+appId: com.comtrial.dei
+---
+- launchApp
+- tapOn:
+    text: 'DM'
+- tapOn:
+    id: 'chat-list-row-.*'
+- assertVisible:
+    id: 'chat-room'
+# 빈 입력 → 전송 버튼 비활성 (1~500자 정책).
+- assertVisible:
+    id: 'chat-composer-send'
+# 메시지 입력 → 카운터 노출 + 전송 활성.
+- tapOn:
+    id: 'chat-composer-input'
+- inputText: 'Maestro e2e 메시지'
+- assertVisible:
+    id: 'chat-composer-counter'
+- tapOn:
+    id: 'chat-composer-send'
+# 전송한 본문이 버블로 확정되어 스트림에 보여야 한다.
+- assertVisible:
+    text: 'Maestro e2e 메시지'
+# 입력 초기화 → 카운터 사라짐.
+- assertNotVisible:
+    id: 'chat-composer-counter'
