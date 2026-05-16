@@ -1,35 +1,52 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
+import { getToday } from '@/lib/dateHelpers';
 import { getTimeOfDay } from '@/lib/timeOfDay';
 import { supabase } from '@/lib/supabase';
 
-export function useTodayClip() {
+function getSlotRange(hour: number): { min: number; max: number } {
+  if (hour < 5) return { min: 0, max: 4 };
+  if (hour < 12) return { min: 5, max: 11 };
+  if (hour < 17) return { min: 12, max: 16 };
+  if (hour < 21) return { min: 17, max: 20 };
+  return { min: 21, max: 23 };
+}
+
+export function useTodayClip(userId: string | undefined) {
   const [hasClipInCurrentSlot, setHasClipInCurrentSlot] = useState(false);
   const [currentSlotLabel, setCurrentSlotLabel] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // 화면 포커스마다 재조회 — 탭 이동 후 돌아와도 최신 상태 반영
   useFocusEffect(
     useCallback(() => {
       const hour = new Date().getHours();
       const label = getTimeOfDay(hour);
-      const today = new Date().toISOString().slice(0, 10);
+      const { min, max } = getSlotRange(hour);
+      const today = getToday();
 
       setCurrentSlotLabel(label);
       setIsLoading(true);
 
+      if (!userId) {
+        setHasClipInCurrentSlot(false);
+        setIsLoading(false);
+        return;
+      }
+
       supabase
         .from('logs')
         .select('id', { count: 'exact', head: true })
-        .eq('hour_slot', hour)
+        .eq('user_id', userId)
+        .gte('hour_slot', min)
+        .lte('hour_slot', max)
         .gte('recorded_at', `${today}T00:00:00.000Z`)
         .lte('recorded_at', `${today}T23:59:59.999Z`)
         .then(({ count }) => {
           setHasClipInCurrentSlot((count ?? 0) > 0);
           setIsLoading(false);
         });
-    }, [])
+    }, [userId])
   );
 
   return { hasClipToday: hasClipInCurrentSlot, currentSlotLabel, isLoading };

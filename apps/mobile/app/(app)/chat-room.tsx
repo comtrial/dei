@@ -97,7 +97,7 @@ export default function ChatRoomScreen() {
       category: 'chat',
       data: { otherUserId: params.otherUserId },
     });
-    const r = enterOpponentProfile((t) => router.push(t), {
+    const r = enterOpponentProfile((t) => router.push(t as never), {
       otherUserId: params.otherUserId ?? null,
       conversationId,
       source: 'ch4-sheet',
@@ -110,7 +110,7 @@ export default function ChatRoomScreen() {
   // 10-G alt: CH2 AppBar 상대 아바타/닉네임 tap → OP3 직진입.
   const handleHeaderProfile = useCallback(() => {
     logger.addBreadcrumb({ message: 'chat_header_avatar_tapped', category: 'chat' });
-    const r = enterOpponentProfile((t) => router.push(t), {
+    const r = enterOpponentProfile((t) => router.push(t as never), {
       otherUserId: params.otherUserId ?? null,
       conversationId,
       source: 'ch2-header',

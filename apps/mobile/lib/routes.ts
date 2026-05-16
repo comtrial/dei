@@ -23,6 +23,8 @@ export const ROUTES = {
   chatRoute: '/chat',
   chatRoom: '/chat-room',
   settings: '/settings',
+  myProfile: '/my-profile',
+  profiles: '/profiles',
 } as const;
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];
@@ -43,6 +45,7 @@ const APP_ROUTES = new Set<string>([
   ROUTES.chatRoute,
   ROUTES.chatRoom,
   ROUTES.settings,
+  ROUTES.myProfile,
 ]);
 
 const ONBOARDING_ROUTES = new Set<string>([
@@ -60,9 +63,12 @@ const AUTH_ROUTES = new Set<string>([
   ROUTES.accountStatus,
 ]);
 
+export const profileRoute = (userId: string): string => `${ROUTES.profiles}/${userId}`;
+
 export const isAppRoute = (pathname: string) =>
   APP_ROUTES.has(pathname) ||
-  [...APP_ROUTES].some((r) => pathname.startsWith(r + '/'));
+  pathname.startsWith(`${ROUTES.profiles}/`) ||
+  [...APP_ROUTES].some((route) => pathname.startsWith(`${route}/`));
 
 export const isAuthRoute = (pathname: string) => AUTH_ROUTES.has(pathname);
 

@@ -1,4 +1,5 @@
-import { decode as decodeBase64 } from 'base64-arraybuffer';
+import { logger } from '@dei/shared';
+import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useState } from 'react';
 
@@ -6,6 +7,26 @@ import { supabase } from '@/lib/supabase';
 
 const clampProfileVideoDuration = (durationMs: number) =>
   Math.min(2500, Math.max(1500, Math.round(durationMs || 2000)));
+
+function getVideoContentType(uri: string): string {
+  const extension = uri.split('?')[0]?.split('.').pop()?.toLowerCase();
+
+  if (extension === 'mov' || extension === 'qt') {
+    return 'video/quicktime';
+  }
+
+  return 'video/mp4';
+}
+
+function getVideoExtension(uri: string): string {
+  const extension = uri.split('?')[0]?.split('.').pop()?.toLowerCase();
+
+  if (extension === 'mov' || extension === 'qt') {
+    return 'mov';
+  }
+
+  return 'mp4';
+}
 
 export function useSaveProfileVideo() {
   const [loading, setLoading] = useState(false);
@@ -36,16 +57,23 @@ export function useSaveProfileVideo() {
         const fileInfo = await FileSystem.getInfoAsync(tempVideoUri);
         fileSizeBytes = fileInfo.exists && 'size' in fileInfo ? fileInfo.size : null;
 
-        // RN fetch+blob 은 file:// URI 에서 size 0 Blob 버그, base64→ArrayBuffer 우회 필수.
-        const base64 = await FileSystem.readAsStringAsync(tempVideoUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        const arrayBuffer = decodeBase64(base64);
-        const fileName = `${userId}/${Date.now()}.mp4`;
+        if (!fileInfo.exists || !fileSizeBytes) {
+          throw new Error('촬영 파일이 비어 있어요. 다시 촬영해 주세요.');
+        }
+
+        // RN fetch+blob 은 file:// URI 에서 size 0 Blob 버그가 있어 File API로 읽는다.
+        const contentType = getVideoContentType(tempVideoUri);
+        const arrayBuffer = await new File(tempVideoUri).arrayBuffer();
+
+        if (arrayBuffer.byteLength === 0) {
+          throw new Error('촬영 파일을 읽을 수 없어요. 다시 촬영해 주세요.');
+        }
+
+        const fileName = `${userId}/${Date.now()}.${getVideoExtension(tempVideoUri)}`;
 
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('profile-videos')
-          .upload(fileName, arrayBuffer, { contentType: 'video/mp4', upsert: false });
+          .upload(fileName, arrayBuffer, { contentType, upsert: false });
 
         if (uploadError) {
           throw uploadError;
@@ -59,7 +87,7 @@ export function useSaveProfileVideo() {
         storage_path: storagePath,
         duration_ms: clampProfileVideoDuration(recordedMs),
         file_size_bytes: fileSizeBytes,
-        mime_type: 'video/mp4',
+        mime_type: tempVideoUri ? getVideoContentType(tempVideoUri) : 'video/mp4',
         moderation_status: 'pending',
         is_primary: true,
       });
@@ -69,7 +97,14 @@ export function useSaveProfileVideo() {
       }
 
       if (tempVideoUri) {
-        await FileSystem.deleteAsync(tempVideoUri, { idempotent: true });
+        try {
+          await FileSystem.deleteAsync(tempVideoUri, { idempotent: true });
+        } catch (cleanupError) {
+          logger.captureException(cleanupError, {
+            tags: { feature: 'profile-video-cleanup' },
+            extra: { tempVideoUri },
+          });
+        }
       }
 
       return { success: true };

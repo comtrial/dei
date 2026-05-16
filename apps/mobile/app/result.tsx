@@ -30,8 +30,9 @@ export default function ResultScreen() {
   const { eligibility, refresh } = useAccountGate();
 
   const recordedMs = Number(durationMs ?? 2000);
-  const isProfileVideoFlow =
-    purpose === 'profile' || eligibility?.next_step === 'first_video';
+  const isProfileVideoFlow = purpose
+    ? purpose === 'profile'
+    : eligibility?.next_step === 'first_video';
   const isSaving = loading || profileVideoLoading;
   const timeLabel = getTimeOfDay(new Date().getHours());
 
@@ -59,6 +60,11 @@ export default function ResultScreen() {
   };
 
   const handleSave = async () => {
+    if (!uri) {
+      Alert.alert('저장 실패', '촬영 파일이 없어 저장할 수 없어요. 다시 촬영해 주세요.');
+      return;
+    }
+
     if (isProfileVideoFlow) {
       const result = await saveProfileVideo({ tempVideoUri: uri || undefined, recordedMs });
       if (result.success) {
@@ -67,12 +73,6 @@ export default function ResultScreen() {
       } else {
         Alert.alert('저장 실패', result.message || '저장에 실패했어요. 다시 시도해주세요.');
       }
-      return;
-    }
-
-    // 시뮬레이터: 데일리 로그 uri가 없으면 저장 없이 홈으로 이동
-    if (!uri) {
-      router.replace(ROUTES.home as never);
       return;
     }
 

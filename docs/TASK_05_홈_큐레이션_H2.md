@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
 
 ## B2 배너 — 영상 미업로드 시 노출
 
-> **노출 조건**: `hasAnyVideo === false`  
+> **노출 조건**: `hasAnyVideo === false`
 > **숨김 조건**: `hasAnyVideo === true` (영상 1건 이상 업로드)
 
 ```tsx
@@ -327,7 +327,7 @@ async function handleLike(targetUserId: string) {
 | FREE | 1회 | 영상 1건 이상 업로드 |
 | PAID (추후) | N회 | 구독 또는 일회성 결제 |
 
-> `daily_like_quota` 필드를 사용자 테이블에 추가해 플랜별 한도 관리 예정.  
+> `daily_like_quota` 필드를 사용자 테이블에 추가해 플랜별 한도 관리 예정.
 > 현재 FREE 기준(`= 1`)은 하드코딩 상수 `FREE_DAILY_QUOTA`로 분리해 추후 교체 용이하게 유지.
 
 ---

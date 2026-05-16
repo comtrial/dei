@@ -1,19 +1,28 @@
 import { useEffect, useState } from 'react';
 import { TouchableOpacity, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { Volume2, VolumeX, Heart } from 'lucide-react-native';
+import { Heart, UserRound, Volume2, VolumeX } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
 import type { CurationItem } from '@/hooks/useHomeScreen';
 
 interface Props {
   item: CurationItem;
-  canLike: boolean;
+  isLikeUsed: boolean;
+  isLiked: boolean;
   onLike: (userId: string) => void;
   onPress: (item: CurationItem) => void;
+  onProfilePress?: (item: CurationItem) => void;
 }
 
-export function CurationCard({ item, canLike, onLike, onPress }: Props) {
+export function CurationCard({
+  item,
+  isLiked,
+  isLikeUsed,
+  onLike,
+  onPress,
+  onProfilePress,
+}: Props) {
   const [muted, setMuted] = useState(true);
   const [videoIndex, setVideoIndex] = useState(0);
 
@@ -68,6 +77,11 @@ export function CurationCard({ item, canLike, onLike, onPress }: Props) {
     .filter(Boolean)
     .join(' · ');
   const infoLine2 = item.region ?? null;
+  const likeButtonClassName = isLiked
+    ? 'absolute right-2.5 bottom-12 w-8 h-8 rounded-full bg-[#C0432A] items-center justify-center'
+    : isLikeUsed
+      ? 'absolute right-2.5 bottom-12 w-8 h-8 rounded-full bg-black/45 border border-white/25 items-center justify-center'
+      : 'absolute right-2.5 bottom-12 w-8 h-8 rounded-full bg-[#C0432A] items-center justify-center';
 
   return (
     <TouchableOpacity
@@ -102,6 +116,20 @@ export function CurationCard({ item, canLike, onLike, onPress }: Props) {
         ) : null}
       </View>
 
+      {onProfilePress ? (
+        <TouchableOpacity
+          accessibilityLabel="프로필 보기"
+          className="absolute right-2.5 top-2.5 h-8 w-8 items-center justify-center rounded-full bg-black/50"
+          onPress={(event) => {
+            event.stopPropagation();
+            onProfilePress(item);
+          }}
+          activeOpacity={0.8}
+        >
+          <UserRound size={14} color="#fff" />
+        </TouchableOpacity>
+      ) : null}
+
       {/* 우하단 음소거 토글 */}
       <TouchableOpacity
         className="absolute right-2.5 bottom-2 w-7 h-7 rounded-full border border-white/35 items-center justify-center"
@@ -116,15 +144,21 @@ export function CurationCard({ item, canLike, onLike, onPress }: Props) {
       </TouchableOpacity>
 
       {/* 좋아요 버튼 */}
-      {canLike && (
-        <TouchableOpacity
-          className="absolute right-2.5 bottom-12 w-8 h-8 rounded-full bg-[#C0432A] items-center justify-center"
-          onPress={() => onLike(item.userId)}
-          activeOpacity={0.8}
-        >
-          <Heart size={14} color="#fff" fill="#fff" />
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        accessibilityLabel={isLiked ? '좋아요 보냄' : '좋아요 보내기'}
+        className={likeButtonClassName}
+        onPress={(event) => {
+          event.stopPropagation();
+          onLike(item.userId);
+        }}
+        activeOpacity={0.8}
+      >
+        <Heart
+          size={14}
+          color={isLikeUsed && !isLiked ? 'rgba(255,255,255,0.7)' : '#fff'}
+          fill={isLiked ? '#fff' : 'transparent'}
+        />
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 }

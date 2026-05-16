@@ -1,16 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
-import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Modal, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { logger } from '@dei/shared';
 
 import { Text } from '@/components/ui/text';
 import { useTodayClip } from '@/hooks/useTodayClip';
-import { setRecordingUri, clearRecordingUri } from '@/lib/recordingStore';
 import { formatDuration } from '@/lib/formatDuration';
+import { clearRecordingUri, setRecordingUri } from '@/lib/recordingStore';
 import { useAccountGate } from '@/providers/account-gate-provider';
+import { useAuth } from '@/providers/auth-provider';
 
 type CameraFacing = 'front' | 'back';
 
@@ -28,8 +29,9 @@ export default function RecordScreen() {
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
-  const { eligibility } = useAccountGate();
-  const { hasClipToday, currentSlotLabel, isLoading: clipLoading } = useTodayClip();
+  const { user } = useAuth();
+  const { eligibility, refresh } = useAccountGate();
+  const { hasClipToday, currentSlotLabel, isLoading: clipLoading } = useTodayClip(user?.id);
 
   const [isFocused, setIsFocused] = useState(true);
   const [facing, setFacing] = useState<CameraFacing>('back');
@@ -146,31 +148,31 @@ export default function RecordScreen() {
   };
 
   const navigateToResult = useCallback(
-    (uri: string) => {
-      console.log('[navigateToResult] uri length:', uri.length, 'preview:', uri.slice(0, 60));
-      if (uri) setRecordingUri(uri);
+    async (uri: string) => {
+      const latestEligibility = await refresh().catch(() => eligibility);
+      const nextStep = latestEligibility?.next_step ?? eligibility?.next_step;
+
+      setRecordingUri(uri);
       setIsFocused(false);
       setTimeout(() => {
         router.push({
           pathname: '/result',
           params: {
             durationMs: String(RECORD_DURATION_MS),
-            purpose: eligibility?.next_step === 'first_video' ? 'profile' : 'daily',
+            purpose: nextStep === 'first_video' ? 'profile' : 'daily',
           },
         });
       }, 600);
     },
-    [eligibility?.next_step, router],
+    [eligibility, refresh, router],
   );
 
   const handleShutterPress = async () => {
-    console.log('[RecordScreen] Shutter pressed. cameraRef:', !!cameraRef.current, 'isRecording:', isRecording);
-
     if (isRecording) return;
     clearRecordingUri();
 
     if (!cameraRef.current) {
-      console.warn('[RecordScreen] cameraRef is null — CameraView not mounted yet');
+      Alert.alert('촬영 준비 중', '카메라가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
       return;
     }
 
@@ -178,15 +180,13 @@ export default function RecordScreen() {
     if (micPermission?.status !== 'granted') {
       const micResult = await requestMicPermission();
       if (micResult.status !== 'granted') {
-        console.warn('[RecordScreen] Microphone permission denied');
+        Alert.alert('마이크 권한 필요', '로그 촬영을 위해 마이크 권한이 필요해요.');
         return;
       }
     }
 
     setIsRecording(true);
     startAnimations();
-
-    console.log('[RecordScreen] Constants.isDevice:', Constants.isDevice);
 
     let stopTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -205,19 +205,21 @@ export default function RecordScreen() {
       setIsRecording(false);
 
       if (result?.uri) {
-        navigateToResult(result.uri);
-      } else {
-        console.warn('[RecordScreen] recordAsync returned no URI');
-        Alert.alert('녹화 실패', '영상 저장에 실패했어요. 다시 시도해주세요.');
+        await navigateToResult(result.uri);
+        return;
       }
+
+      Alert.alert('촬영 실패', '촬영 파일을 만들지 못했어요. 다시 촬영해 주세요.');
     } catch (e) {
       if (stopTimer) {
         clearTimeout(stopTimer);
       }
-      console.error('[RecordScreen] recordAsync failed:', e);
+      logger.captureException(e, {
+        tags: { feature: 'record', action: 'record-video' },
+      });
       stopAnimations();
       setIsRecording(false);
-      Alert.alert('녹화 오류', `녹화 중 오류가 발생했어요.\n${String(e)}`);
+      Alert.alert('촬영 실패', '촬영 파일을 저장하지 못했어요. 다시 촬영해 주세요.');
     }
   };
 
@@ -239,7 +241,6 @@ export default function RecordScreen() {
             zoom={facing === 'front' ? 0 : ZOOM_LEVELS[zoomIndex].value}
             selectedLens={selectedLens}
             onAvailableLensesChanged={({ lenses }) => {
-              if (__DEV__) console.log('[RecordScreen] available lenses:', lenses);
               if (facing === 'front') {
                 if (selectedLens !== undefined) setSelectedLens(undefined);
                 return;

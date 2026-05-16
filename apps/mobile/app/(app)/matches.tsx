@@ -30,7 +30,7 @@ export default function MatchesScreen() {
         data: { conversationId, source: 'lk8' },
       });
       const routed = enterChatFromMatch(
-        (target) => router.push(target),
+        (target) => router.push(target as never),
         { conversationId, source: 'lk8' },
       );
       if (!routed) {

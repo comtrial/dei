@@ -1270,6 +1270,20 @@ export type Database = {
           video_url: string
         }[]
       }
+      block_profile_user: {
+        Args: { p_blocked_user_id: string; p_reason?: string | null }
+        Returns: string
+      }
+      create_profile_report: {
+        Args: {
+          p_description?: string | null
+          p_log_id?: string | null
+          p_reason?: string
+          p_reason_category?: string
+          p_reported_id: string
+        }
+        Returns: string
+      }
       expire_overdue_likes: { Args: { p_user_id: string }; Returns: number }
       get_available_refresh_item_count: {
         Args: { p_user_id?: string }
@@ -1292,6 +1306,34 @@ export type Database = {
           next_step: Database["public"]["Enums"]["onboarding_state"]
           onboarding_state: Database["public"]["Enums"]["onboarding_state"]
           profile_complete: boolean
+        }[]
+      }
+      get_public_profile: {
+        Args: { p_profile_user_id: string }
+        Returns: {
+          created_at: string
+          gender: string | null
+          interest_categories: string[] | null
+          interest_tags: string[] | null
+          intro: string | null
+          mbti: string | null
+          nickname: string | null
+          photo_url: string | null
+          profile_user_id: string
+          region_sido: string | null
+          region_sigungu: string | null
+        }[]
+      }
+      get_public_profile_logs: {
+        Args: { p_profile_user_id: string }
+        Returns: {
+          created_at: string
+          duration_sec: number
+          hour_slot: number
+          id: string
+          recorded_at: string
+          user_id: string
+          video_url: string
         }[]
       }
       grant_refresh_item: {
@@ -1623,4 +1665,3 @@ export const Constants = {
     },
   },
 } as const
-
