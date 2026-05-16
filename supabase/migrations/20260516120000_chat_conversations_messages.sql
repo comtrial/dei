@@ -23,29 +23,47 @@
 
 create extension if not exists pgcrypto;
 
--- ---------- matches ----------
--- 두 사용자 간 매칭 1건. 채팅의 상위 도메인 객체.
+-- ---------- matches (확장 — 기존 테이블 재사용) ----------
+-- public.matches 는 likes/매칭 파이프라인(20260514000020_create_matches.sql)
+-- 에서 이미 생성된다. 그 테이블에는 채팅이 필요로 하는
+-- status / matched_at / updated_at 컬럼이 없으므로 *추가만* 한다.
+-- (테이블을 재정의하지 않음 — 다른 작업자 마이그레이션과 충돌·소유권 침범 방지)
+--
 -- 양쪽 좋아요 성립 시 ACTIVE. 채팅방 나가기 시 UNMATCHED.
 create table if not exists public.matches (
   id              uuid primary key default gen_random_uuid(),
   user_a_id       uuid not null references auth.users(id) on delete cascade,
   user_b_id       uuid not null references auth.users(id) on delete cascade,
-  status          text not null default 'ACTIVE'
-                    check (status in ('ACTIVE', 'UNMATCHED')),
-  matched_at      timestamptz not null default now(),
-  created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now(),
-  constraint matches_no_self check (user_a_id <> user_b_id),
-  -- 순서 정규화: 항상 user_a_id < user_b_id 로 저장하여 중복/대칭 방지
-  constraint matches_canonical_order check (user_a_id < user_b_id)
+  created_at      timestamptz not null default now()
 );
+
+-- 채팅 도메인이 요구하는 컬럼을 멱등하게 보강.
+alter table public.matches
+  add column if not exists status text not null default 'ACTIVE';
+alter table public.matches
+  add column if not exists matched_at timestamptz not null default now();
+alter table public.matches
+  add column if not exists updated_at timestamptz not null default now();
+
+-- status 도메인 제약 (이미 있으면 skip).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'matches_status_chk'
+  ) then
+    alter table public.matches
+      add constraint matches_status_chk
+      check (status in ('ACTIVE', 'UNMATCHED'));
+  end if;
+end $$;
 
 -- 동일 사용자 쌍 1건만 (canonical order 가정).
 create unique index if not exists matches_pair_unique
   on public.matches(user_a_id, user_b_id);
-create index if not exists matches_user_a_idx
+-- status 컬럼 확보 후 부분 인덱스 생성 (42703 회피).
+create index if not exists matches_status_user_a_idx
   on public.matches(user_a_id) where status = 'ACTIVE';
-create index if not exists matches_user_b_idx
+create index if not exists matches_status_user_b_idx
   on public.matches(user_b_id) where status = 'ACTIVE';
 
 drop trigger if exists matches_set_updated_at on public.matches;
