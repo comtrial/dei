@@ -20,6 +20,8 @@ export const ROUTES = {
   matched: '/matched',
   matches: '/matches',
   messages: '/messages',
+  chatRoute: '/chat',
+  chatRoom: '/chat-room',
   settings: '/settings',
 } as const;
 
@@ -38,6 +40,8 @@ const APP_ROUTES = new Set<string>([
   ROUTES.matched,
   ROUTES.matches,
   ROUTES.messages,
+  ROUTES.chatRoute,
+  ROUTES.chatRoom,
   ROUTES.settings,
 ]);
 
