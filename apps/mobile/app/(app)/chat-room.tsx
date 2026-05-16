@@ -13,7 +13,7 @@
  * 라우트 부재 시 funnel 비차단 안전 degrade(안내 Alert) 후 머무름.
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { MoreVertical } from 'lucide-react-native';
+import { ChevronLeft, MoreVertical } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -150,19 +150,36 @@ export default function ChatRoomScreen() {
     <SafeAreaView className="bg-background flex-1" testID="chat-room">
       {/* AppBar */}
       <View className="border-border flex-row items-center justify-between border-b px-3 py-3">
-        <Pressable
-          accessibilityLabel={`${nickname} 프로필 보기`}
-          accessibilityRole="button"
-          className="flex-row items-center gap-2 active:opacity-70"
-          onPress={handleHeaderProfile}
-          testID="chat-header-profile">
+        <View className="flex-row items-center gap-1">
+          <Pressable
+            accessibilityLabel="뒤로"
+            accessibilityRole="button"
+            className="h-10 w-10 items-center justify-center rounded-md active:bg-accent"
+            onPress={() => {
+              logger.addBreadcrumb({ message: 'chat_back_tapped', category: 'chat' });
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace(ROUTES.messages);
+              }
+            }}
+            testID="chat-header-back">
+            <Icon as={ChevronLeft} className="text-foreground" size={24} />
+          </Pressable>
+          <Pressable
+            accessibilityLabel={`${nickname} 프로필 보기`}
+            accessibilityRole="button"
+            className="flex-row items-center gap-2 active:opacity-70"
+            onPress={handleHeaderProfile}
+            testID="chat-header-profile">
           <View className="bg-secondary h-9 w-9 items-center justify-center rounded-full">
             <Text className="text-secondary-foreground font-semibold">
               {nickname.charAt(0) || '?'}
             </Text>
           </View>
           <Text className="text-base font-semibold">{nickname}</Text>
-        </Pressable>
+          </Pressable>
+        </View>
         <Pressable
           accessibilityLabel="더보기"
           accessibilityRole="button"
