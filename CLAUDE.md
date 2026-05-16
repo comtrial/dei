@@ -174,6 +174,24 @@ logger.setUser({ id: session.user.id });
    참조. **"단위/통합 테스트 다 통과" 를 실DB 동작 검증으로 보고하지 말 것**
    — 통과율 ≠ 실제 동작. 협업 agent 는 DB/realtime 변경 PR 을 올리기 전
    해당 흐름의 실DB e2e 를 추가·실행하고 그 결과를 근거로 보고한다.
+8. **백엔드 변경은 "배포 산출물 체크리스트" 를 빠짐없이 — DB 마이그레이션과
+   Edge Function 배포는 별개 경로다 (CRITICAL, 실제로 놓쳤던 항목).**
+   `supabase db push`/마이그레이션 적용은 테이블·RLS·RPC 만 반영하고
+   **Edge Function 은 배포되지 않는다** (`supabase functions deploy <name>`
+   별도 필수). 실제로 채팅에서 마이그레이션만 적용하고 `send-message`/
+   `leave-conversation` Edge Function 을 안 올려, 앱이 "전송에 실패했어요"
+   로 죽었다 — 실DB e2e 가 RPC 를 직접 호출(앱과 다른 경로)해 통과했기에
+   못 잡았다. 그래서:
+   - **백엔드 기능 완료 정의 = (a) 마이그레이션 적용 + (b) 관련 Edge
+     Function 전부 배포 + (c) 클라가 실제 타는 경로(Edge Function 우선,
+     RPC 폴백)로 e2e 검증.** (a)만 하고 "DB 반영 완료" 라 보고 금지.
+   - **실DB e2e 는 앱과 동일 경로로 호출하라.** RPC 직접 호출만 하면
+     Edge Function 미배포·Edge 로직 버그를 통째로 못 잡는다. `supabase
+     .functions.invoke(...)` 경로를 최소 1개 핵심 flow 에 포함.
+   - 배포 산출물 체크리스트(백엔드 PR 자가점검): 마이그레이션 적용 ✅ /
+     `supabase functions list` 에 신규/변경 함수 존재 ✅ / 클라가 의존하는
+     env(.env / Edge secrets) 존재 ✅ / 앱 경로 e2e 통과 ✅. 하나라도
+     비면 "기능 완료" 아님.
 
 ## 채팅 검증 게이트 (CRITICAL — "수동 폰 확인 불필요" 의 근거)
 
