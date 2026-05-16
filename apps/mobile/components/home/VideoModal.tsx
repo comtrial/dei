@@ -1,6 +1,6 @@
 import { Modal, Pressable, TouchableOpacity, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { X, Volume2, VolumeX } from 'lucide-react-native';
+import { X, Volume2, VolumeX, UserRound } from 'lucide-react-native';
 import { useState } from 'react';
 
 import { Text } from '@/components/ui/text';
@@ -9,9 +9,10 @@ import type { CurationItem } from '@/hooks/useHomeScreen';
 interface Props {
   item: CurationItem | null;
   onClose: () => void;
+  onProfilePress?: (item: CurationItem) => void;
 }
 
-export function VideoModal({ item, onClose }: Props) {
+export function VideoModal({ item, onClose, onProfilePress }: Props) {
   const [muted, setMuted] = useState(false);
 
   const player = useVideoPlayer(item?.videoUrl || null, (p) => {
@@ -77,6 +78,17 @@ export function VideoModal({ item, onClose }: Props) {
               <Volume2 size={15} color="#fff" />
             )}
           </TouchableOpacity>
+
+          {item && onProfilePress ? (
+            <TouchableOpacity
+              accessibilityLabel="프로필 보기"
+              className="absolute left-14 top-3 h-8 w-8 items-center justify-center rounded-full bg-black/50"
+              onPress={() => onProfilePress(item)}
+              activeOpacity={0.8}
+            >
+              <UserRound size={15} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
 
           {/* 하단 유저 정보 */}
           <View className="absolute bottom-0 left-0 right-0 px-4 pb-4 pt-10">

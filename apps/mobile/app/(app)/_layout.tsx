@@ -48,6 +48,8 @@ export default function AppLayout() {
       />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="discovery" options={{ href: null }} />
+      <Tabs.Screen name="my-profile" options={{ href: null }} />
+      <Tabs.Screen name="profiles/[userId]" options={{ href: null }} />
     </Tabs>
   );
 }

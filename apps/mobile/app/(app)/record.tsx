@@ -1,16 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
-import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Modal, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Easing, Modal, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
 import { useTodayClip } from '@/hooks/useTodayClip';
-import { isLocalDevAuthEnabled } from '@/lib/dev-auth';
 import { formatDuration } from '@/lib/formatDuration';
 import { useAccountGate } from '@/providers/account-gate-provider';
+import { useAuth } from '@/providers/auth-provider';
+import { logger } from '@dei/shared';
 
 type CameraFacing = 'front' | 'back';
 
@@ -29,8 +29,9 @@ export default function RecordScreen() {
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
-  const { eligibility } = useAccountGate();
-  const { hasClipToday, currentSlotLabel, isLoading: clipLoading } = useTodayClip();
+  const { user } = useAuth();
+  const { eligibility, refresh } = useAccountGate();
+  const { hasClipToday, currentSlotLabel, isLoading: clipLoading } = useTodayClip(user?.id);
 
   const [facing, setFacing] = useState<CameraFacing>('back');
   const [flashOn, setFlashOn] = useState(false);
@@ -137,29 +138,28 @@ export default function RecordScreen() {
     router.back();
   };
 
-  const canUseDevRecordingFallback = isLocalDevAuthEnabled();
-
   const navigateToResult = useCallback(
-    (uri?: string) => {
+    async (uri?: string) => {
+      const latestEligibility = await refresh().catch(() => eligibility);
+      const nextStep = latestEligibility?.next_step ?? eligibility?.next_step;
+
       router.push({
         pathname: '/result',
         params: {
           uri: uri ?? '',
           durationMs: String(RECORD_DURATION_MS),
-          purpose: eligibility?.next_step === 'first_video' ? 'profile' : 'daily',
+          purpose: nextStep === 'first_video' ? 'profile' : 'daily',
         },
       });
     },
-    [eligibility?.next_step, router],
+    [eligibility, refresh, router],
   );
 
   const handleShutterPress = async () => {
-    console.log('[RecordScreen] Shutter pressed. cameraRef:', !!cameraRef.current, 'isRecording:', isRecording);
-
     if (isRecording) return;
 
     if (!cameraRef.current) {
-      console.warn('[RecordScreen] cameraRef is null — CameraView not mounted yet');
+      Alert.alert('촬영 준비 중', '카메라가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
       return;
     }
 
@@ -167,22 +167,13 @@ export default function RecordScreen() {
     if (micPermission?.status !== 'granted') {
       const micResult = await requestMicPermission();
       if (micResult.status !== 'granted') {
-        console.warn('[RecordScreen] Microphone permission denied');
+        Alert.alert('마이크 권한 필요', '로그 촬영을 위해 마이크 권한이 필요해요.');
         return;
       }
     }
 
     setIsRecording(true);
     startAnimations();
-
-    // 시뮬레이터: 녹화 불가 → 2초 대기 후 결과 화면으로 이동 (UI 테스트용)
-    if (!Constants.isDevice) {
-      await new Promise<void>((resolve) => setTimeout(resolve, RECORD_DURATION_MS));
-      stopAnimations();
-      setIsRecording(false);
-      navigateToResult('');
-      return;
-    }
 
     let stopTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -200,19 +191,22 @@ export default function RecordScreen() {
       stopAnimations();
       setIsRecording(false);
 
-      if (result?.uri || canUseDevRecordingFallback) {
-        navigateToResult(result?.uri ?? '');
+      if (result?.uri) {
+        await navigateToResult(result.uri);
+        return;
       }
+
+      Alert.alert('촬영 실패', '촬영 파일을 만들지 못했어요. 다시 촬영해 주세요.');
     } catch (e) {
       if (stopTimer) {
         clearTimeout(stopTimer);
       }
-      console.error('[RecordScreen] recordAsync failed:', e);
+      logger.captureException(e, {
+        tags: { feature: 'record', action: 'record-video' },
+      });
       stopAnimations();
       setIsRecording(false);
-      if (canUseDevRecordingFallback) {
-        navigateToResult('');
-      }
+      Alert.alert('촬영 실패', '촬영 파일을 저장하지 못했어요. 다시 촬영해 주세요.');
     }
   };
 

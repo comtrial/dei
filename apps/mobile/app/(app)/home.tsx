@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { B2Banner } from '@/components/home/B2Banner';
 import { CurationCard } from '@/components/home/CurationCard';
@@ -14,6 +15,7 @@ import { Text } from '@/components/ui/text';
 import { useHomeScreen } from '@/hooks/useHomeScreen';
 import { useLike } from '@/hooks/useLike';
 import { isLocalDevPaymentEnabled } from '@/lib/dev-auth';
+import { profileRoute } from '@/lib/routes';
 import {
   getRefreshOfferingInfo,
   isRevenueCatPurchaseCancelled,
@@ -24,6 +26,7 @@ import { logger } from '@dei/shared';
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const {
     screen,
     pages,
@@ -37,7 +40,7 @@ export default function HomeScreen() {
     dismissNoonBanner,
   } = useHomeScreen(user?.id);
 
-  const { likeUsed, checkLikeUsed, sendLike } = useLike(user?.id);
+  const { checkLikeUsed, hasLikedUser, likeUsed, sendLike } = useLike(user?.id);
   const [selectedItem, setSelectedItem] = useState<CurationItem | null>(null);
   const [isPaidRefreshOpen, setIsPaidRefreshOpen] = useState(false);
   const [isPaymentFailureOpen, setIsPaymentFailureOpen] = useState(false);
@@ -78,8 +81,29 @@ export default function HomeScreen() {
   }, [isPaidRefreshOpen, user?.id]);
 
   const handleLike = async (toUserId: string) => {
-    const ok = await sendLike(toUserId);
-    if (ok) Alert.alert('', '좋아요를 보냈어요 ♥');
+    const result = await sendLike(toUserId);
+
+    if (result === 'sent') {
+      Alert.alert('', '좋아요를 보냈어요 ♥');
+      return;
+    }
+
+    if (result === 'already-liked') {
+      Alert.alert('', '이미 좋아요를 보냈어요.');
+      return;
+    }
+
+    if (result === 'daily-limit') {
+      Alert.alert('', '오늘의 무료 좋아요를 이미 사용했어요.');
+      return;
+    }
+
+    Alert.alert('', '좋아요를 보낼 수 없어요.');
+  };
+
+  const handleProfilePress = (item: CurationItem) => {
+    setSelectedItem(null);
+    router.push(profileRoute(item.userId) as never);
   };
 
   const handleRefreshPress = async () => {
@@ -173,9 +197,11 @@ export default function HomeScreen() {
           <CurationCard
             key={item.poolId}
             item={item}
-            likeUsed={likeUsed}
+            isLiked={hasLikedUser(item.userId)}
+            isLikeUsed={likeUsed}
             onLike={handleLike}
             onPress={setSelectedItem}
+            onProfilePress={handleProfilePress}
           />
         ))}
 
@@ -215,7 +241,11 @@ export default function HomeScreen() {
       </View>
     </SafeAreaView>
 
-    <VideoModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+    <VideoModal
+      item={selectedItem}
+      onClose={() => setSelectedItem(null)}
+      onProfilePress={handleProfilePress}
+    />
     <PaidRefreshSheet
       isDeveloperBypassEnabled={isDeveloperPaymentEnabled}
       isDeveloperCompleting={isDeveloperCompletingRefresh}

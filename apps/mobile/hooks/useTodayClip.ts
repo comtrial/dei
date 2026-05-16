@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { getToday } from '@/lib/dateHelpers';
 import { getTimeOfDay } from '@/lib/timeOfDay';
 import { supabase } from '@/lib/supabase';
 
@@ -11,7 +12,7 @@ function getSlotRange(hour: number): { min: number; max: number } {
   return           { min: 21, max: 23 };       // 밤
 }
 
-export function useTodayClip() {
+export function useTodayClip(userId: string | undefined) {
   const [hasClipInCurrentSlot, setHasClipInCurrentSlot] = useState(false);
   const [currentSlotLabel, setCurrentSlotLabel] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -20,13 +21,20 @@ export function useTodayClip() {
     const hour = new Date().getHours();
     const label = getTimeOfDay(hour);
     const { min, max } = getSlotRange(hour);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getToday();
 
     setCurrentSlotLabel(label);
+
+    if (!userId) {
+      setHasClipInCurrentSlot(false);
+      setIsLoading(false);
+      return;
+    }
 
     supabase
       .from('logs')
       .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
       .gte('hour_slot', min)
       .lte('hour_slot', max)
       .gte('recorded_at', `${today}T00:00:00.000Z`)
@@ -35,7 +43,7 @@ export function useTodayClip() {
         setHasClipInCurrentSlot((count ?? 0) > 0);
         setIsLoading(false);
       });
-  }, []);
+  }, [userId]);
 
   return { hasClipToday: hasClipInCurrentSlot, currentSlotLabel, isLoading };
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 
 import { getDailyLogProgress, type DailyLogProgress, type TodayLog } from '@/lib/dailyLog';
 import { getToday, getYesterday } from '@/lib/dateHelpers';
@@ -128,9 +129,11 @@ export function useHomeScreen(userId: string | undefined) {
     }
   }, [userId]);
 
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchAll();
+    }, [fetchAll])
+  );
 
   // H2일 때 정오 30초 polling
   useEffect(() => {
@@ -147,7 +150,11 @@ export function useHomeScreen(userId: string | undefined) {
   useEffect(() => {
     if (screen !== 'H3' || !userId) return;
     const timer = setInterval(async () => {
-      const pool = await fetchCurationPool(userId);
+      const [pool, logs] = await Promise.all([
+        fetchCurationPool(userId),
+        fetchTodayLogs(userId),
+      ]);
+      setTodayLogs(logs);
       if (pool.length >= 3) {
         setScreen('H2');
         setPages([pool]);

@@ -1,7 +1,29 @@
-import * as FileSystem from 'expo-file-system';
+import { logger } from '@dei/shared';
+import { File } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
+
+function getVideoContentType(uri: string): string {
+  const extension = uri.split('?')[0]?.split('.').pop()?.toLowerCase();
+
+  if (extension === 'mov' || extension === 'qt') {
+    return 'video/quicktime';
+  }
+
+  return 'video/mp4';
+}
+
+function getVideoExtension(uri: string): string {
+  const extension = uri.split('?')[0]?.split('.').pop()?.toLowerCase();
+
+  if (extension === 'mov' || extension === 'qt') {
+    return 'mov';
+  }
+
+  return 'mp4';
+}
 
 export function useSaveLog() {
   const [loading, setLoading] = useState(false);
@@ -20,6 +42,12 @@ export function useSaveLog() {
       } = await supabase.auth.getSession();
       const userId = session?.user.id;
       if (!userId) throw new Error('Not authenticated');
+
+      const fileInfo = await FileSystem.getInfoAsync(tempVideoUri);
+
+      if (!fileInfo.exists || !('size' in fileInfo) || !fileInfo.size) {
+        throw new Error('촬영 파일이 비어 있어요. 다시 촬영해 주세요.');
+      }
 
       const hourSlot = new Date().getHours();
       const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
@@ -41,13 +69,17 @@ export function useSaveLog() {
       }
 
       // 새 영상 업로드
-      const fileName = `${userId}/${Date.now()}.mp4`;
-      const response = await fetch(tempVideoUri);
-      const blob = await response.blob();
+      const contentType = getVideoContentType(tempVideoUri);
+      const fileName = `${userId}/${Date.now()}.${getVideoExtension(tempVideoUri)}`;
+      const videoBody = await new File(tempVideoUri).arrayBuffer();
+
+      if (videoBody.byteLength === 0) {
+        throw new Error('촬영 파일을 읽을 수 없어요. 다시 촬영해 주세요.');
+      }
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('logs')
-        .upload(fileName, blob, { contentType: 'video/mp4', upsert: false });
+        .upload(fileName, videoBody, { contentType, upsert: false });
 
       if (uploadError) throw uploadError;
 
@@ -64,7 +96,15 @@ export function useSaveLog() {
       if (insertError) throw insertError;
 
       await supabase.rpc('recalculate_daily_log', { p_user_id: userId });
-      await FileSystem.deleteAsync(tempVideoUri, { idempotent: true });
+
+      try {
+        await FileSystem.deleteAsync(tempVideoUri, { idempotent: true });
+      } catch (cleanupError) {
+        logger.captureException(cleanupError, {
+          tags: { feature: 'daily-log-cleanup' },
+          extra: { tempVideoUri },
+        });
+      }
 
       return { success: true };
     } catch (e) {

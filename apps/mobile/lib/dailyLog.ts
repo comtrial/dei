@@ -17,14 +17,16 @@ export interface TodayLog {
 }
 
 export function getDailyLogProgress(todayLogs: TodayLog[]): DailyLogProgress {
-  const uniqueSlots = [
+  const uniqueHours = [...new Set(todayLogs.map((log) => log.hour_slot))];
+  const completedSlots = [
     ...new Set(
-      todayLogs.map((log) => getTimeOfDay(new Date(log.recorded_at).getHours()) as TimeSlot)
+      uniqueHours.map((hourSlot) => getTimeOfDay(hourSlot) as TimeSlot)
     ),
   ];
+
   return {
-    completedSlots: uniqueSlots,
-    total: uniqueSlots.length,
-    isComplete: uniqueSlots.length >= 3,
+    completedSlots,
+    total: uniqueHours.length,
+    isComplete: uniqueHours.length >= 3,
   };
 }
