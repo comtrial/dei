@@ -364,27 +364,50 @@ export type Database = {
       }
       likes: {
         Row: {
+          attached_log_id: string | null
           created_at: string
+          expires_at: string
           from_user_id: string
           id: string
           liked_at: string
+          read_at: string | null
+          responded_at: string | null
+          status: string
           to_user_id: string
         }
         Insert: {
+          attached_log_id?: string | null
           created_at?: string
+          expires_at?: string
           from_user_id: string
           id?: string
           liked_at: string
+          read_at?: string | null
+          responded_at?: string | null
+          status?: string
           to_user_id: string
         }
         Update: {
+          attached_log_id?: string | null
           created_at?: string
+          expires_at?: string
           from_user_id?: string
           id?: string
           liked_at?: string
+          read_at?: string | null
+          responded_at?: string | null
+          status?: string
           to_user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "likes_attached_log_id_fkey"
+            columns: ["attached_log_id"]
+            isOneToOne: false
+            referencedRelation: "logs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       logs: {
         Row: {
@@ -421,6 +444,38 @@ export type Database = {
           검수_상태?: string
         }
         Relationships: []
+      }
+      matches: {
+        Row: {
+          created_at: string
+          id: string
+          source_like_id: string | null
+          user_a_id: string
+          user_b_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          source_like_id?: string | null
+          user_a_id: string
+          user_b_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          source_like_id?: string | null
+          user_a_id?: string
+          user_b_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matches_source_like_id_fkey"
+            columns: ["source_like_id"]
+            isOneToOne: false
+            referencedRelation: "likes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       moderation_cases: {
         Row: {
@@ -1069,6 +1124,13 @@ export type Database = {
     }
     Functions: {
       _video_review_notify_config: { Args: never; Returns: Json }
+      accept_like: {
+        Args: { p_like_id: string }
+        Returns: {
+          counterpart_id: string
+          match_id: string
+        }[]
+      }
       accept_required_consents: {
         Args: {
           p_age_policy_version: string
@@ -1208,6 +1270,7 @@ export type Database = {
           video_url: string
         }[]
       }
+      expire_overdue_likes: { Args: { p_user_id: string }; Returns: number }
       get_available_refresh_item_count: {
         Args: { p_user_id?: string }
         Returns: number
@@ -1262,6 +1325,23 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       recalculate_daily_log: { Args: { p_user_id: string }; Returns: undefined }
+      recalculate_daily_log_for_date: {
+        Args: { p_log_date: string; p_user_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          log_date: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "daily_logs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       record_refresh_redemption: {
         Args: {
           p_candidate_user_ids?: string[]
@@ -1290,6 +1370,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      reject_like: { Args: { p_like_id: string }; Returns: undefined }
       revoke_refresh_item_grant_for_payment: {
         Args: { p_payment_id: string; p_revoke_reason?: string }
         Returns: {
@@ -1310,6 +1391,27 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "refresh_item_grants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      send_like: {
+        Args: { p_attached_log_id?: string; p_to_user_id: string }
+        Returns: {
+          attached_log_id: string | null
+          created_at: string
+          expires_at: string
+          from_user_id: string
+          id: string
+          liked_at: string
+          read_at: string | null
+          responded_at: string | null
+          status: string
+          to_user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "likes"
           isOneToOne: true
           isSetofReturn: false
         }

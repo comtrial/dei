@@ -28,7 +28,7 @@ export default function HomeScreen() {
     screen,
     pages,
     currentPool,
-    logProgress,
+    hasAnyVideo,
     noonBanner,
     handleDeveloperPaidRefresh,
     handlePaidRefresh,
@@ -37,7 +37,8 @@ export default function HomeScreen() {
     dismissNoonBanner,
   } = useHomeScreen(user?.id);
 
-  const { likeUsed, checkLikeUsed, sendLike } = useLike(user?.id);
+  const { remainingLikes, checkRemainingLikes, sendLike } = useLike(user?.id);
+  const canLike = hasAnyVideo && remainingLikes > 0;
   const [selectedItem, setSelectedItem] = useState<CurationItem | null>(null);
   const [isPaidRefreshOpen, setIsPaidRefreshOpen] = useState(false);
   const [isPaymentFailureOpen, setIsPaymentFailureOpen] = useState(false);
@@ -47,8 +48,8 @@ export default function HomeScreen() {
   const isDeveloperPaymentEnabled = isLocalDevPaymentEnabled();
 
   useEffect(() => {
-    if (screen === 'H2') checkLikeUsed();
-  }, [checkLikeUsed, screen]);
+    if (screen === 'H2') checkRemainingLikes();
+  }, [checkRemainingLikes, screen]);
 
   useEffect(() => {
     if (!isPaidRefreshOpen || !user?.id) {
@@ -149,31 +150,32 @@ export default function HomeScreen() {
     );
   }
 
-  // H3: 빈 상태 OR H2이지만 로그 미완성 → 영상 숨김
-  if (screen === 'H3' || !logProgress.isComplete) {
+  // H3: 풀 없음/부족
+  if (screen === 'H3') {
     return (
       <SafeAreaView className="flex-1 bg-[#F5EDDB]" edges={['left', 'right']}>
         <HomeTopBar />
-        <B2Banner />
+        {!hasAnyVideo && <B2Banner />}
         <H3EmptyContent />
       </SafeAreaView>
     );
   }
 
-  // H2: 로그 완성 + 큐레이션 정상
+  // H2: 큐레이션 정상 (영상 업로드 여부와 무관하게 추천 노출)
   return (
     <>
     <SafeAreaView className="flex-1 bg-black" edges={['left', 'right']}>
       <HomeTopBar />
+      {!hasAnyVideo && <B2Banner />}
 
       {/* 카드 영역 */}
       <View className="flex-1 relative">
         {/* 3카드 세로 균등 배치 */}
         {currentPool.map((item) => (
           <CurationCard
-            key={item.poolId}
+            key={item.userId}
             item={item}
-            likeUsed={likeUsed}
+            canLike={canLike}
             onLike={handleLike}
             onPress={setSelectedItem}
           />

@@ -1,4 +1,5 @@
-import * as FileSystem from 'expo-file-system';
+import { decode as decodeBase64 } from 'base64-arraybuffer';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
@@ -40,14 +41,16 @@ export function useSaveLog() {
         await supabase.from('logs').delete().eq('id', existing.id);
       }
 
-      // 새 영상 업로드
+      // 새 영상 업로드 — RN fetch+blob 은 file:// URI 에서 size 0 Blob 버그, base64→ArrayBuffer 우회 필수.
       const fileName = `${userId}/${Date.now()}.mp4`;
-      const response = await fetch(tempVideoUri);
-      const blob = await response.blob();
+      const base64 = await FileSystem.readAsStringAsync(tempVideoUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const arrayBuffer = decodeBase64(base64);
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('logs')
-        .upload(fileName, blob, { contentType: 'video/mp4', upsert: false });
+        .upload(fileName, arrayBuffer, { contentType: 'video/mp4', upsert: false });
 
       if (uploadError) throw uploadError;
 
