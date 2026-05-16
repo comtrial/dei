@@ -8,6 +8,18 @@ dist/
 .turbo/
 .codex-setup/
 
+# IDE / agent tooling
+.idea/
+.sisyphus/
+.playwright-mcp/
+opencode.json
+asset/
+
+# Local screenshots, exports, and reference dumps (root only)
+/*.png
+/*.pdf
+/docs/TalkFile_*.html
+
 # Supabase
 supabase/.branches
 supabase/.temp
