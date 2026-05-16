@@ -28,7 +28,7 @@ type AccountGateContextValue = {
   error: string | null;
   isLoading: boolean;
   acceptConsents: (input?: ConsentInput) => Promise<void>;
-  completeLocalDevIdentityVerification: () => Promise<AccountStatus>;
+  completeLocalDevIdentityVerification: () => Promise<Eligibility | null>;
   completeLogIntro: () => Promise<AccountStatus>;
   completeProfile: (input: ProfileInput) => Promise<AccountStatus>;
   refresh: () => Promise<Eligibility | null>;
