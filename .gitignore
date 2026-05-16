@@ -23,3 +23,9 @@ asset/
 # Supabase
 supabase/.branches
 supabase/.temp
+
+# QA / verify artifacts (chat-verify gate / pnpm verify)
+integration-report.json
+playwright-report/
+test-results/
+coverage/

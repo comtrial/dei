@@ -1,0 +1,218 @@
+# Chat verification pipeline — the "확신" gate.
+#
+# This is the single source of merge-confidence for the chat module. The
+# stages run in strict order and a failure in any stage blocks the merge
+# (each `needs:` the previous one). A developer can push their own chat work
+# WITHOUT manually testing it on a phone because every spec flow in
+# docs/chat-spec/DEV-SPEC.md is covered by one of these automated layers:
+#
+#   lint        →  코드 규약 / 죽은 import / RNR·NativeWind 규칙
+#   typecheck   →  앱(RN) + e2e 하네스(web) 두 타깃 타입 안전
+#   unit        →  Vitest — route-gate / message(글자수·실패분류) 순수 로직
+#   component   →  Jest + RNTL — 채팅 컴포넌트 렌더/상호작용
+#   integration →  *실제* 로컬 Supabase 스택에 붙어 RLS·RPC·차단·나가기 검증
+#                  (SKIP 아님 — service-role 키를 supabase status 에서 주입)
+#   e2e-web     →  Playwright — 실제 채팅 스크린을 브라우저에서 DOM 레벨 구동
+#
+# integration 가 여기서 *실제로* 도는 메커니즘이 이 파이프라인의 핵심이다:
+# PM 검증서가 지적한 "통합테스트 skip → 서버 0검증" 을 service container
+# (supabase/setup-cli + supabase start, GitHub ubuntu 러너의 Docker) 로 해소.
+name: Chat Verify
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: chat-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Local Supabase demo keys are public fixtures shared by every supabase CLI
+  # install (the anon key is already committed in apps/mobile/.env.example).
+  # The service-role key is NOT hardcoded — it is read from `supabase status`
+  # at runtime so it stays correct across CLI versions.
+  SUPABASE_LOCAL_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  typecheck:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Mobile typecheck covers BOTH tsconfig.json (RN app) and
+      # tsconfig.e2e.json (web harness/shims/specs) — see apps/mobile scripts.
+      - run: pnpm typecheck
+
+  unit:
+    needs: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Unit (Vitest) — shared / api / mobile lib
+        run: pnpm --filter @dei/shared test && pnpm --filter @dei/api test && pnpm --filter mobile test:unit
+
+  component:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Component (Jest + RNTL)
+        run: pnpm --filter mobile test:component
+
+  integration:
+    needs: component
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # GitHub ubuntu runners ship Docker — `supabase start` spins the full
+      # local stack (Postgres + Auth + PostgREST + Realtime + Edge runtime),
+      # applies supabase/migrations/*, so the chat schema (conversations /
+      # messages / RLS / send_message / leave_conversation /
+      # ensure_conversation_for_match) is REAL, not mocked.
+      - name: Start Supabase stack
+        run: supabase start
+
+      - run: pnpm install --frozen-lockfile
+
+      # Read the demo service-role key from the running stack. The chat
+      # integration suite needs it to create confirmed auth users
+      # (see __tests__/integration/setup.ts hasServiceRoleKey). Without this
+      # the suite would `describe.skipIf` itself → exactly the "0 서버 검증"
+      # hole the PM review flagged. We assert it is present so a future CLI
+      # change can never silently turn the gate into a no-op.
+      - name: Export Supabase keys
+        run: |
+          set -euo pipefail
+          # `supabase status -o env` prints NAME="value" lines. Pull the
+          # service-role key out without `export $(... xargs)` (which mangles
+          # quoted JWTs) — strip surrounding double quotes explicitly.
+          supabase status -o env > supabase-status.env
+          SRK="$(grep -E '^SERVICE_ROLE_KEY=' supabase-status.env | head -n1 | cut -d= -f2-)"
+          SRK="${SRK%\"}"; SRK="${SRK#\"}"
+          if [ -z "$SRK" ]; then
+            echo "::error::SUPABASE_SERVICE_ROLE_KEY missing — integration would skip (0 서버 검증). Failing the gate."
+            exit 1
+          fi
+          {
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SRK"
+            echo "EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321"
+            echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_LOCAL_ANON_KEY}"
+            echo "RUN_INTEGRATION=1"
+          } >> "$GITHUB_ENV"
+
+      # Hard fail (NOT skip) if the suite did not actually execute its cases.
+      # `vitest run --reporter=json` lets us assert numPassedTests > 0 so a
+      # green check can only mean the server contract was really exercised.
+      - name: Run integration (must actually run — skip = failure)
+        env:
+          INTEGRATION_REPORT: ${{ github.workspace }}/integration-report.json
+        run: |
+          set -euo pipefail
+          pnpm --filter mobile exec vitest run \
+            --config vitest.integration.config.ts \
+            --reporter=default --reporter=json --outputFile="$INTEGRATION_REPORT"
+          node -e '
+            const r = require(process.env.INTEGRATION_REPORT);
+            const passed = r.numPassedTests ?? 0;
+            const failed = r.numFailedTests ?? 0;
+            const total = r.numTotalTests ?? 0;
+            const pending = r.numPendingTests ?? 0;
+            console.log(`integration: total=${total} passed=${passed} failed=${failed} pending=${pending}`);
+            if (failed > 0) { console.error("::error::integration tests failed"); process.exit(1); }
+            if (passed === 0) {
+              console.error("::error::integration ran 0 tests (all skipped) — Supabase contract NOT exercised (0 서버 검증). Gate fails.");
+              process.exit(1);
+            }
+          '
+
+      - if: always()
+        run: supabase stop --no-backup
+
+  e2e-web:
+    needs: integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm --filter mobile exec playwright install --with-deps chromium
+      - name: Playwright (real chat screens via react-native-web)
+        run: pnpm --filter mobile test:e2e:web
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/mobile/playwright-report
+          retention-days: 7
+
+  # Aggregate required check — branch protection points at this single job.
+  chat-verify:
+    if: always()
+    needs: [lint, typecheck, unit, component, integration, e2e-web]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate result
+        run: |
+          echo "lint=${{ needs.lint.result }}"
+          echo "typecheck=${{ needs.typecheck.result }}"
+          echo "unit=${{ needs.unit.result }}"
+          echo "component=${{ needs.component.result }}"
+          echo "integration=${{ needs.integration.result }}"
+          echo "e2e-web=${{ needs.e2e-web.result }}"
+          if [ "${{ needs.lint.result }}" != "success" ] || \
+             [ "${{ needs.typecheck.result }}" != "success" ] || \
+             [ "${{ needs.unit.result }}" != "success" ] || \
+             [ "${{ needs.component.result }}" != "success" ] || \
+             [ "${{ needs.integration.result }}" != "success" ] || \
+             [ "${{ needs.e2e-web.result }}" != "success" ]; then
+            echo "::error::Chat verification gate failed — merge blocked."
+            exit 1
+          fi
+          echo "All chat verification gates passed."

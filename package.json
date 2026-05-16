@@ -10,6 +10,8 @@
     "test": "turbo test",
     "test:integration": "turbo test:integration",
     "test:e2e": "turbo test:e2e",
+    "test:e2e:web": "pnpm --filter mobile test:e2e:web",
+    "verify": "node scripts/verify.mjs",
     "smoke:sentry": "tsx apps/mobile/scripts/smoke-sentry.ts",
     "db:start": "supabase start",
     "db:stop": "supabase stop",

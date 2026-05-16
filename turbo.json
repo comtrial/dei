@@ -23,6 +23,19 @@
       "cache": false,
       "env": ["EXPO_PUBLIC_SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_ANON_KEY", "RUN_INTEGRATION"]
     },
-    "test:e2e": { "cache": false, "dependsOn": [] }
+    "test:e2e": { "cache": false, "dependsOn": [] },
+    "test:e2e:web": {
+      "cache": false,
+      "dependsOn": [],
+      "inputs": [
+        "app/**",
+        "components/**",
+        "hooks/**",
+        "lib/**",
+        "e2e/**",
+        "__harness_shims__/**",
+        "playwright.config.ts"
+      ]
+    }
   }
 }

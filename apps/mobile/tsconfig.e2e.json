@@ -1,0 +1,31 @@
+{
+  // Web typecheck target for the Playwright chat harness + specs.
+  //
+  // The harness renders the real chat screens through react-native-web in a
+  // browser (DOM, react-dom/client, CSS string styles like "100vh"), so it
+  // needs DOM libs and `jsx: react-jsx` — semantics the React Native mobile
+  // tsconfig (jsx: react-native) cannot express. It still extends the Expo
+  // base so RN component typings + the `nativewind/types` className
+  // augmentation resolve (the harness imports the real screens). Keeping this
+  // as its own project means harness/shim/spec glue is fully typechecked
+  // (CI gate `typecheck:e2e`) instead of being silently excluded.
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "jsx": "react-jsx",
+    "types": ["node", "react", "react-dom"],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "nativewind-env.d.ts",
+    "e2e/**/*.ts",
+    "e2e/**/*.tsx",
+    "__harness_shims__/**/*.ts",
+    "__harness_shims__/**/*.tsx",
+    "playwright.config.ts"
+  ],
+  "exclude": ["node_modules"]
+}

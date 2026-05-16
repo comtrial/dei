@@ -11,6 +11,9 @@ module.exports = {
   testMatch: [
     '<rootDir>/components/**/__tests__/**/*.test.{ts,tsx}',
     '<rootDir>/app/**/__tests__/**/*.test.{ts,tsx}',
+    // 훅은 React 런타임(useState/useEffect) 의존 → RNTL renderHook (Jest).
+    // vitest 는 lib/ 만 소유(testPathIgnorePatterns)하므로 영역 충돌 없음.
+    '<rootDir>/hooks/**/__tests__/**/*.test.{ts,tsx}',
   ],
   // vitest owns these; don't double-run.
   testPathIgnorePatterns: ['<rootDir>/lib/', '<rootDir>/__tests__/integration/'],

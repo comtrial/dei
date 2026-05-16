@@ -1,0 +1,34 @@
+# 10-A · 채팅 진입 게이트 (CH0) 네이티브 검증
+#
+# DEV-SPEC e2e 10-A (ac4d2102-...) 는 "매칭 직후 LK8 '채팅하기' → CH0 →
+# CH2" 다. LK8(매칭 완료 화면)은 매칭 워크플로 소관이고 이 앱 빌드에는
+# 매칭을 강제로 성립시킬 결정적 진입점이 아직 없다 → 이 플로우는 4개
+# 진입점이 공유하는 단일 게이트(CH0, app/(app)/chat.tsx)의 *네이티브*
+# 통과를 DM 탭 진입점으로 검증한다. CH0 는 모든 진입점이 동일 게이트를
+# 타므로(스펙: "모든 채팅 진입의 단일 게이트"), 이 경로의 통과가 곧
+# LK8/OP3/푸시 경로의 게이트 동작 보장과 동치다.
+#
+# 차단/종료/미존재 분기(BLOCKED/ENDED/NOT_FOUND)는 결정적이고 부작용
+# 없는 Vitest 단위(lib/chat/__tests__/route-gate.test.ts) + 실서버
+# integration(chat-conversations-rls.test.ts)이 담당.
+#
+# 실행: maestro test apps/mobile/.maestro/flows/chat-10a-entry-gate.yaml
+appId: com.comtrial.dei
+---
+- launchApp
+- tapOn:
+    text: 'DM'
+# 목록 행 tap → CH0 게이트 진입. 게이트는 UI 없는 스피너
+# (id: chat-route-gate) 이며 ENTERED 판정 시 즉시 CH2 로 replace.
+- tapOn:
+    id: 'chat-list-row-.*'
+# 게이트 통과 결과: CH2 도달(ENTERED). BLOCKED/ENDED 였다면 토스트 후
+# 목록(chat-list)에 머문다 — 시드가 ACTIVE 대화이므로 ENTERED 기대.
+- assertVisible:
+    id: 'chat-room'
+# 헤더(상대 프로필 진입점) + 더보기(CH4 진입점)가 게이트 통과 후
+# 정상 구성됐는지 확인.
+- assertVisible:
+    id: 'chat-header-profile'
+- assertVisible:
+    id: 'chat-header-more'
