@@ -16,7 +16,7 @@ export function B2Banner() {
         <Video size={15} color="#C0432A" />
       </View>
       <Text className="flex-1 text-xs leading-[18px] text-[#6E6354]">
-        오늘의 로그를 완성하면{'\n'}좋아요를 보낼 수 있어요
+        영상을 찍으면{'\n'}좋아요를 보낼 수 있어요
       </Text>
       <Text className="text-xs font-semibold text-[#C0432A]">촬영 →</Text>
     </TouchableOpacity>

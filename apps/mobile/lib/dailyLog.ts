@@ -1,13 +1,8 @@
-import { getTimeOfDay } from '@/lib/timeOfDay';
-
-export type TimeSlot = '새벽' | '오전' | '낮' | '저녁' | '밤';
-
-export const ALL_SLOTS: TimeSlot[] = ['새벽', '오전', '낮', '저녁', '밤'];
+export const TOTAL_DAILY_SLOTS = 24;
 
 export interface DailyLogProgress {
-  completedSlots: TimeSlot[];
+  recordedHours: number[];
   total: number;
-  isComplete: boolean;
 }
 
 export interface TodayLog {
@@ -17,14 +12,9 @@ export interface TodayLog {
 }
 
 export function getDailyLogProgress(todayLogs: TodayLog[]): DailyLogProgress {
-  const uniqueSlots = [
-    ...new Set(
-      todayLogs.map((log) => getTimeOfDay(new Date(log.recorded_at).getHours()) as TimeSlot)
-    ),
-  ];
+  const recordedHours = [...new Set(todayLogs.map((log) => log.hour_slot))].sort((a, b) => a - b);
   return {
-    completedSlots: uniqueSlots,
-    total: uniqueSlots.length,
-    isComplete: uniqueSlots.length >= 3,
+    recordedHours,
+    total: recordedHours.length,
   };
 }
