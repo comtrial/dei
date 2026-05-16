@@ -289,26 +289,32 @@ begin
   end;
 
   -- 1) conversation -> DELETED
-  update public.conversations
+  --    OUT 파라미터 `status` 와 테이블 컬럼 `status` 모호성(42702) 방지:
+  --    set 대상은 테이블 별칭으로 한정.
+  update public.conversations as c
      set status = 'DELETED',
          updated_at = now()
-   where id = p_conversation_id;
+   where c.id = p_conversation_id;
 
   -- 2) messages soft-delete (전체)
-  update public.messages
+  update public.messages as m
      set deleted_at = now()
-   where messages.conversation_id = p_conversation_id
-     and deleted_at is null;
+   where m.conversation_id = p_conversation_id
+     and m.deleted_at is null;
 
   -- 3) matches -> UNMATCHED
-  update public.matches
+  update public.matches as mt
      set status = 'UNMATCHED',
          updated_at = now()
-   where id = v_conv.match_id
-     and status <> 'UNMATCHED';
+   where mt.id = v_conv.match_id
+     and mt.status <> 'UNMATCHED';
 
+  -- OUT 컬럼명과 동일한 식별자 충돌 방지: 명시적 별칭 부여.
   return query
-    select p_conversation_id, v_conv.match_id, v_other, 'DELETED'::text;
+    select p_conversation_id   as conversation_id,
+           v_conv.match_id     as match_id,
+           v_other             as other_user_id,
+           'DELETED'::text     as status;
 end $$;
 
 revoke all on function public.leave_conversation(uuid) from public;
