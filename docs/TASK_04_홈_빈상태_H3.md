@@ -1,6 +1,6 @@
 # TASK · 04 홈 화면 — 빈 상태 (H3 Empty Screen)
 
-> **작업 범위**: 홈 화면 진입 시 풀 부족 또는 로그 미촬영 케이스 처리  
+> **작업 범위**: 홈 화면 진입 시 풀 부족 케이스 처리  
 > **연관 화면**: H2 (정상 큐레이션), B2 배너, 탭바  
 > **담당**: 손승태 · collaborator 최승원  
 > **우선순위**: P0  
@@ -13,8 +13,8 @@
 
 | ID | 상태 | 진입 조건 |
 |----|------|----------|
-| H3-A | 빈 상태 + B2 배너 노출 | 오늘 내 로그 미촬영 + 큐레이션 풀 없음/부족 |
-| H3-B | 빈 상태 (배너 없음) | 오늘 내 로그 촬영 완료 + 큐레이션 풀 없음/부족 |
+| H3-A | 빈 상태 + B2 배너 노출 | 영상 미업로드 (전체 기간) + 큐레이션 풀 없음/부족 |
+| H3-B | 빈 상태 (배너 없음) | 영상 1건 이상 업로드 + 큐레이션 풀 없음/부족 |
 | H2 | 정상 큐레이션 | 풀 3명 이상 정상 존재 |
 
 ---
@@ -48,14 +48,12 @@ async function resolveHomeScreen(userId: string): Promise<'H2' | 'H3'> {
   return 'H2';
 }
 
-// 오늘 내 로그 촬영 여부 (B2 배너 노출 조건)
-async function hasTodayLog(userId: string): Promise<boolean> {
-  const today = getToday(); // 'YYYY-MM-DD'
+// 내 영상 업로드 이력 (전체 기간 — 좋아요 배너 노출 조건)
+async function hasAnyVideo(userId: string): Promise<boolean> {
   const { data } = await supabase
     .from('logs')
     .select('id')
     .eq('user_id', userId)
-    .gte('recorded_at', `${today}T00:00:00`)
     .limit(1);
   return (data?.length ?? 0) > 0;
 }
@@ -70,8 +68,8 @@ async function hasTodayLog(userId: string): Promise<boolean> {
     │
     └─ 풀 없음 or 3명 미만 ──────────────────────→ H3 (빈 상태)
               │
-              ├─ 오늘 로그 미촬영 ─→ H3-A (B2 배너 포함)
-              └─ 오늘 로그 촬영 완료 → H3-B (배너 없음)
+              ├─ 영상 미업로드(전체 기간) ─────────→ H3-A (B2 배너 포함)
+              └─ 영상 1건 이상 업로드 ────────────→ H3-B (배너 없음)
 ```
 
 ---
@@ -89,7 +87,7 @@ async function hasTodayLog(userId: string): Promise<boolean> {
 ┌─────────────────────────────┐
 │  dei.                   🔔  │  ← 상단 바 (알림 아이콘 정상 노출)
 ├─────────────────────────────┤
-│  [B2 배너 — 로그 미촬영 시만] │  ← 조건부 노출
+│  [B2 배너 — 영상 미업로드 시만] │  ← 조건부 노출
 ├─────────────────────────────┤
 │                             │
 │         🌙 일러스트          │
@@ -113,16 +111,16 @@ async function hasTodayLog(userId: string): Promise<boolean> {
 export default function HomeScreen() {
   const { userId } = useAuth();
   const [screen, setScreen] = useState<'loading' | 'H2' | 'H3'>('loading');
-  const [hasLog, setHasLog] = useState(false);
+  const [videoUploaded, setVideoUploaded] = useState(false);
 
   useEffect(() => {
     async function init() {
-      const [screenType, logExists] = await Promise.all([
+      const [screenType, anyVideo] = await Promise.all([
         resolveHomeScreen(userId),
-        hasTodayLog(userId),
+        hasAnyVideo(userId),
       ]);
       setScreen(screenType);
-      setHasLog(logExists);
+      setVideoUploaded(anyVideo);
     }
     init();
   }, []);
@@ -144,7 +142,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <HomeTopBar />
-      {!hasLog && <B2Banner />}   {/* 로그 미촬영 시만 배너 노출 */}
+      {!videoUploaded && <B2Banner />}   {/* 영상 미업로드 시만 배너 노출 */}
       <H3EmptyContent />
     </SafeAreaView>
   );
@@ -229,10 +227,10 @@ const styles = StyleSheet.create({
 
 ---
 
-## B2 배너 — 로그 미촬영 시 노출
+## B2 배너 — 영상 미업로드 시 노출
 
-> **노출 조건**: H3 진입 + 오늘 로그 미촬영  
-> **숨김 조건**: 오늘 로그 촬영 완료 (H3-B 케이스)
+> **노출 조건**: H3 진입 + 영상을 한 번도 업로드하지 않은 경우  
+> **숨김 조건**: 영상 1건 이상 업로드 완료 (H3-B 케이스)
 
 ```tsx
 // components/home/B2Banner.tsx
@@ -247,7 +245,7 @@ export function B2Banner() {
     >
       <Text style={styles.icon}>📹</Text>
       <Text style={styles.text}>
-        오늘의 로그를 완성하면{'\n'}좋아요를 보낼 수 있어요
+        영상을 찍으면{'\n'}좋아요를 보낼 수 있어요
       </Text>
       <Text style={styles.cta}>촬영 →</Text>
     </TouchableOpacity>
@@ -362,6 +360,7 @@ useEffect(() => {
 
   posthog.capture('curation_pool_empty_shown', {
     reason: pool === null ? 'no_pool' : 'pool_too_small',  // no_pool | pool_too_small
+    has_any_video: videoUploaded,                           // 영상 업로드 이력 여부
     is_first_visit: isFirstVisit,                           // 첫 앱 진입 여부
     time_since_signup_hours: getHoursSinceSignup(user.created_at),
   });
@@ -371,6 +370,7 @@ useEffect(() => {
 | prop | 타입 | 설명 |
 |------|------|------|
 | `reason` | `'no_pool' \| 'pool_too_small'` | 풀 자체 없음 vs 3명 미만 |
+| `has_any_video` | `boolean` | 영상 업로드 이력 여부 (B2 배너 노출 반영) |
 | `is_first_visit` | `boolean` | 가입 후 첫 홈 진입 여부 |
 | `time_since_signup_hours` | `number` | 가입 후 경과 시간(시간 단위) |
 
@@ -389,8 +389,8 @@ useEffect(() => {
     │       │
     │       └─ 풀 없음 or 3명 미만 ──────────→ H3 빈 상태
     │                   │
-    │                   ├─ 로그 미촬영 ──────→ H3-A (B2 배너 포함)
-    │                   └─ 로그 촬영 완료 ───→ H3-B (배너 없음)
+    │                   ├─ 영상 미업로드 ─────→ H3-A (B2 배너 포함)
+    │                   └─ 영상 1건 이상 ─────→ H3-B (배너 없음)
     │
     ├─ [B2 배너 탭] ───────────────────────→ CameraScreen (01A)
     │
@@ -411,10 +411,10 @@ src/
   components/
     home/
       H3EmptyContent.tsx      ← 빈 상태 일러스트 + 문구
-      B2Banner.tsx            ← 로그 미촬영 배너
+      B2Banner.tsx            ← 영상 미업로드 배너
       HomeTopBar.tsx          ← 상단 dei. 로고 + 알림 벨 (H2/H3 공용)
   hooks/
-    useHomeScreen.ts          ← resolveHomeScreen, hasTodayLog 로직
+    useHomeScreen.ts          ← resolveHomeScreen, hasAnyVideo 로직
     useNotifications.ts       ← 알림 읽음 상태
   utils/
     dateHelpers.ts            ← getToday(), getYesterday(), getHoursSinceSignup()
@@ -430,7 +430,7 @@ assets/
 1. **풀 억지 채우기 금지**: 3명 미만이면 무조건 H3 노출. 더미 카드 채우기 없음 (§8.2)
 2. **정오 기준**: 기기 로컬 시간 기준. 서버 시간과 최대 수초 오차 허용
 3. **어제 풀 유지**: 정오 이전 진입 시 `poolFetchDate = getYesterday()` — 전날 풀을 그대로 사용
-4. **B2 배너**: H3일 때만 조건 평가. H2에서는 별도 B2 스펙 참조
+4. **B2 배너**: H3일 때만 조건 평가. 영상 업로드 이력(전체 기간) 기준으로 노출 결정
 5. **알림 벨**: H2/H3 공통 `HomeTopBar` 컴포넌트 사용. 읽지 않은 알림 존재 시 빨간 dot
 6. **탭바**: H3에서도 탭바 정상 동작 — 다른 탭 이동 가능
 7. **Polling 정리**: H3 → H2 전환 시 `clearInterval` 반드시 호출
@@ -441,13 +441,13 @@ assets/
 ## ✅ 완료 기준 (Definition of Done)
 
 - [ ] 풀 3명 미만 → H3, 3명 이상 → H2 분기 정상 동작
-- [ ] H3-A: 로그 미촬영 시 B2 배너 노출
-- [ ] H3-B: 로그 촬영 완료 시 배너 숨김
+- [ ] H3-A: 영상 미업로드 시 B2 배너 노출
+- [ ] H3-B: 영상 1건 이상 업로드 시 배너 숨김
 - [ ] H3: 일러스트 + 안내 문구 + 정오 갱신 칩 노출
 - [ ] 정오 polling: 1분 간격 체크, H2 전환 시 인터벌 정리
 - [ ] 앱 foreground 복귀 시 재분기
 - [ ] 정오 이전 진입: 어제 풀 기준으로 분기
 - [ ] 상단 알림 벨 정상 노출 (unread dot 포함)
 - [ ] 탭바 정상 노출 및 탭 이동 동작
-- [ ] PostHog `curation_pool_empty_shown` 이벤트 — reason / is_first_visit / time_since_signup_hours
+- [ ] PostHog `curation_pool_empty_shown` 이벤트 — reason / has_any_video / is_first_visit / time_since_signup_hours
 - [ ] 풀 fetch 실패 시 H3 fallback 처리
