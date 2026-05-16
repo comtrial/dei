@@ -1,14 +1,15 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
 import { useSaveProfileVideo } from '@/hooks/useSaveProfileVideo';
 import { useSaveLog } from '@/hooks/useSaveLog';
+import { getRecordingUri } from '@/lib/recordingStore';
 import { formatDuration } from '@/lib/formatDuration';
 import { ROUTES } from '@/lib/routes';
 import { getTimeOfDay } from '@/lib/timeOfDay';
@@ -17,11 +18,12 @@ import { useAccountGate } from '@/providers/account-gate-provider';
 export default function ResultScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { uri, durationMs, purpose } = useLocalSearchParams<{
+  const { durationMs, purpose } = useLocalSearchParams<{
     durationMs: string;
     purpose?: 'daily' | 'profile';
-    uri: string;
   }>();
+  // file:// URI는 URL 파라미터 인코딩 손상 방지를 위해 모듈 변수로 전달
+  const uri = useRef(getRecordingUri() ?? '').current;
   const [muted, setMuted] = useState(true);
   const { saveLog, loading } = useSaveLog();
   const { saveProfileVideo, loading: profileVideoLoading } = useSaveProfileVideo();
@@ -34,11 +36,11 @@ export default function ResultScreen() {
   const isSaving = loading || profileVideoLoading;
   const timeLabel = getTimeOfDay(new Date().getHours());
 
-  // uri가 없으면 null 전달 (시뮬레이터 테스트용 또는 에러 방지)
-  const player = useVideoPlayer(uri || null, (p) => {
+  const player = useVideoPlayer(uri ? { uri } : null, (p) => {
     p.loop = true;
-    p.muted = muted;
-    p.play();
+    p.muted = true;
+    // AVCaptureSession 해제 완료 후 재생 (카메라 → 재생 전환 시 블랙 방지)
+    setTimeout(() => p.play(), 300);
   });
 
   const handleMuteToggle = () => {
@@ -87,6 +89,7 @@ export default function ResultScreen() {
       {/* 1. 영상 — 풀스크린 베이스 */}
       {uri ? (
         <VideoView
+          key={uri}
           player={player}
           style={StyleSheet.absoluteFillObject}
           contentFit="cover"
@@ -95,7 +98,11 @@ export default function ResultScreen() {
       ) : null}
 
       {/* 2. 상단 바 */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.topBar, {
+        paddingTop: insets.top + 12,
+        paddingLeft: insets.left + 16,
+        paddingRight: insets.right + 16,
+      }]}>
         <TouchableOpacity onPress={handleCancel} hitSlop={12}>
           <Text style={styles.cancelText}>취소</Text>
         </TouchableOpacity>
@@ -105,12 +112,12 @@ export default function ResultScreen() {
       </View>
 
       {/* 3. LOOP 인디케이터 */}
-      <View style={[styles.loopBadge, { top: insets.top + 60 }]}>
+      <View style={[styles.loopBadge, { top: insets.top + 60, left: insets.left + 14 }]}>
         <View style={styles.loopDot} />
         <Text style={styles.loopText}>LOOP</Text>
       </View>
 
-      {/* 4. 시간대 배지 — 배경 없음, 텍스트만 */}
+      {/* 4. 시간대 배지 */}
       <View style={[styles.hourBadge, { bottom: insets.bottom + 100 }]}>
         <Text style={styles.hourText}>{timeLabel}</Text>
         <Text style={styles.durationText}>{formatDuration(recordedMs)}</Text>
@@ -119,7 +126,11 @@ export default function ResultScreen() {
       {/* 5. 하단 버튼 */}
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.65)']}
-        style={[styles.bottomGradient, { paddingBottom: insets.bottom + 24 }]}>
+        style={[styles.bottomGradient, {
+          paddingBottom: insets.bottom + 24,
+          paddingLeft: insets.left + 14,
+          paddingRight: insets.right + 14,
+        }]}>
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={styles.btnSecondary}
@@ -145,7 +156,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
     paddingBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -185,7 +195,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingTop: 40,
-    paddingHorizontal: 14,
   },
   actionRow: { flexDirection: 'row', gap: 10 },
   btnSecondary: {

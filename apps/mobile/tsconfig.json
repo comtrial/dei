@@ -14,5 +14,11 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "nativewind-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "e2e/**",
+    "__harness_shims__/**",
+    "playwright.config.ts"
   ]
 }

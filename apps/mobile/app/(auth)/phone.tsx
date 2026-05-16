@@ -81,8 +81,8 @@ export default function PhoneScreen() {
     setMessage(null);
 
     try {
-      await completeLocalDevIdentityVerification();
-      router.replace(ROUTES.profile as never);
+      const updatedEligibility = await completeLocalDevIdentityVerification();
+      router.replace((updatedEligibility ? routeForEligibility(updatedEligibility) : ROUTES.profile) as never);
     } catch (devVerificationError) {
       const errorMessage =
         devVerificationError instanceof Error

@@ -15,7 +15,7 @@ interface Props {
 export function VideoModal({ item, onClose, onProfilePress }: Props) {
   const [muted, setMuted] = useState(false);
 
-  const player = useVideoPlayer(item?.videoUrl || null, (p) => {
+  const player = useVideoPlayer(item?.videos?.[0]?.videoUrl || null, (p) => {
     p.loop = true;
     p.muted = false;
     p.play();

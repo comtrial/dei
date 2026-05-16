@@ -15,8 +15,13 @@ export const ROUTES = {
   discovery: '/discovery',
   record: '/record',
   result: '/result',
+  logDetail: '/log-detail',
+  likes: '/likes',
+  matched: '/matched',
   matches: '/matches',
   messages: '/messages',
+  chatRoute: '/chat',
+  chatRoom: '/chat-room',
   settings: '/settings',
   myProfile: '/my-profile',
   profiles: '/profiles',
@@ -32,8 +37,13 @@ const APP_ROUTES = new Set<string>([
   ROUTES.discovery,
   ROUTES.record,
   ROUTES.result,
+  ROUTES.logDetail,
+  ROUTES.likes,
+  ROUTES.matched,
   ROUTES.matches,
   ROUTES.messages,
+  ROUTES.chatRoute,
+  ROUTES.chatRoom,
   ROUTES.settings,
   ROUTES.myProfile,
 ]);
@@ -56,7 +66,9 @@ const AUTH_ROUTES = new Set<string>([
 export const profileRoute = (userId: string): string => `${ROUTES.profiles}/${userId}`;
 
 export const isAppRoute = (pathname: string) =>
-  APP_ROUTES.has(pathname) || pathname.startsWith(`${ROUTES.profiles}/`);
+  APP_ROUTES.has(pathname) ||
+  pathname.startsWith(`${ROUTES.profiles}/`) ||
+  [...APP_ROUTES].some((route) => pathname.startsWith(`${route}/`));
 
 export const isAuthRoute = (pathname: string) => AUTH_ROUTES.has(pathname);
 

@@ -2,19 +2,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
-import { getDailyLogProgress, type DailyLogProgress, type TodayLog } from '@/lib/dailyLog';
-import { getToday, getYesterday } from '@/lib/dateHelpers';
 import { supabase } from '@/lib/supabase';
 
 export type HomeScreenType = 'loading' | 'H2' | 'H3';
 
-export interface CurationItem {
+export interface CurationVideo {
   poolId: string;
-  userId: string;
   logId: string;
   videoUrl: string;
+}
+
+export interface CurationItem {
+  userId: string;
   displayName: string;
   gender: string | null;
+  age: number | null;
+  region: string | null;
+  videos: CurationVideo[];
 }
 
 type PaidRefreshCurationRow = {
@@ -27,86 +31,159 @@ type PaidRefreshCurationRow = {
   video_url: string | null;
 };
 
-function toCurationItem(row: PaidRefreshCurationRow): CurationItem {
-  const rawPath = row.video_path ?? row.video_url ?? '';
-  const videoUrl = rawPath
-    ? supabase.storage.from('logs').getPublicUrl(rawPath).data.publicUrl
-    : '';
+function groupToCurationItems(rows: PaidRefreshCurationRow[]): CurationItem[] {
+  const userMap = new Map<string, CurationItem>();
 
-  return {
-    displayName: row.display_name ?? '—',
-    gender: row.gender ?? null,
-    logId: row.log_id,
-    poolId: row.pool_id,
-    userId: row.user_id,
-    videoUrl,
-  };
+  for (const row of rows) {
+    const rawPath = row.video_path ?? row.video_url ?? '';
+    const videoUrl = rawPath
+      ? supabase.storage.from('logs').getPublicUrl(rawPath).data.publicUrl
+      : '';
+
+    const video: CurationVideo = { poolId: row.pool_id, logId: row.log_id, videoUrl };
+
+    if (userMap.has(row.user_id)) {
+      userMap.get(row.user_id)!.videos.push(video);
+    } else {
+      userMap.set(row.user_id, {
+        userId: row.user_id,
+        displayName: row.display_name ?? '—',
+        gender: row.gender ?? null,
+        age: null,
+        region: null,
+        videos: [video],
+      });
+    }
+  }
+
+  return Array.from(userMap.values());
 }
 
 async function fetchCurationPool(
   userId: string,
   excludeUserIds: string[] = []
 ): Promise<CurationItem[]> {
-  const hour = new Date().getHours();
-  const poolDate = hour < 12 ? getYesterday() : getToday();
+  // Step 0: 본인 성별 조회 → 이성만 추천 (소개팅 앱 매칭 정책)
+  // gender 미설정/비표준 값(NULL, 'M'/'F' 외) → 빈 풀 반환 (온보딩 미완료 등)
+  const { data: selfProfile } = await supabase
+    .from('profiles')
+    .select('gender')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const selfGender = selfProfile?.gender;
+  if (selfGender !== 'M' && selfGender !== 'F') return [];
+  const targetGender: 'M' | 'F' = selfGender === 'M' ? 'F' : 'M';
 
-  const query = supabase
+  // Step 0b: 이성 user_id 목록 확보 (curation_pool ↔ profiles 직접 FK 없어 in 필터로 처리)
+  const { data: oppositeProfiles } = await supabase
+    .from('profiles')
+    .select('user_id')
+    .eq('gender', targetGender);
+  const allowedUserIds = (oppositeProfiles ?? []).map((row) => row.user_id);
+  if (allowedUserIds.length === 0) return [];
+
+  // Step 1: 3명의 서로 다른 유저를 찾고 각자의 가장 최신 pool_date를 확정
+  const step1 = supabase
     .from('curation_pool')
-    .select('id, user_id, log_id, video_path, logs(video_url)')
-    .eq('pool_date', poolDate)
+    .select('user_id, pool_date')
     .neq('user_id', userId)
     .eq('검수_YN', 'Y')
     .eq('차단_YN', 'N')
-    .limit(3);
+    .in('user_id', allowedUserIds)
+    .order('pool_date', { ascending: false })
+    .limit(300);
 
   if (excludeUserIds.length > 0) {
-    query.not('user_id', 'in', `(${excludeUserIds.join(',')})`);
+    step1.not('user_id', 'in', `(${excludeUserIds.join(',')})`);
   }
 
-  const { data: poolData } = await query;
-  if (!poolData || poolData.length === 0) return [];
+  const { data: entries } = await step1;
+  if (!entries || entries.length === 0) return [];
 
-  const userIds = poolData.map((p) => p.user_id);
+  // 유저별 최신 pool_date 추출 (정렬이 DESC이므로 첫 등장 = 최신)
+  const userLatestDate = new Map<string, string>();
+  for (const entry of entries) {
+    if (!userLatestDate.has(entry.user_id)) {
+      userLatestDate.set(entry.user_id, entry.pool_date);
+    }
+    if (userLatestDate.size === 3) break;
+  }
+
+  if (userLatestDate.size < 3) return [];
+
+  // Step 2: 각 유저의 최신 pool_date 영상 전부 조회 (시간 오름차순)
+  const videoResults = await Promise.all(
+    Array.from(userLatestDate.entries()).map(([uid, date]) =>
+      supabase
+        .from('curation_pool')
+        .select('id, user_id, log_id, video_path, logs(video_url)')
+        .eq('user_id', uid)
+        .eq('pool_date', date)
+        .eq('검수_YN', 'Y')
+        .eq('차단_YN', 'N')
+        .order('created_at', { ascending: true })
+    )
+  );
+
+  // Step 3: 프로필 조회
+  const targetUserIds = Array.from(userLatestDate.keys());
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('user_id, nickname, gender')
-    .in('user_id', userIds);
+    .select('user_id, nickname, gender, birth_date, region_sido')
+    .in('user_id', targetUserIds);
 
   const profileMap = new Map(profiles?.map((p) => [p.user_id, p]) ?? []);
 
-  return poolData.map((entry) => {
-    const profile = profileMap.get(entry.user_id);
-    const rawPath = (entry.video_path ?? (entry.logs as any)?.video_url ?? '') as string;
-    const videoUrl = rawPath
-      ? supabase.storage.from('logs').getPublicUrl(rawPath).data.publicUrl
-      : '';
+  // Step 4: CurationItem 조립
+  return videoResults
+    .map((result) => {
+      const poolEntries = result.data ?? [];
+      if (poolEntries.length === 0) return null;
 
-    return {
-      poolId: entry.id,
-      userId: entry.user_id,
-      logId: entry.log_id,
-      videoUrl,
-      displayName: profile?.nickname ?? '—',
-      gender: profile?.gender ?? null,
-    };
-  });
+      const uid = poolEntries[0].user_id;
+      const profile = profileMap.get(uid);
+
+      const videos: CurationVideo[] = poolEntries.map((entry) => {
+        const rawPath = (entry.video_path ?? (entry.logs as any)?.video_url ?? '') as string;
+        const videoUrl = rawPath
+          ? supabase.storage.from('logs').getPublicUrl(rawPath).data.publicUrl
+          : '';
+        return { poolId: entry.id, logId: entry.log_id, videoUrl };
+      });
+
+      const age = profile?.birth_date
+        ? Math.floor(
+            (Date.now() - new Date(profile.birth_date).getTime()) /
+              (365.25 * 24 * 60 * 60 * 1000)
+          )
+        : null;
+
+      return {
+        userId: uid,
+        displayName: profile?.nickname ?? '—',
+        gender: profile?.gender ?? null,
+        age,
+        region: profile?.region_sido ?? null,
+        videos,
+      };
+    })
+    .filter((item): item is CurationItem => item !== null);
 }
 
-async function fetchTodayLogs(userId: string): Promise<TodayLog[]> {
-  const today = getToday();
+async function checkHasAnyVideo(userId: string): Promise<boolean> {
   const { data } = await supabase
     .from('logs')
-    .select('id, recorded_at, hour_slot')
+    .select('id')
     .eq('user_id', userId)
-    .gte('recorded_at', `${today}T00:00:00.000Z`);
-  return (data as TodayLog[]) ?? [];
+    .limit(1);
+  return (data?.length ?? 0) > 0;
 }
 
 export function useHomeScreen(userId: string | undefined) {
   const [screen, setScreen] = useState<HomeScreenType>('loading');
   const [pages, setPages] = useState<CurationItem[][]>([]);
   const [seenUserIds, setSeenUserIds] = useState<string[]>([]);
-  const [todayLogs, setTodayLogs] = useState<TodayLog[]>([]);
+  const [hasAnyVideo, setHasAnyVideo] = useState(false);
   const [noonBanner, setNoonBanner] = useState(false);
   const screenRef = useRef(screen);
   screenRef.current = screen;
@@ -114,11 +191,11 @@ export function useHomeScreen(userId: string | undefined) {
   const fetchAll = useCallback(async () => {
     if (!userId) return;
     setScreen('loading');
-    const [pool, logs] = await Promise.all([
+    const [pool, anyVideo] = await Promise.all([
       fetchCurationPool(userId),
-      fetchTodayLogs(userId),
+      checkHasAnyVideo(userId),
     ]);
-    setTodayLogs(logs);
+    setHasAnyVideo(anyVideo);
     if (pool.length >= 3) {
       setScreen('H2');
       setPages([pool]);
@@ -150,11 +227,11 @@ export function useHomeScreen(userId: string | undefined) {
   useEffect(() => {
     if (screen !== 'H3' || !userId) return;
     const timer = setInterval(async () => {
-      const [pool, logs] = await Promise.all([
+      const [pool, anyVideo] = await Promise.all([
         fetchCurationPool(userId),
-        fetchTodayLogs(userId),
+        checkHasAnyVideo(userId),
       ]);
-      setTodayLogs(logs);
+      setHasAnyVideo(anyVideo);
       if (pool.length >= 3) {
         setScreen('H2');
         setPages([pool]);
@@ -205,14 +282,16 @@ export function useHomeScreen(userId: string | undefined) {
     });
 
     if (error) {
-      if (error.message.includes('NO_CANDIDATES') || error.message.includes('NO_AVAILABLE_REFRESH_ITEM')) {
+      if (
+        error.message.includes('NO_CANDIDATES') ||
+        error.message.includes('NO_AVAILABLE_REFRESH_ITEM')
+      ) {
         return 'exhausted';
       }
-
       return 'failed';
     }
 
-    const nextPool = ((data ?? []) as PaidRefreshCurationRow[]).map(toCurationItem);
+    const nextPool = groupToCurationItems((data ?? []) as PaidRefreshCurationRow[]);
 
     if (nextPool.length < 3) {
       return 'exhausted';
@@ -231,14 +310,11 @@ export function useHomeScreen(userId: string | undefined) {
     await fetchAll();
   }, [fetchAll]);
 
-  const logProgress: DailyLogProgress = getDailyLogProgress(todayLogs);
-
   return {
     screen,
     pages,
     currentPool: pages[0] ?? [],
-    logProgress,
-    hasLog: todayLogs.length > 0,
+    hasAnyVideo,
     noonBanner,
     handleDeveloperPaidRefresh,
     handlePaidRefresh,

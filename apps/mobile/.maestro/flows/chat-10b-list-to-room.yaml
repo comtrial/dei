@@ -1,0 +1,31 @@
+# 10-B · 홈 탭바 → 채팅 목록(CH1) → 채팅방(CH2)
+#
+# DEV-SPEC e2e 10-B (efeb5a14-...). 핵심 funnel: DM 탭 진입 → CH1 목록 →
+# 행 tap → CH0 라우터 통과 → CH2 채팅방 도달. conversation_count=0 이면
+# CH3 빈 상태로 분기되므로, 이 플로우는 매칭/대화가 1건 이상 있는
+# 시드 상태(로컬 Supabase + integration 시드 또는 dev 계정)를 전제한다.
+#
+# 셀렉터: testID(id:) 우선. 텍스트는 i18n 변경에 약하므로 보조로만 사용.
+# 실행: maestro test apps/mobile/.maestro/flows/chat-10b-list-to-room.yaml
+appId: com.comtrial.dei
+---
+- launchApp
+# 사전조건: 로그인 + 온보딩 완료 상태(없으면 sign-in.yaml 선행).
+# DM 탭으로 이동. 탭바 라벨 "DM" (app/(app)/_layout.tsx).
+- tapOn:
+    text: 'DM'
+# CH1 목록 또는 CH3 빈 상태 중 하나가 떠야 한다.
+- assertVisible:
+    id: 'chat-list'
+    optional: true
+# 목록 첫 행 tap → CH0 라우터 → CH2.
+# (시드된 conversation 의 id 를 모를 수 있으므로 prefix 매칭.)
+- tapOn:
+    id: 'chat-list-row-.*'
+# CH0 라우터(스피너) 통과 후 CH2 채팅방 도달.
+- assertVisible:
+    id: 'chat-room'
+- assertVisible:
+    id: 'chat-composer'
+- assertVisible:
+    id: 'chat-message-list'

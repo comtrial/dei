@@ -19,6 +19,21 @@ mobile app installed.
    maestro test apps/mobile/.maestro/flows/sign-in.yaml    # 단일
    ```
 
+## 플로우 목록
+
+| 파일 | 스펙 | 검증 funnel |
+|---|---|---|
+| `sign-in.yaml` | (auth) | OTP 로그인 happy path |
+| `chat-10a-entry-gate.yaml` | 10-A / CH0 | 채팅 진입 단일 게이트 통과 → CH2 |
+| `chat-10b-list-to-room.yaml` | 10-B / CH1→CH2 | DM 탭 → 목록 → 행 tap → 채팅방 |
+| `chat-10e-send-message.yaml` | 10-E / CH2 | 컴포저 입력 → 전송 → 버블 확정 |
+
+> 채팅 flow 들은 로그인+온보딩 완료 + 매칭/대화 1건 이상 시드 상태를
+> 전제한다 (없으면 CH3 빈 상태로 분기). 실패 retry·차단·종료 같은
+> 비결정/부작용 경로의 *결정적* 검증은 Playlight(e2e-web) + Vitest
+> integration 이 담당하고, Maestro 는 네이티브 happy-path funnel 만 본다.
+> 계층 분담 근거: `apps/mobile/e2e/README.md`.
+
 ## CI
 
 `.github/workflows/e2e.yml` 가 EAS preview 빌드를 트리거한 뒤 Maestro Cloud

@@ -1,0 +1,371 @@
+{
+  "flows": [
+    {
+      "name": "10-A 매칭 직후 채팅 진입 e2e (LK8)",
+      "purpose": "매칭 직후 LK8 '채팅하기' → CH0 라우터 통과 → CH2 진입 → 첫 메시지 전송까지의 핵심 funnel",
+      "status": "PLANNED",
+      "start": "0ccc1899-28f1-4a26-926f-5a102de788a8",
+      "id": "ac4d2102-853a-43ce-ac71-e69e712b88b0"
+    },
+    {
+      "name": "10-B 홈 탭바 → 채팅 목록 → 채팅방",
+      "purpose": "홈 탭바 채팅 진입 후 대화 선택 → 메시지 전송. conversation_count=0 시 CH3 으로 분기.",
+      "status": "PLANNED",
+      "start": "a5985c9c-8f2e-49b7-8898-6dff7ea8777b",
+      "id": "efeb5a14-7326-42c4-9b89-c8f576b671c6"
+    },
+    {
+      "name": "10-C OP3 매칭 후 프로필 → 채팅 진입",
+      "purpose": "매칭 후 상대 프로필에서 채팅 진입. CH0 통합 라우터 검증 확인.",
+      "status": "PLANNED",
+      "start": "7804f4a7-42f7-4f4b-aa82-c49a8977264b",
+      "id": "e6110b3e-4b17-4360-b997-5256127135aa"
+    },
+    {
+      "name": "10-D 푸시 알림 → 채팅방 직진입",
+      "purpose": "앱 외부에서 알림 tap → deeplink. 만료/차단 시 라우터에서 흡수.",
+      "status": "PLANNED",
+      "start": "e476bbe9-cb8e-4f73-bab2-0bcccaf32982",
+      "id": "194792a1-ffc3-4e76-aa48-f10aada99100"
+    },
+    {
+      "name": "10-E 메시지 전송 e2e (성공 + 실패 retry)",
+      "purpose": "전송 직전 B-CH2 차단/상태 재검증 게이트. fail 시 인라인 retry.",
+      "status": "PLANNED",
+      "start": "45f39546-9311-4634-86fd-0ff218404333",
+      "id": "294d0001-8c15-4913-b64a-4726c9240872"
+    },
+    {
+      "name": "10-F 채팅방 나가기 e2e (양쪽 영구 삭제)",
+      "purpose": "더보기 → 나가기 → 확인 → CH-API2 → 양쪽 삭제. B-CH5 적용.",
+      "status": "PLANNED",
+      "start": "9156e7d9-3b15-4f2c-9184-d2b5fd57c10d",
+      "id": "1ea78bda-cd64-4928-a258-604eb63139f0"
+    },
+    {
+      "name": "10-G 채팅방 → 상대 프로필 보기 (신고/차단 진입)",
+      "purpose": "사용자 결정 #4 타협 경로. CH2 → CH4 → \"상대 프로필 보기\" → OP3 (또는 헤더 아바타 직진입 alt).",
+      "status": "PLANNED",
+      "start": "9156e7d9-3b15-4f2c-9184-d2b5fd57c10d",
+      "id": "b9f14b85-1225-471b-96c6-a0a563b5fcdc"
+    },
+    {
+      "name": "10-H 상대 나감 수신 무음 정리",
+      "purpose": "B-CH6 — conversation.ended 수신 시 토스트 0, 250ms 페이드아웃, 자동 H2 복귀. 성공 종료 개념 없음 (시스템 효과만).",
+      "status": "PLANNED",
+      "start": "2214ea79-223e-48e7-8bb5-1c1228c327f0",
+      "id": "684555c9-460a-4209-822a-b1217c8cb0ae"
+    },
+    {
+      "name": "10-I 채팅 빈 상태 → 로그 촬영 회복",
+      "purpose": "매칭 0건 콜드스타트 → 일상 로그 기록하기 CTA → R3 cross-WF.",
+      "status": "PLANNED",
+      "start": "69e5521b-2ed7-4c0d-9a0b-1b31d05e393d",
+      "id": "e8f07eeb-776a-4d32-bfe8-5bf0fd26aaed"
+    }
+  ],
+  "contexts": {
+    "ac4d9b03-b659-4911-a9dd-c4e3b7c8e8e4": {
+      "label": "OP3 · 상대 프로필 · 매칭 후 전체 공개",
+      "kind": "USER_FACING_SCREEN",
+      "numbering": "OP3",
+      "purpose": "매칭 상태에서 전체 프로필 공개. 채팅 CTA + 더보기(신고/차단). Preview (4).",
+      "endpoint": null,
+      "method": null
+    },
+    "2867a374-e1d0-475c-9c3b-7780215e41a3": {
+      "label": "LK8 · 매칭 완료 화면",
+      "kind": "USER_FACING_SCREEN",
+      "numbering": "LK8",
+      "purpose": "축하 메시지 + 상대 프로필 요약 + 채팅하기/닫기 CTA. 채팅하기 시 conversation 진입. Preview (7).",
+      "endpoint": null,
+      "method": null
+    },
+    "049fe027-cd82-4a0b-8681-6591a38e6ee2": {
+      "label": "CH-API1 · POST /conversations/:id/messages",
+      "kind": "EXTERNAL_API_ENDPOINT",
+      "numbering": "CH-API1",
+      "purpose": "메시지 전송 API. 서버 측에서 차단/conversation 상태 재검증 후 messages row insert (status=SENT). 200 응답 시 클라이언트 버블 확정, 5xx 시 retry 마커.",
+      "endpoint": "/conversations/:id/messages",
+      "method": "POST"
+    },
+    "fef2b376-fdf5-4a4b-ac35-546e4371c958": {
+      "label": "CH-RT · 실시간 채널 (WebSocket/SSE)",
+      "kind": "EXTERNAL_API_ENDPOINT",
+      "numbering": "CH-RT",
+      "purpose": "메시지 수신 + conversation.ended 신호 수신용 실시간 채널. 미연결 시 앱 진입 시 CH1 로드에서 차이 발견 → 동일 무음 정리.",
+      "endpoint": "wss://realtime/chat",
+      "method": "WS"
+    },
+    "cebc28b5-b34b-4624-a432-75297d887c53": {
+      "label": "CH2 · 채팅방 1:1",
+      "kind": "USER_FACING_SCREEN",
+      "numbering": "CH2",
+      "purpose": "메시지 스트림 + 텍스트 컴포저. AppBar 좌측 상대 닉네임/미니 아바타 (탭→OP3), 우측 더보기(...)→CH4 시트. 메시지 길이 1~500자. 전송 직전 차단 재검증.",
+      "endpoint": null,
+      "method": null
+    },
+    "d5903667-0bde-4936-8951-792205e617a2": {
+      "label": "CH3 · 채팅 목록 빈 상태",
+      "kind": "USER_FACING_SCREEN",
+      "numbering": "CH3",
+      "purpose": "매칭 0건 또는 모든 대화가 양쪽 삭제됨 상태. \"아직 매칭이 없어요 — 일상 로그 기록하기\" CTA → R3 cross-WF.",
+      "endpoint": null,
+      "method": null
+    },
+    "4f0e90b4-1132-43f1-a041-d343084921ad": {
+      "label": "CH-API2 · POST /conversations/:id/leave",
+      "kind": "EXTERNAL_API_ENDPOINT",
+      "numbering": "CH-API2",
+      "purpose": "사용자 나가기 API. 서버: conversation.status=DELETED, messages soft-delete (deleted_at), matches.status=UNMATCHED, 상대에게 conversation.ended 실시간 push.",
+      "endpoint": "/conversations/:id/leave",
+      "method": "POST"
+    },
+    "e15b7f99-0b86-4f63-a540-0cf19ea61990": {
+      "label": "CH0 · 채팅 진입 라우터 + 차단/상태 게이트",
+      "kind": "INTERNAL_LOGIC_GATE",
+      "numbering": "CH0",
+      "purpose": "LK8 / OP3 / H2 탭바 / 푸시 알림 4개 진입점에서 conversation_id 를 해석하고, blocks 테이블 양방향 조회 + conversations.status 판정 후 CH2/토스트/CH1 으로 분기. 모든 채팅 진입의 단일 게이트.",
+      "endpoint": null,
+      "method": null
+    },
+    "82821795-9b84-4308-9ea0-de914f594a05": {
+      "label": "CH1 · 채팅 목록",
+      "kind": "USER_FACING_SCREEN",
+      "numbering": "CH1",
+      "purpose": "홈 탭바 \"채팅\" 진입 시 매칭된 상대 N명 리스트 표시. updated_at 내림차순 정렬. 항목 tap → CH0 라우터로. 매칭 0건 시 CH3 빈 상태.",
+      "endpoint": null,
+      "method": null
+    },
+    "e5c1cde1-1d30-495a-aae5-728b43648291": {
+      "label": "CH4 · 채팅방 더보기 시트",
+      "kind": "USER_FACING_SCREEN",
+      "numbering": "CH4",
+      "purpose": "CH2 AppBar 우상단 더보기 탭 시 열리는 바텀 시트. 사용자 결정 #4 타협안: \"상대 프로필 보기\" + \"나가기\" 2개 항목. 신고/차단 진입점 없음 (프로필에서만).",
+      "endpoint": null,
+      "method": null
+    }
+  },
+  "events": {
+    "0ccc1899-28f1-4a26-926f-5a102de788a8": {
+      "name": "match_chat_open_tapped",
+      "summary": "LK8 채팅하기 탭 → conversation 진입",
+      "trigger": "USER_INTERACTION_ON_CONTROL",
+      "ctx": "2867a374-e1d0-475c-9c3b-7780215e41a3",
+      "transitions": [
+        {
+          "label": "LK8 → CH0 라우터",
+          "effect": "TRIGGER_NEXT_EVENT",
+          "target_event": "1a71e582-9aee-4b67-aeef-ae22832e1ad2",
+          "target_ctx": null,
+          "cond": null
+        }
+      ]
+    },
+    "aacfd7db-26e2-42c7-bca7-845c80b18847": {
+      "name": "chat_route_resolved",
+      "summary": "CH0 라우터 분기 판정 완료 (CH2 / 차단토스트 / 종료토스트)",
+      "trigger": "PRECEDING_EVENT_COMPLETED",
+      "ctx": "e15b7f99-0b86-4f63-a540-0cf19ea61990",
+      "transitions": [
+        {
+          "label": "outcome=ENTERED",
+          "effect": "NAVIGATE_TO_ANOTHER_CONTEXT",
+          "target_event": null,
+          "target_ctx": "cebc28b5-b34b-4624-a432-75297d887c53",
+          "cond": "차단 없음 AND conversation.status=ACTIVE"
+        },
+        {
+          "label": "outcome=BLOCKED",
+          "effect": "DISPLAY_MESSAGE_TO_USER",
+          "target_event": null,
+          "target_ctx": null,
+          "cond": "차단 존재"
+        },
+        {
+          "label": "outcome=ENDED",
+          "effect": "DISPLAY_MESSAGE_TO_USER",
+          "target_event": null,
+          "target_ctx": null,
+          "cond": "conversation.status ∈ {ENDED, DELETED}"
+        }
+      ]
+    },
+    "2214ea79-223e-48e7-8bb5-1c1228c327f0": {
+      "name": "chat_list_item_tapped",
+      "summary": "CH1 목록 항목 tap",
+      "trigger": "USER_INTERACTION_ON_CONTROL",
+      "ctx": "82821795-9b84-4308-9ea0-de914f594a05",
+      "transitions": [
+        {
+          "label": "B-CH6 무음 정리 — CH2 활성 시 250ms fadeout → H2",
+          "effect": "CHANGE_LOCAL_UI_STATE",
+          "target_event": null,
+          "target_ctx": null,
+          "cond": null
+        }
+      ]
+    },
+    "23b70208-266c-49c6-97c6-89978f1cc01e": {
+      "name": "message_send_submitted",
+      "summary": "전송 버튼 tap → 차단/상태 재검증",
+      "trigger": "USER_INTERACTION_ON_CONTROL",
+      "ctx": "cebc28b5-b34b-4624-a432-75297d887c53",
+      "transitions": []
+    },
+    "7804f4a7-42f7-4f4b-aa82-c49a8977264b": {
+      "name": "op3_chat_tapped",
+      "summary": "매칭 후 프로필에서 채팅하기 탭",
+      "trigger": "USER_INTERACTION_ON_CONTROL",
+      "ctx": "ac4d9b03-b659-4911-a9dd-c4e3b7c8e8e4",
+      "transitions": [
+        {
+          "label": "매칭 후 채팅하기 → LK8",
+          "effect": "NAVIGATE_TO_ANOTHER_CONTEXT",
+          "target_event": null,
+          "target_ctx": "2867a374-e1d0-475c-9c3b-7780215e41a3",
+          "cond": null
+        },
+        {
+          "label": "OP3 → CH0 라우터",
+          "effect": "TRIGGER_NEXT_EVENT",
+          "target_event": "1a71e582-9aee-4b67-aeef-ae22832e1ad2",
+          "target_ctx": null,
+          "cond": null
+        }
+      ]
+    },
+    "a5985c9c-8f2e-49b7-8898-6dff7ea8777b": {
+      "name": "push_notification_chat_tapped",
+      "summary": "푸시 알림 → 채팅방 deeplink",
+      "trigger": "EXTERNAL_SIGNAL_RECEIVED",
+      "ctx": "e15b7f99-0b86-4f63-a540-0cf19ea61990",
+      "transitions": [
+        {
+          "label": "conversation_count > 0",
+          "effect": "NAVIGATE_TO_ANOTHER_CONTEXT",
+          "target_event": null,
+          "target_ctx": "82821795-9b84-4308-9ea0-de914f594a05",
+          "cond": "conversations 중 status=ACTIVE 가 1건 이상"
+        },
+        {
+          "label": "conversation_count = 0",
+          "effect": "NAVIGATE_TO_ANOTHER_CONTEXT",
+          "target_event": null,
+          "target_ctx": "d5903667-0bde-4936-8951-792205e617a2",
+          "cond": "ACTIVE conversation 0건"
+        }
+      ]
+    },
+    "e476bbe9-cb8e-4f73-bab2-0bcccaf32982": {
+      "name": "leave_processed",
+      "summary": "CH-API2 처리 완료 → 양쪽 삭제 + UNMATCHED",
+      "trigger": "PRECEDING_EVENT_COMPLETED",
+      "ctx": "4f0e90b4-1132-43f1-a041-d343084921ad",
+      "transitions": [
+        {
+          "label": "푸시 deeplink → CH0 라우터",
+          "effect": "TRIGGER_NEXT_EVENT",
+          "target_event": "1a71e582-9aee-4b67-aeef-ae22832e1ad2",
+          "target_ctx": null,
+          "cond": null
+        }
+      ]
+    },
+    "9156e7d9-3b15-4f2c-9184-d2b5fd57c10d": {
+      "name": "chat_more_tapped",
+      "summary": "CH2 AppBar 더보기 tap → CH4 시트",
+      "trigger": "USER_INTERACTION_ON_CONTROL",
+      "ctx": "cebc28b5-b34b-4624-a432-75297d887c53",
+      "transitions": [
+        {
+          "label": "CH2 → CH4 시트",
+          "effect": "NAVIGATE_TO_ANOTHER_CONTEXT",
+          "target_event": null,
+          "target_ctx": "e5c1cde1-1d30-495a-aae5-728b43648291",
+          "cond": null
+        }
+      ]
+    },
+    "d862c5f0-d806-47d2-b095-d562ccda2c5c": {
+      "name": "conversation_ended_received",
+      "summary": "실시간 채널 conversation.ended 수신",
+      "trigger": "EXTERNAL_SIGNAL_RECEIVED",
+      "ctx": "fef2b376-fdf5-4a4b-ac35-546e4371c958",
+      "transitions": [
+        {
+          "label": "messages row + updated_at",
+          "effect": "UPDATE_DOMAIN_DATA_FIELD",
+          "target_event": null,
+          "target_ctx": null,
+          "cond": null
+        },
+        {
+          "label": "상대에게 메시지 push",
+          "effect": "EMIT_DOMAIN_EVENT",
+          "target_event": null,
+          "target_ctx": null,
+          "cond": null
+        }
+      ]
+    },
+    "45f39546-9311-4634-86fd-0ff218404333": {
+      "name": "message_persisted",
+      "summary": "CH-API1 200 응답 → messages row 저장",
+      "trigger": "PRECEDING_EVENT_COMPLETED",
+      "ctx": "049fe027-cd82-4a0b-8681-6591a38e6ee2",
+      "transitions": [
+        {
+          "label": "B-CH2 차단/상태 재검증 + POST /messages",
+          "effect": "CALL_EXTERNAL_SERVICE",
+          "target_event": null,
+          "target_ctx": null,
+          "cond": null
+        },
+        {
+          "label": "200 OK",
+          "effect": "TRIGGER_NEXT_EVENT",
+          "target_event": "d862c5f0-d806-47d2-b095-d562ccda2c5c",
+          "target_ctx": null,
+          "cond": null
+        },
+        {
+          "label": "실패 (네트워크/차단/종료)",
+          "effect": "TRIGGER_NEXT_EVENT",
+          "target_event": "23b70208-266c-49c6-97c6-89978f1cc01e",
+          "target_ctx": null,
+          "cond": null
+        }
+      ]
+    },
+    "1a71e582-9aee-4b67-aeef-ae22832e1ad2": {
+      "name": "chat_route_evaluating",
+      "summary": "CH0 라우터 진입 (4개 진입점 중 하나에서)",
+      "trigger": "PRECEDING_EVENT_COMPLETED",
+      "ctx": "e15b7f99-0b86-4f63-a540-0cf19ea61990",
+      "transitions": [
+        {
+          "label": "차단/상태 조회",
+          "effect": "CALL_EXTERNAL_SERVICE",
+          "target_event": null,
+          "target_ctx": null,
+          "cond": null
+        },
+        {
+          "label": "조회 완료 → 판정",
+          "effect": "TRIGGER_NEXT_EVENT",
+          "target_event": "aacfd7db-26e2-42c7-bca7-845c80b18847",
+          "target_ctx": null,
+          "cond": null
+        }
+      ]
+    },
+    "69e5521b-2ed7-4c0d-9a0b-1b31d05e393d": {
+      "name": "chat_empty_state_entered",
+      "summary": "CH3 채팅 목록 빈 상태 진입",
+      "trigger": "SCREEN_ENTERED_OR_LOADED",
+      "ctx": "d5903667-0bde-4936-8951-792205e617a2",
+      "transitions": []
+    }
+  }
+}

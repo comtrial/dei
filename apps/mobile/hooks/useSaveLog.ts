@@ -68,18 +68,18 @@ export function useSaveLog() {
         await supabase.from('logs').delete().eq('id', existing.id);
       }
 
-      // 새 영상 업로드
+      // 새 영상 업로드 — RN fetch+blob 은 file:// URI 에서 size 0 Blob 버그가 있어 File API로 읽는다.
       const contentType = getVideoContentType(tempVideoUri);
       const fileName = `${userId}/${Date.now()}.${getVideoExtension(tempVideoUri)}`;
-      const videoBody = await new File(tempVideoUri).arrayBuffer();
+      const arrayBuffer = await new File(tempVideoUri).arrayBuffer();
 
-      if (videoBody.byteLength === 0) {
+      if (arrayBuffer.byteLength === 0) {
         throw new Error('촬영 파일을 읽을 수 없어요. 다시 촬영해 주세요.');
       }
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('logs')
-        .upload(fileName, videoBody, { contentType, upsert: false });
+        .upload(fileName, arrayBuffer, { contentType, upsert: false });
 
       if (uploadError) throw uploadError;
 

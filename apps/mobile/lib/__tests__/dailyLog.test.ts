@@ -30,6 +30,7 @@ describe('dailyLog', () => {
     expect(getDailyLogProgress(logs)).toEqual({
       completedSlots: ['낮'],
       isComplete: true,
+      recordedHours: [14, 15, 16],
       total: 3,
     });
   });

@@ -28,7 +28,7 @@ type AccountGateContextValue = {
   error: string | null;
   isLoading: boolean;
   acceptConsents: (input?: ConsentInput) => Promise<void>;
-  completeLocalDevIdentityVerification: () => Promise<AccountStatus>;
+  completeLocalDevIdentityVerification: () => Promise<Eligibility | null>;
   completeLogIntro: () => Promise<AccountStatus>;
   completeProfile: (input: ProfileInput) => Promise<AccountStatus>;
   refresh: () => Promise<Eligibility | null>;
@@ -100,7 +100,7 @@ export function AccountGateProvider({ children }: { children: React.ReactNode })
   );
 
   const completeLocalDevIdentityVerification = useCallback(async () => {
-    const { data, error: devVerificationError } = await supabase
+    const { error: devVerificationError } = await supabase
       .rpc('complete_local_dev_identity_verification')
       .single();
 
@@ -108,8 +108,7 @@ export function AccountGateProvider({ children }: { children: React.ReactNode })
       throw devVerificationError;
     }
 
-    await refresh();
-    return data;
+    return await refresh();
   }, [refresh]);
 
   const completeProfile = useCallback(

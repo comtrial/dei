@@ -1,3 +1,10 @@
+# Standalone integration runner (label-gated convenience).
+#
+# The authoritative chat merge gate is .github/workflows/chat-verify.yml —
+# it runs integration on EVERY PR and FAILS when 0 cases execute. This file
+# stays as an opt-in (`needs-db` label) full-suite runner; it now also injects
+# the service-role key so chat-conversations-rls.test.ts does not silently
+# skip here either.
 name: Integration tests
 
 on:
@@ -27,6 +34,18 @@ jobs:
         run: supabase start
 
       - run: pnpm install --frozen-lockfile
+
+      - name: Export Supabase service-role key
+        run: |
+          set -euo pipefail
+          supabase status -o env > supabase-status.env
+          SRK="$(grep -E '^SERVICE_ROLE_KEY=' supabase-status.env | head -n1 | cut -d= -f2-)"
+          SRK="${SRK%\"}"; SRK="${SRK#\"}"
+          if [ -z "$SRK" ]; then
+            echo "::error::SUPABASE_SERVICE_ROLE_KEY missing — chat integration would skip."
+            exit 1
+          fi
+          echo "SUPABASE_SERVICE_ROLE_KEY=$SRK" >> "$GITHUB_ENV"
 
       - name: Run integration tests
         env:

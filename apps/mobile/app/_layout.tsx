@@ -33,6 +33,8 @@ function RootLayout() {
               <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
               <Stack.Screen name="(app)" options={{ headerShown: false }} />
               <Stack.Screen name="result" options={{ headerShown: false }} />
+              <Stack.Screen name="log-detail" options={{ headerShown: false }} />
+              <Stack.Screen name="log-detail/delete-confirm" options={{ headerShown: false, presentation: 'transparentModal' }} />
               <Stack.Screen name="modal" options={{ presentation: 'modal', title: '신고' }} />
             </Stack>
           </RootGate>

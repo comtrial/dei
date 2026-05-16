@@ -136,7 +136,8 @@ logger.setUser({ id: session.user.id });
 | Component | RN 컴포넌트 / screen | **Jest + jest-expo + RNTL** | `components/**/__tests__/*.test.tsx` | `pnpm test` |
 | Integration | 실제 Supabase 쿼리, RLS, auth flow | **Vitest** + 로컬 supabase | `apps/mobile/__tests__/integration/` | `pnpm test:integration` |
 | Contract | admin ↔ mobile API 스키마 | **Vitest + MSW + zod** | `packages/api/src/__tests__/contract*.test.ts` | `pnpm test` |
-| E2E | 사용자 시나리오 (회원가입~신고 등) | **Maestro** | `apps/mobile/.maestro/flows/` | `pnpm test:e2e` |
+| E2E-web | 화면 단위 사용자 흐름 (DOM 레벨) | **Playwright + RN-web 하네스** | `apps/mobile/e2e/playwright/specs/` | `pnpm test:e2e:web` |
+| E2E-native | 실기기 시나리오 (회원가입~신고 등) | **Maestro** | `apps/mobile/.maestro/flows/` | `pnpm test:e2e` |
 
 ### 반드시 지켜야 할 규칙
 
@@ -146,12 +147,61 @@ logger.setUser({ id: session.user.id });
 2. **로깅 / Sentry 테스트는 항상 mock.** 자동 테스트가 실제 Sentry 로 이벤트를
    보내면 dashboard 가 더러워집니다. `apps/mobile/jest.setup.ts` 에서 글로벌
    mock 처리 + Vitest 쪽은 `vi.mock('@sentry/react-native', ...)`.
-3. **Integration 테스트는 `it.skipIf` 로 docker 없는 환경에서 자동 스킵.** 패턴은
-   `apps/mobile/__tests__/integration/setup.ts` 의 `isSupabaseReachable` 참고.
+3. **Integration 테스트는 로컬에선 `skipIf` 로 자동 스킵하되, CI 에서는
+   반드시 실제 실행된다.** 로컬 무도커 스킵 패턴은
+   `apps/mobile/__tests__/integration/setup.ts` 의 `isSupabaseReachable`.
+   CI(`chat-verify.yml`)는 `supabase start` + `supabase status` 로
+   service-role 키를 주입해 *실제 실행* 하며, 실행 케이스 0건이면 게이트를
+   **FAIL** 시킨다. "skip 됐으니 통과"는 금지 — 그건 서버 0검증이다.
 4. **Contract 테스트는 zod schema 를 단일 source of truth 로.** 새 admin
    엔드포인트가 생기면 `packages/api/src/schemas/` 에 zod 추가 → mobile 도
    동일 schema import. 스키마 없이 응답 파싱 금지.
 5. **E2E 셀렉터는 `testID` 우선.** 텍스트만으로 찾으면 i18n / copy 변경에 깨짐.
+   네이밍 `<feature>-<역할>` (예: `chat-composer-send`).
+6. **E2E-web 하네스는 화면을 재구현하지 않는다.** `apps/mobile/e2e/harness`
+   가 *프로덕션 스크린* 을 RN-web 으로 마운트하고 Supabase/router/auth
+   경계만 모킹. 새 화면 추가 시 하네스가 깨지면 화면 코드가 잘못된 것.
+7. **DB·realtime 연동 기능은 push 전 실DB e2e 로 관통 검증한다 (CRITICAL).**
+   unit/component/e2e-web 은 전부 mock 이라 "통과해도 실제 동작 보장 안 됨".
+   특히 **realtime 메시지 왕복, 매칭→대화방→메시지 전체 사용자 여정, RLS
+   실제 가시성** 은 mock 으로는 절대 못 잡는다 (실제로 채팅 시스템에서
+   realtime 왕복 미검증·RLS status 갭이 mock 게이트 전부 통과한 뒤에야
+   실DB e2e 에서 발견됨). 패턴: 전용 테스트 유저(이메일 prefix
+   `e2e-*@example.test`)만 생성·사용 → 원격/로컬 Supabase 에 실제 RPC·
+   realtime 구독으로 흐름 관통 → `try/finally` 로 테스트 데이터 전량
+   cleanup (기존 실데이터 무접촉, 시작=끝 카운트 동일 확인). 기준 구현·
+   리포트: `docs/chat-spec/e2e-realdb-report.md`, 스크립트 패턴은 거기
+   참조. **"단위/통합 테스트 다 통과" 를 실DB 동작 검증으로 보고하지 말 것**
+   — 통과율 ≠ 실제 동작. 협업 agent 는 DB/realtime 변경 PR 을 올리기 전
+   해당 흐름의 실DB e2e 를 추가·실행하고 그 결과를 근거로 보고한다.
+
+## 채팅 검증 게이트 (CRITICAL — "수동 폰 확인 불필요" 의 근거)
+
+채팅 모듈은 **개발자가 폰으로 안 눌러봐도** 머지 가능하다는 확신을
+`.github/workflows/chat-verify.yml` 의 6단계 게이트가 보장한다. 단계는
+직렬 `needs:` 체인이고 하나라도 실패하면 머지 차단이며, 집계 잡
+`chat-verify` 가 branch protection required check 다.
+
+```
+lint → typecheck → unit → component → integration(실제 Supabase) → e2e-web(Playwright)
+```
+
+로컬 단일 재현: **`pnpm verify`** (Docker 없으면 integration 만
+`NOT-RUN-LOCALLY` 로 정직 표기, CI 가 강제).
+
+### 스펙 flow → 보장 계층 매핑 (수동 검증 대체 근거)
+
+| 스펙 (DEV-SPEC) | 커버 계층 | 검증 위치 |
+|---|---|---|
+| CH0 게이트 (ENTERED/BLOCKED/ENDED/NOT_FOUND) | Unit + Integration + E2E-native | `lib/chat/__tests__/route-gate.test.ts`, `chat-conversations-rls.test.ts`, `.maestro/chat-10a` |
+| CH1 목록 / 10-B | Component + E2E-web | `ChatListRow.test.tsx`, `ch1-list.spec.ts`, `.maestro/chat-10b` |
+| CH2 컴포저 글자수/전송/10-E retry | Unit + Component + E2E-web | `message.test.ts`, `ChatComposer.test.tsx`, `ch2-room.spec.ts` |
+| CH3 빈 상태 / 10-I | Component + E2E-web | `ChatEmptyState.test.tsx`, `ch1-list.spec.ts` |
+| CH4 더보기 / CH5 나가기 / 10-F | Component + E2E-web + Integration | `ChatMoreSheet/LeaveChatDialog.test.tsx`, `ch4-ch5-leave.spec.ts`, `leave_conversation` it |
+| CH-API1/2 서버 계약·RLS·차단·소프트삭제 | Integration (실제 Supabase) | `chat-conversations-rls.test.ts` |
+| CH-RT 무음 정리 / 10-H | E2E-web | `ch2-room.spec.ts` (room-ended-incoming) |
+
+> 상세 결정 트리 / testID 규칙 / 협력자 절차: `apps/mobile/e2e/README.md`.
 
 ### Sentry 가 실제로 붙었는지 확인하는 법
 

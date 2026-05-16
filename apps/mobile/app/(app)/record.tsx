@@ -4,20 +4,20 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Modal, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { logger } from '@dei/shared';
 
 import { Text } from '@/components/ui/text';
 import { useTodayClip } from '@/hooks/useTodayClip';
 import { formatDuration } from '@/lib/formatDuration';
+import { clearRecordingUri, setRecordingUri } from '@/lib/recordingStore';
 import { useAccountGate } from '@/providers/account-gate-provider';
 import { useAuth } from '@/providers/auth-provider';
-import { logger } from '@dei/shared';
 
 type CameraFacing = 'front' | 'back';
 
 const ZOOM_LEVELS = [
-  { label: '0.5', value: 0 },
-  { label: '1', value: 0 },
-  { label: '2', value: 0.07 },
+  { label: '1', value: 0.05 },
+  { label: '2', value: 0.15 },
 ] as const;
 
 const RECORD_DURATION_MS = 2000;
@@ -33,10 +33,12 @@ export default function RecordScreen() {
   const { eligibility, refresh } = useAccountGate();
   const { hasClipToday, currentSlotLabel, isLoading: clipLoading } = useTodayClip(user?.id);
 
+  const [isFocused, setIsFocused] = useState(true);
   const [facing, setFacing] = useState<CameraFacing>('back');
   const [flashOn, setFlashOn] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [zoomIndex, setZoomIndex] = useState(1);
+  const [zoomIndex, setZoomIndex] = useState(0);
+  const [selectedLens, setSelectedLens] = useState<string | undefined>();
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
   const didInitRef = useRef(false);
@@ -58,8 +60,15 @@ export default function RecordScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setIsFocused(true);
       didInitRef.current = false;
+      Alert.alert(
+        '가로 모드 권장',
+        '가로로 돌려서 촬영하면 더 잘 나와요 📱',
+        [{ text: '확인', style: 'default' }],
+      );
       return () => {
+        setIsFocused(false);  // 포커스 잃으면 CameraView 언마운트 → AVSession 해제
         didInitRef.current = false;
         setShowPermissionDialog(false);
         setShowOverwriteDialog(false);
@@ -139,24 +148,28 @@ export default function RecordScreen() {
   };
 
   const navigateToResult = useCallback(
-    async (uri?: string) => {
+    async (uri: string) => {
       const latestEligibility = await refresh().catch(() => eligibility);
       const nextStep = latestEligibility?.next_step ?? eligibility?.next_step;
 
-      router.push({
-        pathname: '/result',
-        params: {
-          uri: uri ?? '',
-          durationMs: String(RECORD_DURATION_MS),
-          purpose: nextStep === 'first_video' ? 'profile' : 'daily',
-        },
-      });
+      setRecordingUri(uri);
+      setIsFocused(false);
+      setTimeout(() => {
+        router.push({
+          pathname: '/result',
+          params: {
+            durationMs: String(RECORD_DURATION_MS),
+            purpose: nextStep === 'first_video' ? 'profile' : 'daily',
+          },
+        });
+      }, 600);
     },
     [eligibility, refresh, router],
   );
 
   const handleShutterPress = async () => {
     if (isRecording) return;
+    clearRecordingUri();
 
     if (!cameraRef.current) {
       Alert.alert('촬영 준비 중', '카메라가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
@@ -210,20 +223,14 @@ export default function RecordScreen() {
     }
   };
 
-  const handleStopPress = () => {
-    // 2초 미만이면 무시; 자동 정지가 먼저 트리거되므로 실질적으로 동작 안 함
-    if (elapsedMsRef.current < RECORD_DURATION_MS) return;
-    cameraRef.current?.stopRecording();
-  };
-
   // CameraView 렌더링은 카메라 권한만으로 충분. 마이크는 recordAsync 직전에 확인
   const isGranted = permission?.status === 'granted';
   const timerColor = isRecording ? '#C0432A' : 'white';
 
   return (
     <View className="flex-1 bg-[#1A1008]">
-      {/* Camera */}
-      {isGranted && (
+      {/* Camera — 포커스 상태일 때만 마운트. 백그라운드에서 AVSession 해제하여 result 화면 재생 가능하게 함 */}
+      {isGranted && isFocused && (
         <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
           <CameraView
             ref={cameraRef}
@@ -231,7 +238,25 @@ export default function RecordScreen() {
             mode="video"
             facing={facing}
             flash={flashOn ? 'on' : 'off'}
-            zoom={ZOOM_LEVELS[zoomIndex].value}
+            zoom={facing === 'front' ? 0 : ZOOM_LEVELS[zoomIndex].value}
+            selectedLens={selectedLens}
+            onAvailableLensesChanged={({ lenses }) => {
+              if (facing === 'front') {
+                if (selectedLens !== undefined) setSelectedLens(undefined);
+                return;
+              }
+              const dualWide = lenses.find(
+                (l) => l === 'Back Dual Wide Camera' || l === '후면 듀얼 광각 카메라'
+              );
+              const singleMain = lenses.find(
+                (l) => l === 'Back Camera' || l === '후면 카메라'
+              );
+              const fallback = lenses
+                .slice()
+                .sort((a, b) => a.length - b.length)[0];
+              const chosen = dualWide ?? singleMain ?? fallback;
+              if (chosen && chosen !== selectedLens) setSelectedLens(chosen);
+            }}
           />
         </View>
       )}
@@ -341,7 +366,10 @@ export default function RecordScreen() {
         style={{ bottom: insets.bottom + 32 }}>
         {/* Flip — disabled during recording */}
         <TouchableOpacity
-          onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+          onPress={() => {
+            setFacing((f) => (f === 'back' ? 'front' : 'back'));
+            setSelectedLens(undefined);
+          }}
           hitSlop={12}
           style={{ opacity: isRecording ? 0.3 : 1 }}
           disabled={isRecording}>
@@ -378,34 +406,23 @@ export default function RecordScreen() {
             />
           )}
 
-          {/* Shutter button */}
+          {/* Shutter button — 녹화 중엔 비활성 */}
           <TouchableOpacity
-            onPress={isRecording ? handleStopPress : handleShutterPress}
+            onPress={handleShutterPress}
             activeOpacity={0.8}
-            hitSlop={8}>
-            {isRecording ? (
-              // Stop icon: white rounded square
-              <View
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 4,
-                  backgroundColor: 'white',
-                }}
-              />
-            ) : (
-              // Shutter: white circle
-              <View
-                style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: 40,
-                  borderWidth: 4,
-                  borderColor: 'white',
-                  backgroundColor: 'white',
-                }}
-              />
-            )}
+            hitSlop={8}
+            disabled={isRecording}>
+            <View
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                borderWidth: 4,
+                borderColor: 'white',
+                backgroundColor: 'white',
+                opacity: isRecording ? 0.3 : 1,
+              }}
+            />
           </TouchableOpacity>
         </View>
 
