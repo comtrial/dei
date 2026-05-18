@@ -11,7 +11,20 @@
     },
     "preview": {
       "distribution": "internal",
-      "env": { "APP_ENV": "staging" }
+      "channel": "preview",
+      "ios": { "simulator": false },
+      "android": { "buildType": "apk" },
+      "env": {
+        "APP_ENV": "staging",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://sjlzidjnpczysygnlmtk.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqbHppZGpucGN6eXN5Z25sbXRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NTQwNDQsImV4cCI6MjA5MzQzMDA0NH0.h3x-kwbAMd_yl2LxmL7C27F6na6luRKeIXlHVjNIhCY",
+        "EXPO_PUBLIC_ENABLE_DEV_IDENTITY_BYPASS": "true",
+        "EXPO_PUBLIC_ENABLE_DEV_PAYMENT_BYPASS": "false",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://3eb2cadbb6b232e459cb5bc962d506e8@o4511291332100096.ingest.us.sentry.io/4511291335049216",
+        "EXPO_PUBLIC_SENTRY_ENV": "staging",
+        "EXPO_PUBLIC_REVENUECAT_REFRESH_OFFERING_ID": "refresh",
+        "EXPO_PUBLIC_REVENUECAT_REFRESH_PRODUCT_ID": "dei_refresh_1"
+      }
     },
     "production": {
       "autoIncrement": true,
