@@ -36,6 +36,7 @@ export const LogOut = StubIcon;
 export const UserRound = StubIcon;
 export const AlertCircle = StubIcon;
 export const ChevronDown = StubIcon;
+export const ChevronLeft = StubIcon;
 export const ChevronRight = StubIcon;
 export const Check = StubIcon;
 
