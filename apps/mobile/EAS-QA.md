@@ -5,9 +5,15 @@
 
 > ⚠️ 핵심: `apps/mobile/lib/supabase.ts` 는 `EXPO_PUBLIC_SUPABASE_URL/ANON_KEY`
 > 가 없으면 앱 시작 즉시 throw 한다. `.env` 는 gitignore 라 EAS 클라우드
-> 빌드에 안 올라간다 → 그래서 `eas.json` 의 `preview.env` 에 값을 박아뒀다
-> (이 파일이 그 단계를 이미 처리함). env 를 바꾸면 **재빌드 필수**
+> 빌드에 안 올라간다 → 그래서 **EAS 서버의 `preview` 환경에 env 를
+> 등록해뒀다** (`eas env:list preview` 로 확인 가능). 빌드 시 EAS 가
+> 자동 주입하므로 git 에 anon key 가 안 남는다. `eas.json` 의
+> `preview.env` 에는 `APP_ENV` 만 둔다. env 를 바꾸면 **재빌드 필수**
 > (`EXPO_PUBLIC_*` 는 빌드타임 임베드).
+>
+> env 변경: `eas env:create preview --name <K> --value <V> --force`
+> (anon key 는 `--visibility sensitive`). 절대 `eas.json` 에 다시
+> 인라인하지 말 것.
 
 ## 0. 빌더 사전 준비 (보통 1명)
 
@@ -74,7 +80,10 @@ QA 는 앱 켜면 원격 Supabase(`sjlzidjnpczysygnlmtk`)에 바로 연결된다
 
 ## 보안 메모
 
-`eas.json` 에 든 값은 전부 **클라이언트 공개 범위**(anon key, Sentry DSN).
-anon key 노출 시 그 원격 dev DB 접근은 RLS 에만 의존하므로, dev DB 에
-민감 실데이터를 쌓지 말 것. service_role 키·DB 비번·PortOne/RevenueCat
-시크릿은 여기에 **없고 있어서도 안 된다** (QA 빌드에 불필요).
+QA 빌드용 env 는 **EAS 서버 `preview` 환경**에 보관(anon key 는
+`sensitive`). 전부 **클라이언트 공개 범위**(anon key, Sentry DSN —
+앱 바이너리에도 들어가는 식별자)라 git 에 안 남기는 것 외 추가
+민감도는 없다. anon key 보유자는 RLS 가 허용하는 범위의 원격 dev DB
+에 접근 가능 → dev DB 에 민감 실데이터를 쌓지 말 것. service_role
+키·DB 비번·PortOne/RevenueCat 시크릿은 **없고 있어서도 안 된다**
+(QA 빌드에 불필요). 확인: `eas env:list preview`.
