@@ -9,11 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "bundleIdentifier": "com.comtrial.dei.susan",
+      "bundleIdentifier": "kr.cmdsoftware.dei",
       "supportsTablet": true
     },
     "android": {
-      "package": "com.comtrial.dei.susan",
+      "package": "kr.cmdsoftware.dei",
       "permissions": [
         "com.android.vending.BILLING"
       ],
