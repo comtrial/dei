@@ -62,15 +62,24 @@ export async function fetchChatList(myUserId: string): Promise<ChatListItem[]> {
   const otherIds = Array.from(new Set(rows.map((c) => otherUserId(c, myUserId))));
 
   const { data: profiles } = await tbl('profiles')
-    .select('user_id, nickname')
+    .select('user_id, nickname, photo_url')
     .in('user_id', otherIds);
 
+  const profileRows = (profiles ?? []) as {
+    user_id: string;
+    nickname: string | null;
+    photo_url: string | null;
+  }[];
+
   const nicknameById = new Map<string, string>(
-    ((profiles ?? []) as { user_id: string; nickname: string | null }[]).map((p) => [
-      p.user_id,
-      p.nickname ?? '익명',
-    ]),
+    profileRows.map((p) => [p.user_id, p.nickname ?? '익명']),
   );
+
+  // photo_url 은 storage 경로 → signed URL 로 변환 (병렬). 실패/부재 시 null.
+  const photoEntries = await Promise.all(
+    profileRows.map(async (p) => [p.user_id, await signedProfileImage(p.photo_url)] as const),
+  );
+  const photoById = new Map<string, string | null>(photoEntries);
 
   return rows.map((c) => {
     const oid = otherUserId(c, myUserId);
@@ -78,11 +87,50 @@ export async function fetchChatList(myUserId: string): Promise<ChatListItem[]> {
       conversationId: c.id,
       otherUserId: oid,
       otherNickname: nicknameById.get(oid) ?? '익명',
+      otherPhotoUrl: photoById.get(oid) ?? null,
       lastMessagePreview: c.last_message_preview,
       updatedAt: c.updated_at,
       status: c.status,
     } satisfies ChatListItem;
   });
+}
+
+/** profile-images storage 경로 → 1시간 signed URL. 경로 없거나 실패 시 null. */
+async function signedProfileImage(path: string | null | undefined): Promise<string | null> {
+  if (!path) return null;
+  const { data, error } = await supabase.storage
+    .from('profile-images')
+    .createSignedUrl(path, 60 * 60);
+  if (error) {
+    logger.captureException(error, {
+      tags: { feature: 'chat-list', storageBucket: 'profile-images' },
+    });
+    return null;
+  }
+  return data?.signedUrl ?? null;
+}
+
+/** CH2 헤더용 상대 프로필 (닉네임 + signed 사진 URL). */
+export interface OtherProfile {
+  nickname: string;
+  photoUrl: string | null;
+}
+
+/**
+ * 상대 user_id 로 공개 프로필(닉네임/사진) 조회. 채팅방 헤더 표시용.
+ * profiles RLS 가 인증 유저에게 활성 프로필 읽기를 허용한다.
+ */
+export async function fetchOtherProfile(userId: string): Promise<OtherProfile | null> {
+  const { data } = await tbl('profiles')
+    .select('nickname, photo_url')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const row = data as { nickname: string | null; photo_url: string | null } | null;
+  if (!row) return null;
+  return {
+    nickname: row.nickname ?? '익명',
+    photoUrl: await signedProfileImage(row.photo_url),
+  };
 }
 
 export interface ConversationGate {

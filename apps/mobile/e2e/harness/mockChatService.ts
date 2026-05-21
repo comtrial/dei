@@ -59,6 +59,7 @@ const baseList: ChatListItem[] = [
     conversationId: CONV,
     otherUserId: OTHER,
     otherNickname: '하늘',
+    otherPhotoUrl: null,
     lastMessagePreview: '내일 봬요!',
     updatedAt: new Date('2026-05-16T09:30:00Z').toISOString(),
     status: 'ACTIVE',
@@ -67,6 +68,7 @@ const baseList: ChatListItem[] = [
     conversationId: 'conv-fixture-2',
     otherUserId: 'other-2',
     otherNickname: '바다',
+    otherPhotoUrl: null,
     lastMessagePreview: null,
     updatedAt: new Date('2026-05-15T22:10:00Z').toISOString(),
     status: 'ACTIVE',
@@ -78,6 +80,15 @@ export async function fetchChatList(): Promise<ChatListItem[]> {
   if (s === 'list-empty') return [];
   if (s === 'list-error') throw new Error('mock: failed to load conversations');
   return baseList;
+}
+
+export interface OtherProfile {
+  nickname: string;
+  photoUrl: string | null;
+}
+
+export async function fetchOtherProfile(): Promise<OtherProfile | null> {
+  return { nickname: '하늘', photoUrl: null };
 }
 
 export async function loadConversationGate(): Promise<ConversationGate> {

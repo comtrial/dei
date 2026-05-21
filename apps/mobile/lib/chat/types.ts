@@ -58,6 +58,8 @@ export interface ChatListItem {
   conversationId: string;
   otherUserId: string;
   otherNickname: string;
+  /** 상대 프로필 사진 (storage signed URL). 없으면 null → 초성 fallback. */
+  otherPhotoUrl: string | null;
   lastMessagePreview: string | null;
   updatedAt: string;
   status: ConversationStatus;

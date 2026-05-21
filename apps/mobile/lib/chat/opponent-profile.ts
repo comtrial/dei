@@ -8,19 +8,19 @@
  *           → CTX[OP3] (branch "CH2 헤더 → OP3")
  *   - 10-C: `[OP3]op3_chat_tapped` → CH0 라우터 (반대 방향. enter-chat.ts 가 담당)
  *
- * OP3 화면 자체는 **상대 프로필 워크플로(06)** 소관이며 이 앱(채팅 모듈)에는
- * 아직 OP3 라우트가 없다. 핵심 funnel 의 LK8 seam 패턴(enter-chat.ts)과 동일하게:
- *   - OP3 라우트가 존재하면 그쪽으로 navigate (params: otherUserId)
- *   - 없으면 funnel 을 막지 않고 안전 degrade (false 반환 → 호출부가 안내)
+ * OP3 화면은 상대 프로필 워크플로(06) 의 공개 프로필 라우트
+ * `/profiles/[userId]` (ProfileScreen mode="public") 로 구현돼 있다. 핵심 funnel 의
+ * LK8 seam 패턴(enter-chat.ts)과 동일하게:
+ *   - OP3 라우트 + otherUserId 가 있으면 그쪽으로 navigate (params: userId)
+ *   - otherUserId 가 없으면(식별 불가) funnel 을 막지 않고 안전 degrade
  * 진입 트리거/seam 을 한 곳(이 순수 함수)에 모아 Vitest 로 단언 가능하게 한다.
  *
  * I/O 없음(순수) — expo-router push 시그니처만 의존.
  */
 import { ROUTES } from '@/lib/routes';
 
-/** ROUTES 에 OP3(매칭 후 상대 프로필) 라우트가 생기면 여기에 키를 추가한다. */
-const OP3_ROUTE: string | null =
-  (ROUTES as Record<string, string>).opponentProfile ?? null;
+/** OP3 = 공개 프로필 동적 라우트. ProfileScreen 이 userId 로 프로필+사진을 그린다. */
+const OP3_ROUTE = `${ROUTES.profiles}/[userId]`;
 
 export type ProfileRouterPush = (target: {
   pathname: string;
@@ -53,16 +53,16 @@ export function enterOpponentProfile(
   push: ProfileRouterPush,
   { otherUserId, source, conversationId = null }: EnterOpponentProfileInput,
 ): EnterOpponentProfileResult {
-  if (!OP3_ROUTE || !otherUserId) {
+  if (!otherUserId) {
     return {
       routed: false,
-      degradeMessage: '상대 프로필 화면은 매칭 프로필(OP3) 연결 후 제공됩니다.',
+      degradeMessage: '상대 정보를 찾을 수 없습니다.',
     };
   }
   push({
     pathname: OP3_ROUTE,
     params: {
-      otherUserId,
+      userId: otherUserId,
       source,
       ...(conversationId ? { conversationId } : {}),
     },

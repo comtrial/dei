@@ -25,6 +25,7 @@ describe('useChatList', () => {
         conversationId: 'c1',
         otherUserId: 'u2',
         otherNickname: '하늘',
+        otherPhotoUrl: null,
         lastMessagePreview: '안녕',
         updatedAt: '2026-05-16T09:00:00Z',
         status: 'ACTIVE',

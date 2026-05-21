@@ -17,12 +17,14 @@ const isFn = vi.fn();
 const fromImpl = vi.fn();
 const rpcImpl = vi.fn();
 const functionsInvoke = vi.fn();
+const createSignedUrl = vi.fn();
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: (...a: unknown[]) => fromImpl(...a),
     rpc: (...a: unknown[]) => rpcImpl(...a),
     functions: { invoke: (...a: unknown[]) => functionsInvoke(...a) },
+    storage: { from: () => ({ createSignedUrl: (...a: unknown[]) => createSignedUrl(...a) }) },
   },
 }));
 
@@ -69,12 +71,13 @@ describe('fetchChatList (CH1)', () => {
     const profiles = {
       select: vi.fn().mockReturnThis(),
       in: inFn.mockResolvedValue({
-        data: [{ user_id: 'u2', nickname: '하늘' }],
+        data: [{ user_id: 'u2', nickname: '하늘', photo_url: 'u2/p.jpg' }],
       }),
     };
     fromImpl.mockImplementation((name: string) =>
       name === 'conversations' ? conversations : profiles,
     );
+    createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/u2.jpg' }, error: null });
 
     const list = await fetchChatList('me');
 
@@ -85,6 +88,7 @@ describe('fetchChatList (CH1)', () => {
       conversationId: 'c1',
       otherUserId: 'u2',
       otherNickname: '하늘',
+      otherPhotoUrl: 'https://signed/u2.jpg',
       status: 'ACTIVE',
     });
   });
