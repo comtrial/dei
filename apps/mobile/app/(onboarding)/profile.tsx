@@ -1,6 +1,7 @@
 import { Camera, Check, ChevronDown, ChevronLeft, ImagePlus } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { logger } from '@dei/shared';
 import {
   ActivityIndicator,
   BackHandler,
@@ -423,6 +424,10 @@ export default function ProfileScreen() {
       });
       setProfileImagePath('');
     } catch (pickerError) {
+      logger.captureException(pickerError, {
+        tags: { feature: 'profile-onboarding', action: 'pick-profile-image' },
+        extra: { source },
+      });
       setError(
         pickerError instanceof Error && pickerError.message.includes('Cannot find native module')
           ? '사진 선택 모듈이 dev client에 아직 없어요. 한 번만 앱을 다시 빌드하면 사용할 수 있어요.'
@@ -489,6 +494,14 @@ export default function ProfileScreen() {
       });
       router.replace(ROUTES.logIntro as never);
     } catch (submitError) {
+      logger.captureException(submitError, {
+        tags: { feature: 'profile-onboarding', action: 'submit-profile' },
+        extra: {
+          hasSelectedImage: !!selectedProfileImage,
+          interestCategoryCount: selectedCategories.length,
+          interestTagCount: selectedTags.length,
+        },
+      });
       setError(submitError instanceof Error ? submitError.message : '프로필을 저장할 수 없어요.');
     } finally {
       setIsSubmitting(false);

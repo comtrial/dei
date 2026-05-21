@@ -109,6 +109,10 @@ export function useSaveProfileVideo() {
 
       return { success: true };
     } catch (error) {
+      logger.captureException(error, {
+        tags: { feature: 'save-profile-video' },
+        extra: { hasTempVideoUri: !!tempVideoUri, recordedMs },
+      });
       const message = error instanceof Error ? error.message : '알 수 없는 오류';
       return { success: false, message };
     } finally {

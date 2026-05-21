@@ -2,16 +2,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 import { getToday } from '@/lib/dateHelpers';
-import { getTimeOfDay } from '@/lib/timeOfDay';
 import { supabase } from '@/lib/supabase';
-
-function getSlotRange(hour: number): { min: number; max: number } {
-  if (hour < 5) return { min: 0, max: 4 };
-  if (hour < 12) return { min: 5, max: 11 };
-  if (hour < 17) return { min: 12, max: 16 };
-  if (hour < 21) return { min: 17, max: 20 };
-  return { min: 21, max: 23 };
-}
 
 export function useTodayClip(userId: string | undefined) {
   const [hasClipInCurrentSlot, setHasClipInCurrentSlot] = useState(false);
@@ -21,8 +12,8 @@ export function useTodayClip(userId: string | undefined) {
   useFocusEffect(
     useCallback(() => {
       const hour = new Date().getHours();
-      const label = getTimeOfDay(hour);
-      const { min, max } = getSlotRange(hour);
+      // 시 단위 슬롯 라벨 ("21:00") — 저장 정책과 일치 (useSaveLog 도 hour_slot 시 단위 저장)
+      const label = `${String(hour).padStart(2, '0')}:00`;
       const today = getToday();
 
       setCurrentSlotLabel(label);
@@ -38,8 +29,7 @@ export function useTodayClip(userId: string | undefined) {
         .from('logs')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
-        .gte('hour_slot', min)
-        .lte('hour_slot', max)
+        .eq('hour_slot', hour) // 정확히 같은 시 슬롯만 (카테고리 범위 아님)
         .gte('recorded_at', `${today}T00:00:00.000Z`)
         .lte('recorded_at', `${today}T23:59:59.999Z`)
         .then(({ count }) => {

@@ -1,15 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useFocusEffect, useRouter } from 'expo-router';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Easing, Modal, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Easing, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logger } from '@dei/shared';
 
 import { Text } from '@/components/ui/text';
 import { useTodayClip } from '@/hooks/useTodayClip';
-import { formatDuration } from '@/lib/formatDuration';
 import { clearRecordingUri, setRecordingUri } from '@/lib/recordingStore';
+import { ROUTES } from '@/lib/routes';
 import { useAccountGate } from '@/providers/account-gate-provider';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -33,48 +34,51 @@ export default function RecordScreen() {
   const { eligibility, refresh } = useAccountGate();
   const { hasClipToday, currentSlotLabel, isLoading: clipLoading } = useTodayClip(user?.id);
 
-  const [isFocused, setIsFocused] = useState(true);
+  const [isFocused, setIsFocused] = useState(false);
   const [facing, setFacing] = useState<CameraFacing>('back');
-  const [flashOn, setFlashOn] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [zoomIndex, setZoomIndex] = useState(0);
-  const [selectedLens, setSelectedLens] = useState<string | undefined>();
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
   const didInitRef = useRef(false);
 
-  const elapsedMsRef = useRef(0);
-  const [displayMs, setDisplayMs] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const barAnim = useRef(new Animated.Value(0)).current;
 
   const stopAnimations = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
     progressAnim.stopAnimation();
     barAnim.stopAnimation();
   }, [barAnim, progressAnim]);
 
   useFocusEffect(
     useCallback(() => {
-      setIsFocused(true);
       didInitRef.current = false;
-      Alert.alert(
-        '가로 모드 권장',
-        '가로로 돌려서 촬영하면 더 잘 나와요 📱',
-        [{ text: '확인', style: 'default' }],
-      );
+      // stale state 초기화 — Tabs 는 unmount 안 하므로 진입 때마다 reset 필수
+      setFacing('back');
+      setZoomIndex(0);
+      setIsRecording(false);
+      // 가로 모드 잠금 완료 후 CameraView 마운트 → AVSession 활성 중 방향 전환 크래시 방지
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
+        .then(() => setIsFocused(true))
+        .catch((err) => {
+          logger.captureException(err, {
+            tags: { feature: 'record', action: 'lock-orientation' },
+          });
+          setIsFocused(true); // 잠금 실패해도 카메라는 보여줌
+        });
       return () => {
-        setIsFocused(false);  // 포커스 잃으면 CameraView 언마운트 → AVSession 해제
+        setIsFocused(false); // 포커스 잃으면 CameraView 언마운트 → AVSession 해제
         didInitRef.current = false;
         setShowPermissionDialog(false);
         setShowOverwriteDialog(false);
         stopAnimations();
         setIsRecording(false);
-        setDisplayMs(0);
+        // 화면 방향 잠금 해제 (app.json의 기본 orientation인 portrait로 자동 복귀)
+        ScreenOrientation.unlockAsync().catch((err) => {
+          logger.captureException(err, {
+            tags: { feature: 'record', action: 'unlock-orientation' },
+          });
+        });
       };
     }, [stopAnimations])
   );
@@ -99,9 +103,6 @@ export default function RecordScreen() {
   }, [stopAnimations]);
 
   const startAnimations = () => {
-    elapsedMsRef.current = 0;
-    setDisplayMs(0);
-
     progressAnim.setValue(0);
     barAnim.setValue(0);
 
@@ -118,22 +119,24 @@ export default function RecordScreen() {
       easing: Easing.linear,
       useNativeDriver: false,
     }).start();
-
-    timerRef.current = setInterval(() => {
-      elapsedMsRef.current += 100;
-      setDisplayMs(elapsedMsRef.current);
-    }, 100);
   };
 
   const handleAllowPermission = async () => {
     setShowPermissionDialog(false);
-    const camResult = await requestPermission();
-    if (camResult.status !== 'granted') {
+    try {
+      const camResult = await requestPermission();
+      if (camResult.status !== 'granted') {
+        router.back();
+        return;
+      }
+      await requestMicPermission();
+      if (hasClipToday) setShowOverwriteDialog(true);
+    } catch (err) {
+      logger.captureException(err, {
+        tags: { feature: 'record', action: 'request-permissions' },
+      });
       router.back();
-      return;
     }
-    await requestMicPermission();
-    if (hasClipToday) setShowOverwriteDialog(true);
   };
 
   const handleDenyPermission = () => {
@@ -225,40 +228,28 @@ export default function RecordScreen() {
 
   // CameraView 렌더링은 카메라 권한만으로 충분. 마이크는 recordAsync 직전에 확인
   const isGranted = permission?.status === 'granted';
-  const timerColor = isRecording ? '#C0432A' : 'white';
+  // 상단 가운데 시계 — 현재 시각의 시 슬롯 (예: "21:00"). useTodayClip 의 currentSlotLabel 과 동일 정책.
+  const currentHourLabel = `${String(new Date().getHours()).padStart(2, '0')}:00`;
+  const shouldMountCamera = isGranted && isFocused;
 
   return (
     <View className="flex-1 bg-[#1A1008]">
       {/* Camera — 포커스 상태일 때만 마운트. 백그라운드에서 AVSession 해제하여 result 화면 재생 가능하게 함 */}
-      {isGranted && isFocused && (
-        <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-          <CameraView
-            ref={cameraRef}
-            style={{ flex: 1 }}
-            mode="video"
-            facing={facing}
-            flash={flashOn ? 'on' : 'off'}
-            zoom={facing === 'front' ? 0 : ZOOM_LEVELS[zoomIndex].value}
-            selectedLens={selectedLens}
-            onAvailableLensesChanged={({ lenses }) => {
-              if (facing === 'front') {
-                if (selectedLens !== undefined) setSelectedLens(undefined);
-                return;
-              }
-              const dualWide = lenses.find(
-                (l) => l === 'Back Dual Wide Camera' || l === '후면 듀얼 광각 카메라'
-              );
-              const singleMain = lenses.find(
-                (l) => l === 'Back Camera' || l === '후면 카메라'
-              );
-              const fallback = lenses
-                .slice()
-                .sort((a, b) => a.length - b.length)[0];
-              const chosen = dualWide ?? singleMain ?? fallback;
-              if (chosen && chosen !== selectedLens) setSelectedLens(chosen);
-            }}
-          />
-        </View>
+      {/* flash 는 video 모드에서 torch 로만 동작 — UI 제거. selectedLens / onAvailableLensesChanged 는 native crash 이력으로 보류 */}
+      {shouldMountCamera && (
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          mode="video"
+          facing={facing}
+          zoom={facing === 'front' ? 0 : ZOOM_LEVELS[zoomIndex].value}
+          onMountError={(event) => {
+            logger.captureException(new Error(event?.message ?? 'CameraView onMountError'), {
+              tags: { feature: 'record', action: 'camera-mount' },
+              extra: { facing, zoomIndex },
+            });
+          }}
+        />
       )}
 
       {/* Progress bar (bottom of viewfinder, above controls) */}
@@ -275,50 +266,69 @@ export default function RecordScreen() {
         />
       )}
 
-      {/* Top bar */}
-      <View
-        className="absolute left-0 right-0 flex-row items-center justify-between px-5"
-        style={{ top: insets.top + 12 }}>
+      {/* 상단 바 — 가로 모드 */}
+      <View 
+        pointerEvents="box-none"
+        className="absolute left-0 right-0 flex-row items-center justify-between"
+        style={{ 
+          top: insets.top + 12,
+          paddingLeft: insets.left + 20,
+          paddingRight: insets.right + 20,
+          zIndex: 1000
+        }}>
+        {/* X 닫기 버튼 */}
         <TouchableOpacity
-          onPress={() => !isRecording && router.back()}
-          hitSlop={12}
-          style={{ opacity: isRecording ? 0.3 : 1 }}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (isRecording) return;
+
+            ScreenOrientation.unlockAsync().catch((err) => {
+              logger.captureException(err, {
+                tags: { feature: 'record', action: 'unlock-orientation-close' },
+              });
+            });
+            setIsFocused(false);
+
+            // AVSession 해제 시간을 주고 navigate (즉시 router.back 시 카메라 native view 와 충돌)
+            setTimeout(() => {
+              try {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace(ROUTES.home as never);
+                }
+              } catch (err) {
+                logger.captureException(err, {
+                  tags: { feature: 'record', action: 'close-navigate' },
+                });
+              }
+            }, 300);
+          }}
+          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          style={{
+            opacity: isRecording ? 0.3 : 1,
+            width: 44,
+            height: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
           disabled={isRecording}>
           <View className="h-9 w-9 items-center justify-center rounded-full bg-black/30">
             <Ionicons name="close" size={20} color="white" />
           </View>
         </TouchableOpacity>
 
+        {/* 현재 시각 (시 슬롯) — 녹화 ms 카운터 대신 표시 */}
         <View className="items-center">
           <Text
             className="font-mono text-base font-semibold"
-            style={{ color: timerColor }}>
-            {formatDuration(displayMs)}
+            style={{ color: 'white' }}>
+            {currentHourLabel}
           </Text>
-          <View className="mt-1 flex-row gap-1">
-            {[0, 1, 2].map((i) => (
-              <View
-                key={i}
-                style={{
-                  width: 4,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: isRecording ? '#C0432A' : 'rgba(255,255,255,0.5)',
-                }}
-              />
-            ))}
-          </View>
         </View>
 
-        <TouchableOpacity
-          onPress={() => !isRecording && setFlashOn((v) => !v)}
-          hitSlop={12}
-          style={{ opacity: isRecording ? 0.3 : 1 }}
-          disabled={isRecording}>
-          <View className="h-9 w-9 items-center justify-center rounded-full bg-black/30">
-            <Ionicons name={flashOn ? 'flash' : 'flash-outline'} size={18} color={flashOn ? '#FFD700' : 'white'} />
-          </View>
-        </TouchableOpacity>
+        {/* X 버튼과 동일 크기의 invisible spacer — 타이머 중앙 정렬 유지 (flash 버튼 제거됨) */}
+        <View style={{ width: 44, height: 44 }} />
       </View>
 
       {/* Focus frame */}
@@ -326,10 +336,44 @@ export default function RecordScreen() {
         <View style={{ width: 128, height: 128, borderWidth: 2, borderColor: '#C8A84B', borderRadius: 4 }} />
       </View>
 
-      {/* Zoom buttons */}
+      {/* 왼쪽 세로 컨트롤 바 — 가로 모드 */}
+      <View 
+        className="absolute flex-col items-center gap-6"
+        style={{ 
+          left: insets.left + 20,
+          top: 0,
+          bottom: 0,
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+        {/* REAR / FRONT */}
+        <Text style={{ fontFamily: 'monospace', fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
+          {facing === 'back' ? 'REAR' : 'FRONT'}
+        </Text>
+
+        {/* 카메라 전환 버튼 */}
+        <TouchableOpacity
+          onPress={() => {
+            setFacing((f) => (f === 'back' ? 'front' : 'back'));
+          }}
+          hitSlop={12}
+          style={{ opacity: isRecording ? 0.3 : 1 }}
+          disabled={isRecording}>
+          <View className="h-12 w-12 items-center justify-center rounded-full bg-white/20">
+            <Ionicons name="camera-reverse-outline" size={24} color="white" />
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* Zoom buttons — 촬영 버튼 바로 위 (가로로 배치) */}
       <View
         className="absolute flex-row items-center gap-4"
-        style={{ bottom: insets.bottom + 108, alignSelf: 'center', left: 0, right: 0, justifyContent: 'center' }}>
+        style={{ 
+          right: insets.right + 32,
+          bottom: '50%',
+          marginBottom: RING_SIZE / 2 + 20,
+          zIndex: 100
+        }}>
         {ZOOM_LEVELS.map((level, index) => (
           <TouchableOpacity key={level.label} onPress={() => setZoomIndex(index)} hitSlop={12} disabled={isRecording}>
             <View
@@ -353,91 +397,89 @@ export default function RecordScreen() {
         ))}
       </View>
 
-      {/* REAR / FRONT */}
-      <View style={{ position: 'absolute', bottom: insets.bottom + 92, left: 20 }}>
-        <Text style={{ fontFamily: 'monospace', fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
-          {facing === 'back' ? 'REAR' : 'FRONT'}
-        </Text>
-      </View>
+      {/* 촬영 버튼 — 가로 모드에서 오른쪽 중앙 (오른손 엄지 위치) */}
+      <View 
+        style={{ 
+          position: 'absolute',
+          right: insets.right + 32,
+          top: '50%',
+          marginTop: -RING_SIZE / 2,
+          width: RING_SIZE, 
+          height: RING_SIZE,
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+        {isRecording && (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: RING_SIZE,
+              height: RING_SIZE,
+              borderRadius: RING_SIZE / 2,
+              borderWidth: 3,
+              borderColor: '#C0432A',
+              opacity: progressAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.35, 1],
+              }),
+              transform: [
+                {
+                  scale: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.92, 1],
+                  }),
+                },
+              ],
+            }}
+          />
+        )}
 
-      {/* Bottom controls */}
-      <View
-        className="absolute left-0 right-0 flex-row items-center justify-between px-10"
-        style={{ bottom: insets.bottom + 32 }}>
-        {/* Flip — disabled during recording */}
+        {/* Shutter button — 녹화 중엔 비활성 */}
         <TouchableOpacity
-          onPress={() => {
-            setFacing((f) => (f === 'back' ? 'front' : 'back'));
-            setSelectedLens(undefined);
-          }}
-          hitSlop={12}
-          style={{ opacity: isRecording ? 0.3 : 1 }}
+          onPress={handleShutterPress}
+          activeOpacity={0.8}
+          hitSlop={8}
           disabled={isRecording}>
-          <View className="h-12 w-12 items-center justify-center rounded-full bg-white/20">
-            <Ionicons name="camera-reverse-outline" size={24} color="white" />
-          </View>
-        </TouchableOpacity>
-
-        {/* Shutter with progress indicator */}
-        <View style={{ width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' }}>
-          {isRecording && (
-            <Animated.View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                width: RING_SIZE,
-                height: RING_SIZE,
-                borderRadius: RING_SIZE / 2,
-                borderWidth: 3,
-                borderColor: '#C0432A',
-                opacity: progressAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.35, 1],
-                }),
-                transform: [
-                  {
-                    scale: progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.92, 1],
-                    }),
-                  },
-                ],
-              }}
-            />
-          )}
-
-          {/* Shutter button — 녹화 중엔 비활성 */}
-          <TouchableOpacity
-            onPress={handleShutterPress}
-            activeOpacity={0.8}
-            hitSlop={8}
-            disabled={isRecording}>
-            <View
-              style={{
-                width: 80,
-                height: 80,
-                borderRadius: 40,
-                borderWidth: 4,
-                borderColor: 'white',
-                backgroundColor: 'white',
-                opacity: isRecording ? 0.3 : 1,
-              }}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* NO CLIP / Today clip indicator */}
-        <TouchableOpacity hitSlop={12} disabled={isRecording}>
-          <View className="h-12 w-12 items-center justify-center rounded border border-white/40">
-            <Text className="text-center font-mono text-[9px] font-semibold leading-tight text-white">
-              NO{'\n'}CLIP
-            </Text>
-          </View>
+          <View
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              borderWidth: 4,
+              borderColor: 'white',
+              backgroundColor: 'white',
+              opacity: isRecording ? 0.3 : 1,
+            }}
+          />
         </TouchableOpacity>
       </View>
+
+      {/* NO CLIP — 가로 모드에서 오른쪽 하단 */}
+      <TouchableOpacity 
+        hitSlop={12} 
+        disabled={isRecording}
+        style={{
+          position: 'absolute',
+          bottom: insets.bottom + 32,
+          right: insets.right + 20,
+          zIndex: 100
+        }}>
+        <View className="h-12 w-12 items-center justify-center rounded border border-white/40">
+          <Text className="text-center font-mono text-[9px] font-semibold leading-tight text-white">
+            NO{'\n'}CLIP
+          </Text>
+        </View>
+      </TouchableOpacity>
 
       {/* 01B · Permission dialog */}
-      <Modal visible={showPermissionDialog} transparent animationType="fade" statusBarTranslucent>
+      <Modal
+        visible={showPermissionDialog}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}>
         <View className="flex-1 items-center justify-center bg-black/60 px-6">
           <View className="w-full rounded-xl bg-[#F5EDDB] p-6">
             <Text className="mb-2 text-lg font-bold text-[#171310]">카메라 접근 허용</Text>
@@ -461,7 +503,12 @@ export default function RecordScreen() {
       </Modal>
 
       {/* 01C · Overwrite dialog */}
-      <Modal visible={showOverwriteDialog} transparent animationType="fade" statusBarTranslucent>
+      <Modal
+        visible={showOverwriteDialog}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}>
         <View className="flex-1 items-center justify-center bg-black/60 px-6">
           <View className="w-full rounded-xl bg-[#F5EDDB] p-6">
             <Text className="mb-2 text-lg font-bold text-[#171310]">

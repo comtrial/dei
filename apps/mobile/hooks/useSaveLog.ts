@@ -108,6 +108,10 @@ export function useSaveLog() {
 
       return { success: true };
     } catch (e) {
+      logger.captureException(e, {
+        tags: { feature: 'save-log' },
+        extra: { hasTempVideoUri: !!tempVideoUri, recordedMs },
+      });
       const message = e instanceof Error ? e.message : '알 수 없는 오류';
       return { success: false, message };
     } finally {
