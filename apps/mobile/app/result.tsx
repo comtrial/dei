@@ -1,10 +1,12 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { logger } from '@dei/shared';
 
 import { Text } from '@/components/ui/text';
 import { useSaveProfileVideo } from '@/hooks/useSaveProfileVideo';
@@ -12,7 +14,7 @@ import { useSaveLog } from '@/hooks/useSaveLog';
 import { getRecordingUri } from '@/lib/recordingStore';
 import { formatDuration } from '@/lib/formatDuration';
 import { ROUTES } from '@/lib/routes';
-import { getTimeOfDay } from '@/lib/timeOfDay';
+
 import { useAccountGate } from '@/providers/account-gate-provider';
 
 export default function ResultScreen() {
@@ -34,7 +36,7 @@ export default function ResultScreen() {
     ? purpose === 'profile'
     : eligibility?.next_step === 'first_video';
   const isSaving = loading || profileVideoLoading;
-  const timeLabel = getTimeOfDay(new Date().getHours());
+  const timeLabel = `${String(new Date().getHours()).padStart(2, '0')}:00`;
 
   const player = useVideoPlayer(uri ? { uri } : null, (p) => {
     p.loop = true;
@@ -43,20 +45,44 @@ export default function ResultScreen() {
     setTimeout(() => p.play(), 300);
   });
 
+  // 화면 방향 잠금 해제 (app.json의 기본 orientation인 portrait로 자동 복귀)
+  useEffect(() => {
+    ScreenOrientation.unlockAsync().catch((err) => {
+      logger.captureException(err, {
+        tags: { feature: 'result', action: 'unlock-orientation' },
+      });
+    });
+  }, []);
+
   const handleMuteToggle = () => {
     const next = !muted;
     setMuted(next);
     player.muted = next;
   };
 
+  const cleanupTempFile = async (action: 'cancel' | 'redo') => {
+    if (!uri) return;
+    try {
+      await FileSystem.deleteAsync(uri, { idempotent: true });
+    } catch (err) {
+      logger.captureException(err, {
+        tags: { feature: 'result', action: `${action}-cleanup` },
+        extra: { uri },
+      });
+    }
+  };
+
   const handleCancel = async () => {
-    if (uri) await FileSystem.deleteAsync(uri, { idempotent: true });
+    await cleanupTempFile('cancel');
     router.back();
   };
 
   const handleRedo = async () => {
-    if (uri) await FileSystem.deleteAsync(uri, { idempotent: true });
-    router.replace('/(app)/record');
+    await cleanupTempFile('redo');
+    // result.tsx 는 record 에서 push 로 진입했으므로 back 하면 record 로 복귀.
+    // router.replace('/(app)/record') 는 Tabs 내부 라우트를 stack 으로 다시 쌓아
+    // CameraView 가 중복 마운트되며 AVCaptureSession 충돌 → native crash 유발.
+    router.back();
   };
 
   const handleSave = async () => {
@@ -68,7 +94,13 @@ export default function ResultScreen() {
     if (isProfileVideoFlow) {
       const result = await saveProfileVideo({ tempVideoUri: uri || undefined, recordedMs });
       if (result.success) {
-        await refresh();
+        try {
+          await refresh();
+        } catch (err) {
+          logger.captureException(err, {
+            tags: { feature: 'result', action: 'refresh-after-profile-video' },
+          });
+        }
         router.replace(ROUTES.videoReview as never);
       } else {
         Alert.alert('저장 실패', result.message || '저장에 실패했어요. 다시 시도해주세요.');
