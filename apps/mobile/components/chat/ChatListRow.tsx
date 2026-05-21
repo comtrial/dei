@@ -2,7 +2,7 @@
  * CH1 목록의 한 행. 상대 닉네임 + 마지막 메시지 미리보기 + updated_at.
  * tap → CH0 라우터.
  */
-import { Pressable, View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
 import type { ChatListItem } from '@/lib/chat/types';
@@ -36,9 +36,17 @@ export function ChatListRow({ item, onPress }: ChatListRowProps) {
       className="flex-row items-center gap-3 px-1 py-4 active:bg-accent rounded-md"
       onPress={() => onPress(item)}
       testID={`chat-list-row-${item.conversationId}`}>
-      <View className="bg-secondary h-12 w-12 items-center justify-center rounded-full">
-        <Text className="text-secondary-foreground text-lg font-semibold">{initial}</Text>
-      </View>
+      {item.otherPhotoUrl ? (
+        <Image
+          accessibilityLabel={`${item.otherNickname} 프로필 사진`}
+          className="bg-secondary h-12 w-12 rounded-full"
+          source={{ uri: item.otherPhotoUrl }}
+        />
+      ) : (
+        <View className="bg-secondary h-12 w-12 items-center justify-center rounded-full">
+          <Text className="text-secondary-foreground text-lg font-semibold">{initial}</Text>
+        </View>
+      )}
       <View className="flex-1">
         <View className="flex-row items-center justify-between">
           <Text className="text-base font-semibold" numberOfLines={1}>

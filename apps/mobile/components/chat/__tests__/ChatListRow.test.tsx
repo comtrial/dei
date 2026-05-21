@@ -7,6 +7,7 @@ const item: ChatListItem = {
   conversationId: 'conv-1',
   otherUserId: 'user-2',
   otherNickname: '민지',
+  otherPhotoUrl: null,
   lastMessagePreview: '안녕하세요!',
   updatedAt: new Date().toISOString(),
   status: 'ACTIVE',

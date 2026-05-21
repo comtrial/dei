@@ -8,9 +8,8 @@
  *   - CH5 나가기 확정 → leave → 완료 토스트 "대화에서 나갔습니다" → H2 (10-F)
  *   - 상대 나감/종료 수신 시 무음 정리 후 H2 자동 복귀 (B-CH6 / 10-H)
  *
- * OP3(매칭 후 상대 공개 프로필) 은 상대 프로필 워크플로(06) 소관이며 이 앱
- * (채팅 모듈)에 OP3 라우트가 아직 없다 → `enterOpponentProfile` seam 이
- * 라우트 부재 시 funnel 비차단 안전 degrade(안내 Alert) 후 머무름.
+ * OP3(매칭 후 상대 공개 프로필) 은 공개 프로필 라우트 `/profiles/[userId]` 로
+ * 구현돼 있고 `enterOpponentProfile` seam 이 그쪽으로 navigate 한다.
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, MoreVertical } from 'lucide-react-native';
@@ -18,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -33,7 +33,7 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { useChatRoom } from '@/hooks/useChatRoom';
-import { leaveConversation } from '@/lib/chat/chat-service';
+import { fetchOtherProfile, leaveConversation } from '@/lib/chat/chat-service';
 import { enterOpponentProfile } from '@/lib/chat/opponent-profile';
 import { ROUTES } from '@/lib/routes';
 import { useAuth } from '@/providers/auth-provider';
@@ -49,7 +49,27 @@ export default function ChatRoomScreen() {
   }>();
   const conversationId = params.conversationId ?? null;
   const myId = user?.id ?? null;
-  const nickname = params.otherNickname || '상대';
+
+  // 상대 프로필(닉네임/사진)을 otherUserId 로 조회. 조회 전엔 param 닉네임 fallback.
+  const [otherProfile, setOtherProfile] = useState<{
+    nickname: string;
+    photoUrl: string | null;
+  } | null>(null);
+  useEffect(() => {
+    const oid = params.otherUserId;
+    if (!oid) return;
+    let active = true;
+    void logger.withErrorCapture('chat.header.profile', async () => {
+      const p = await fetchOtherProfile(oid);
+      if (active && p) setOtherProfile(p);
+    });
+    return () => {
+      active = false;
+    };
+  }, [params.otherUserId]);
+
+  const nickname = otherProfile?.nickname || params.otherNickname || '상대';
+  const photoUrl = otherProfile?.photoUrl ?? null;
 
   const { messages, loading, ended, sendFailure, clearSendFailure, send, retry } =
     useChatRoom(conversationId, myId);
@@ -172,11 +192,19 @@ export default function ChatRoomScreen() {
             className="flex-row items-center gap-2 active:opacity-70"
             onPress={handleHeaderProfile}
             testID="chat-header-profile">
-          <View className="bg-secondary h-9 w-9 items-center justify-center rounded-full">
-            <Text className="text-secondary-foreground font-semibold">
-              {nickname.charAt(0) || '?'}
-            </Text>
-          </View>
+          {photoUrl ? (
+            <Image
+              accessibilityLabel={`${nickname} 프로필 사진`}
+              className="bg-secondary h-9 w-9 rounded-full"
+              source={{ uri: photoUrl }}
+            />
+          ) : (
+            <View className="bg-secondary h-9 w-9 items-center justify-center rounded-full">
+              <Text className="text-secondary-foreground font-semibold">
+                {nickname.charAt(0) || '?'}
+              </Text>
+            </View>
+          )}
           <Text className="text-base font-semibold">{nickname}</Text>
           </Pressable>
         </View>
