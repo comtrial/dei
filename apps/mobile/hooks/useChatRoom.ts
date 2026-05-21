@@ -48,6 +48,8 @@ export interface UseChatRoomResult {
   send: (body: string) => Promise<void>;
   /** 실패 버블 재전송 (인라인 retry 마커 tap). retryable 실패에만 노출. */
   retry: (clientId: string) => Promise<void>;
+  /** 메시지 재로드 (화면 focus 시 호출 — 탭 인스턴스 재사용 무한로딩 방지). */
+  reload: () => void;
 }
 
 export function useChatRoom(
@@ -65,6 +67,26 @@ export function useChatRoom(
   const realtimeReady = useRef(false);
 
   const clearSendFailure = useCallback(() => setSendFailure(null), []);
+
+  // 메시지 재로드. 탭 네비게이터에서 chat-room 인스턴스가 유지돼 동일
+  // conversationId 로 재진입 시 useEffect 가 재실행되지 않으면 loading 이 옛
+  // 상태(true)로 굳어 무한 로딩이 된다 → 화면 focus 마다 이걸 호출해 복구한다.
+  const reload = useCallback(() => {
+    if (!conversationId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    fetchMessages(conversationId)
+      .then((rows) => setMessages(rows.map(rowToMessage)))
+      .catch((err) => {
+        logger.captureException(err, {
+          tags: { feature: 'chat-room', action: 'load' },
+          extra: { conversationId },
+        });
+      })
+      .finally(() => setLoading(false));
+  }, [conversationId]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -241,5 +263,6 @@ export function useChatRoom(
     clearSendFailure,
     send,
     retry,
+    reload,
   };
 }

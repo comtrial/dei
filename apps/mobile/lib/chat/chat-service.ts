@@ -95,16 +95,23 @@ export async function fetchChatList(myUserId: string): Promise<ChatListItem[]> {
   });
 }
 
-/** profile-images storage 경로 → 1시간 signed URL. 경로 없거나 실패 시 null. */
+/**
+ * profile-images storage 경로 → 1시간 signed URL. 경로 없거나 실패 시 null.
+ * "Object not found"(사진 미존재 / RLS 로 비가시) 는 정상적인 fallback 흐름이므로
+ * Sentry 로 캡처하지 않는다 (초성 아바타로 degrade). 그 외 예기치 못한 에러만 캡처.
+ */
 async function signedProfileImage(path: string | null | undefined): Promise<string | null> {
   if (!path) return null;
   const { data, error } = await supabase.storage
     .from('profile-images')
     .createSignedUrl(path, 60 * 60);
   if (error) {
-    logger.captureException(error, {
-      tags: { feature: 'chat-list', storageBucket: 'profile-images' },
-    });
+    const msg = (error as { message?: string }).message ?? '';
+    if (!/not\s*found/i.test(msg)) {
+      logger.captureException(error, {
+        tags: { feature: 'chat-list', storageBucket: 'profile-images' },
+      });
+    }
     return null;
   }
   return data?.signedUrl ?? null;
