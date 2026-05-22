@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
+import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 import { logger } from '@dei/shared';
@@ -20,13 +21,13 @@ export default function MatchedScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const [counterpart, setCounterpart] = useState<Profile | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!matchId || !user?.id) return;
-    logger.withErrorCapture('match-detail.fetch', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: match } = await (supabase as any).from('matches')
+    void logger.withErrorCapture('match-detail.fetch', async () => {
+      const sb = supabase as any;
+      const { data: match } = await sb.from('matches')
         .select('user_a_id, user_b_id')
         .eq('id', matchId)
         .single();
@@ -38,6 +39,13 @@ export default function MatchedScreen() {
         .eq('user_id', cpId)
         .single();
       if (profile) setCounterpart(profile);
+
+      // 채팅 진입용 conversation 조회 (accept_like 가 매칭 시 생성). match_id 로 1:1.
+      const { data: conv } = await sb.from('conversations')
+        .select('id')
+        .eq('match_id', matchId)
+        .maybeSingle();
+      if (conv?.id) setConversationId(conv.id);
     }, { tags: { feature: 'match-detail', matchId } });
   }, [matchId, user?.id]);
 
@@ -75,20 +83,25 @@ export default function MatchedScreen() {
 
       <View className="px-6 pb-8 gap-2">
         <Pressable
-          onPress={() =>
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (router.replace as any)({ pathname: '/messages/[matchId]', params: { matchId } })
-          }
+          onPress={() => {
+            // CH0 게이트(/chat)로 conversationId 전달 — 게이트가 상태/차단 판정 후
+            // 채팅방(CH2) 진입. conversation 미로드/부재 시 DM 목록으로 안전 폴백.
+            if (conversationId) {
+              router.replace({
+                pathname: ROUTES.chatRoute,
+                params: { conversationId, source: 'match' },
+              });
+            } else {
+              router.replace(ROUTES.messages);
+            }
+          }}
           className="bg-primary rounded-xl py-4 items-center active:opacity-80"
           testID="match-chat-cta"
         >
           <Text className="text-primary-foreground font-semibold text-base">채팅하기</Text>
         </Pressable>
         <Pressable
-          onPress={() =>
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (router.replace as any)('/(app)/likes')
-          }
+          onPress={() => router.replace(ROUTES.likes as never)}
           className="rounded-xl py-4 items-center active:opacity-60"
           testID="match-close"
         >
