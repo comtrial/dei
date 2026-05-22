@@ -1,0 +1,6 @@
+-- Remote history placeholder.
+--
+-- The remote project already records migration version 20260522103645 from a
+-- manual feature flag fix. The canonical local feature flag schema is kept in
+-- 20260522130000_feature_flags.sql, so this file intentionally contains no
+-- schema changes.

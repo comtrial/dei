@@ -10,6 +10,7 @@ type StatItem = { label: string; value: number; delta?: number };
 
 type Props = {
   heartCount?: number;
+  refreshItemCount?: number;
   daysSinceVideo?: number | null;
   stats?: StatItem[];
   /** 내 프로필 사진 (signed URL). variant B/C 우측 상단 프로필에 표시. */
@@ -27,6 +28,7 @@ type Props = {
  */
 export function HomeTopBarSlot({
   heartCount,
+  refreshItemCount,
   daysSinceVideo,
   stats,
   myPhotoUrl,
@@ -41,6 +43,8 @@ export function HomeTopBarSlot({
   if (variant === 'B') {
     return (
       <HomeTopVariantB
+        heartCount={heartCount}
+        refreshItemCount={refreshItemCount}
         daysSinceVideo={daysSinceVideo}
         stats={stats}
         myPhotoUrl={myPhotoUrl}
@@ -53,6 +57,8 @@ export function HomeTopBarSlot({
   if (variant === 'C') {
     return (
       <HomeTopVariantC
+        heartCount={heartCount}
+        refreshItemCount={refreshItemCount}
         daysSinceVideo={daysSinceVideo}
         myPhotoUrl={myPhotoUrl}
         myLatestVideoThumbUrl={myLatestVideoThumbUrl}
@@ -60,5 +66,5 @@ export function HomeTopBarSlot({
       />
     );
   }
-  return <HomeTopBar heartCount={heartCount} />;
+  return <HomeTopBar heartCount={heartCount} refreshItemCount={refreshItemCount} />;
 }

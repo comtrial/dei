@@ -25,7 +25,7 @@ describe('HomeTopBarSlot (home_top_layout variant)', () => {
   it('flag=A (기본/무압박) → HomeTopBar 렌더 (B/C 카드 없음)', () => {
     mockFlagValue = 'A';
     const { queryByTestId, getByLabelText } = render(
-      <HomeTopBarSlot heartCount={3} daysSinceVideo={5} />,
+      <HomeTopBarSlot heartCount={3} refreshItemCount={2} daysSinceVideo={5} />,
     );
     expect(queryByTestId('home-top-variant-b')).toBeNull();
     expect(queryByTestId('home-top-variant-c')).toBeNull();
@@ -36,9 +36,13 @@ describe('HomeTopBarSlot (home_top_layout variant)', () => {
   it('flag=B (모멘텀/보상레버) → 반응 통계 카드 렌더', () => {
     mockFlagValue = 'B';
     const { getByTestId, getByText } = render(
-      <HomeTopBarSlot heartCount={3} daysSinceVideo={2} />,
+      <HomeTopBarSlot heartCount={3} refreshItemCount={2} daysSinceVideo={2} />,
     );
     expect(getByTestId('home-top-variant-b')).toBeTruthy();
+    expect(getByTestId('home-heart-balance')).toBeTruthy();
+    expect(getByTestId('home-refresh-ticket-balance')).toBeTruthy();
+    expect(getByText('3')).toBeTruthy();
+    expect(getByText('2')).toBeTruthy();
     expect(getByText('반응이 오고 있어요')).toBeTruthy();
     expect(getByText('한 편 더 찍기')).toBeTruthy();
   });
@@ -46,9 +50,13 @@ describe('HomeTopBarSlot (home_top_layout variant)', () => {
   it('flag=C (리프레시/압박) → 새 영상 유도 카드 렌더', () => {
     mockFlagValue = 'C';
     const { getByTestId, getByText } = render(
-      <HomeTopBarSlot heartCount={0} daysSinceVideo={24} />,
+      <HomeTopBarSlot heartCount={0} refreshItemCount={1} daysSinceVideo={24} />,
     );
     expect(getByTestId('home-top-variant-c')).toBeTruthy();
+    expect(getByTestId('home-heart-balance')).toBeTruthy();
+    expect(getByTestId('home-refresh-ticket-balance')).toBeTruthy();
+    expect(getByText('0')).toBeTruthy();
+    expect(getByText('1')).toBeTruthy();
     expect(getByText('요즘 모습 보여주세요')).toBeTruthy();
     expect(getByText('새로 찍기')).toBeTruthy();
   });

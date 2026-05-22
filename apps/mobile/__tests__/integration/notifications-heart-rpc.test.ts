@@ -113,12 +113,12 @@ describe.skipIf(!process.env.RUN_INTEGRATION || !hasRequiredServiceRoleKey)(
           .from('payments')
           .insert({
             user_id: senderId,
-            product_type: 'REFRESH',
+            product_type: 'HEART',
             amount: 1000,
             currency: 'KRW',
             '결제상태': 'SUCCESS',
             provider: 'revenuecat',
-            product_id: 'dei_refresh_1',
+            product_id: 'dei_heart_1',
             revenuecat_transaction_id: `test-${uniqueId()}`,
           })
           .select('id')
@@ -128,7 +128,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION || !hasRequiredServiceRoleKey)(
         const grant = await service.rpc('grant_refresh_item', {
           p_user_id: senderId,
           p_payment_id: payment?.id,
-          p_product_id: 'dei_refresh_1',
+          p_product_id: 'dei_heart_1',
           p_granted_count: 1,
         });
         expect(grant.error).toBeNull();
@@ -183,7 +183,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION || !hasRequiredServiceRoleKey)(
         });
         expect(freeLike.error).toBeNull();
 
-        const countAfterFreeLike = await service.rpc('get_available_refresh_item_count', {
+        const countAfterFreeLike = await service.rpc('get_available_heart_count', {
           p_user_id: senderId,
         });
         expect(countAfterFreeLike.error).toBeNull();
@@ -195,7 +195,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION || !hasRequiredServiceRoleKey)(
         });
         expect(heartLike.error).toBeNull();
 
-        const countAfterHeartLike = await service.rpc('get_available_refresh_item_count', {
+        const countAfterHeartLike = await service.rpc('get_available_heart_count', {
           p_user_id: senderId,
         });
         expect(countAfterHeartLike.error).toBeNull();

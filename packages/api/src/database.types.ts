@@ -304,7 +304,7 @@ export type Database = {
           {
             foreignKeyName: "curation_pool_log_id_fkey"
             columns: ["log_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "logs"
             referencedColumns: ["id"]
           },
@@ -334,6 +334,77 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      feature_flag_rules: {
+        Row: {
+          conditions: Json
+          created_at: string
+          enabled: boolean
+          flag_key: string
+          id: string
+          priority: number
+          result_value: Json
+        }
+        Insert: {
+          conditions?: Json
+          created_at?: string
+          enabled?: boolean
+          flag_key: string
+          id?: string
+          priority?: number
+          result_value: Json
+        }
+        Update: {
+          conditions?: Json
+          created_at?: string
+          enabled?: boolean
+          flag_key?: string
+          id?: string
+          priority?: number
+          result_value?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feature_flag_rules_flag_key_fkey"
+            columns: ["flag_key"]
+            isOneToOne: false
+            referencedRelation: "feature_flags"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      feature_flags: {
+        Row: {
+          created_at: string
+          default_value: Json
+          description: string | null
+          enabled: boolean
+          key: string
+          rollout_percentage: number
+          rollout_variants: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_value?: Json
+          description?: string | null
+          enabled?: boolean
+          key: string
+          rollout_percentage?: number
+          rollout_variants?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_value?: Json
+          description?: string | null
+          enabled?: boolean
+          key?: string
+          rollout_percentage?: number
+          rollout_variants?: Json | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -451,6 +522,20 @@ export type Database = {
             referencedRelation: "logs"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "likes_from_profile_fkey"
+            columns: ["from_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "likes_to_profile_fkey"
+            columns: ["to_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       logs: {
@@ -460,6 +545,7 @@ export type Database = {
           hour_slot: number
           id: string
           recorded_at: string
+          thumbnail_urls: string[]
           user_id: string
           video_url: string
           검수_YN: string
@@ -471,6 +557,7 @@ export type Database = {
           hour_slot: number
           id?: string
           recorded_at: string
+          thumbnail_urls?: string[]
           user_id: string
           video_url: string
           검수_YN?: string
@@ -482,6 +569,7 @@ export type Database = {
           hour_slot?: number
           id?: string
           recorded_at?: string
+          thumbnail_urls?: string[]
           user_id?: string
           video_url?: string
           검수_YN?: string
@@ -1256,6 +1344,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _flag_attr_value: {
+        Args: {
+          p_attr: Database["public"]["Enums"]["flag_attribute"]
+          p_user: string
+        }
+        Returns: Json
+      }
+      _flag_cond_match: {
+        Args: {
+          p_actual: Json
+          p_expected: Json
+          p_op: Database["public"]["Enums"]["flag_operator"]
+        }
+        Returns: boolean
+      }
       _video_review_notify_config: { Args: never; Returns: Json }
       accept_like: {
         Args: { p_like_id: string }
@@ -1308,6 +1411,30 @@ export type Database = {
       chat_is_blocked_between: {
         Args: { p_user_a: string; p_user_b: string }
         Returns: boolean
+      }
+      complete_local_dev_consumable_purchase: {
+        Args: { p_product_id?: string }
+        Returns: {
+          consumed_at: string | null
+          created_at: string
+          granted_at: string
+          granted_count: number
+          id: string
+          payment_id: string
+          product_id: string
+          remaining_count: number
+          revoke_reason: string | null
+          revoked_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "refresh_item_grants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       complete_local_dev_identity_verification: {
         Args: never
@@ -1445,7 +1572,12 @@ export type Database = {
         Args: { p_user_x: string; p_user_y: string }
         Returns: string
       }
+      evaluate_my_flags: { Args: never; Returns: Json }
       expire_overdue_likes: { Args: { p_user_id: string }; Returns: number }
+      get_available_heart_count: {
+        Args: { p_user_id?: string }
+        Returns: number
+      }
       get_available_refresh_item_count: {
         Args: { p_user_id?: string }
         Returns: number
@@ -1527,8 +1659,13 @@ export type Database = {
         }
       }
       is_admin: { Args: never; Returns: boolean }
+      is_heart_product: { Args: { p_product_id: string }; Returns: boolean }
       is_public_profile_visible: {
         Args: { p_profile_user_id: string; p_viewer_user_id: string }
+        Returns: boolean
+      }
+      is_refresh_item_product: {
+        Args: { p_product_id: string }
         Returns: boolean
       }
       leave_conversation: {
@@ -1703,6 +1840,21 @@ export type Database = {
     Enums: {
       account_state: "active" | "suspended" | "banned" | "deleted"
       device_platform: "ios" | "android" | "web"
+      flag_attribute:
+        | "days_since_signup"
+        | "days_since_first_video"
+        | "days_since_first_video_approved"
+        | "identity_verified"
+        | "profile_complete"
+        | "first_video_approved"
+        | "likes_sent_count"
+        | "likes_received_count"
+        | "match_count"
+        | "has_successful_payment"
+        | "gender"
+        | "region_sido"
+        | "account_state"
+      flag_operator: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in"
       identity_provider: "portone"
       moderation_case_status: "open" | "in_review" | "resolved" | "dismissed"
       moderation_source_type: "report" | "profile_video" | "user"
@@ -1855,6 +2007,22 @@ export const Constants = {
     Enums: {
       account_state: ["active", "suspended", "banned", "deleted"],
       device_platform: ["ios", "android", "web"],
+      flag_attribute: [
+        "days_since_signup",
+        "days_since_first_video",
+        "days_since_first_video_approved",
+        "identity_verified",
+        "profile_complete",
+        "first_video_approved",
+        "likes_sent_count",
+        "likes_received_count",
+        "match_count",
+        "has_successful_payment",
+        "gender",
+        "region_sido",
+        "account_state",
+      ],
+      flag_operator: ["eq", "neq", "gt", "gte", "lt", "lte", "in"],
       identity_provider: ["portone"],
       moderation_case_status: ["open", "in_review", "resolved", "dismissed"],
       moderation_source_type: ["report", "profile_video", "user"],

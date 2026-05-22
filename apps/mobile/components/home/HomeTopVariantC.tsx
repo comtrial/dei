@@ -2,10 +2,13 @@ import { useRouter } from 'expo-router';
 import { Image, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { HeartBalancePill, RefreshTicketBalancePill } from '@/components/home/HeartBalancePill';
 import { Text } from '@/components/ui/text';
 import { ROUTES } from '@/lib/routes';
 
 type Props = {
+  heartCount?: number;
+  refreshItemCount?: number;
   /** 최근 영상 며칠 전. */
   daysSinceVideo?: number | null;
   /** 내 프로필 사진 (signed URL). 없으면 회색 fallback. */
@@ -20,6 +23,8 @@ type Props = {
  * 영상이 오래되면 매칭 풀에서 멀어진다는 압박으로 새 영상 촬영 유도.
  */
 export function HomeTopVariantC({
+  heartCount,
+  refreshItemCount,
   daysSinceVideo,
   myPhotoUrl,
   myLatestVideoThumbUrl,
@@ -32,20 +37,24 @@ export function HomeTopVariantC({
     <View className="bg-[#F5EDDB] px-4 pb-3" style={{ paddingTop: insets.top + 8 }}>
       <View className="mb-3 flex-row items-center justify-between">
         <Text className="text-lg font-bold tracking-tight text-[#171310]">dei.</Text>
-        <TouchableOpacity
-          accessibilityLabel="내 프로필"
-          hitSlop={12}
-          onPress={() => router.push(ROUTES.myProfile as never)}>
-          {myPhotoUrl ? (
-            <Image
-              accessibilityLabel="내 프로필 사진"
-              className="h-7 w-7 rounded-full bg-[#D9C9A8]"
-              source={{ uri: myPhotoUrl }}
-            />
-          ) : (
-            <View className="h-7 w-7 items-center justify-center rounded-full bg-[#D9C9A8]" />
-          )}
-        </TouchableOpacity>
+        <View className="flex-row items-center gap-2">
+          <HeartBalancePill heartCount={heartCount} />
+          <RefreshTicketBalancePill refreshItemCount={refreshItemCount} />
+          <TouchableOpacity
+            accessibilityLabel="내 프로필"
+            hitSlop={12}
+            onPress={() => router.push(ROUTES.myProfile as never)}>
+            {myPhotoUrl ? (
+              <Image
+                accessibilityLabel="내 프로필 사진"
+                className="h-7 w-7 rounded-full bg-[#D9C9A8]"
+                source={{ uri: myPhotoUrl }}
+              />
+            ) : (
+              <View className="h-7 w-7 items-center justify-center rounded-full bg-[#D9C9A8]" />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View className="rounded-2xl bg-[#EFE6D2] p-3" testID="home-top-variant-c">

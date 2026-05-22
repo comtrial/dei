@@ -44,6 +44,15 @@ export function getRefreshProductId() {
   return Deno.env.get('REVENUECAT_REFRESH_PRODUCT_ID') || 'dei_refresh_1';
 }
 
+export function getHeartProductId() {
+  return Deno.env.get('REVENUECAT_HEART_PRODUCT_ID') || 'dei_heart_1';
+}
+
+export function isHeartProduct(productId: string) {
+  const normalized = productId.trim().toLowerCase();
+  return normalized === getHeartProductId().trim().toLowerCase() || normalized.includes('heart');
+}
+
 export function getPaymentAmount(price: unknown) {
   return typeof price === 'number' && Number.isFinite(price) ? Math.round(price) : 0;
 }

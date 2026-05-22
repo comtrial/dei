@@ -1,16 +1,18 @@
 import { useRouter } from 'expo-router';
-import { Heart, UserCircle } from 'lucide-react-native';
+import { UserCircle } from 'lucide-react-native';
 import { TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { HeartBalancePill, RefreshTicketBalancePill } from '@/components/home/HeartBalancePill';
 import { Text } from '@/components/ui/text';
 import { ROUTES } from '@/lib/routes';
 
 type HomeTopBarProps = {
   heartCount?: number;
+  refreshItemCount?: number;
 };
 
-export function HomeTopBar({ heartCount }: HomeTopBarProps) {
+export function HomeTopBar({ heartCount, refreshItemCount }: HomeTopBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -20,12 +22,8 @@ export function HomeTopBar({ heartCount }: HomeTopBarProps) {
       style={{ paddingTop: insets.top + 8 }}>
       <Text className="text-lg font-bold tracking-tight text-[#171310]">dei.</Text>
       <View className="flex-row items-center gap-2">
-        {typeof heartCount === 'number' ? (
-          <View className="h-8 flex-row items-center gap-1.5 rounded-md border border-[#E0D5C0] bg-[#FFF8EA] px-2.5">
-            <Heart size={15} color="#C0432A" fill="#C0432A" />
-            <Text className="text-xs font-bold text-[#171310]">{heartCount}</Text>
-          </View>
-        ) : null}
+        <HeartBalancePill heartCount={heartCount} />
+        <RefreshTicketBalancePill refreshItemCount={refreshItemCount} />
 
         <TouchableOpacity
           accessibilityLabel="내 프로필"

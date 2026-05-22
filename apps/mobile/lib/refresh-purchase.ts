@@ -3,6 +3,8 @@ import { logger } from '@dei/shared';
 import { supabase } from '@/lib/supabase';
 import {
   configureRevenueCat,
+  getHeartOfferingId,
+  getHeartProductId,
   getRefreshOfferingId,
   getRefreshProductId,
   getRevenueCatPurchases,
@@ -20,12 +22,21 @@ export type RefreshOfferingInfo = {
 };
 
 type SyncRefreshPurchaseResponse = {
+  availableHeartCount?: number;
   availableRefreshCount: number;
   paymentId: string;
   refreshGrantId: string;
 };
 
-async function getRefreshPackage(userId: string): Promise<PurchasesPackage | null> {
+type ConsumablePurchaseConfig = {
+  offeringId: string;
+  productId: string;
+};
+
+async function getConsumablePackage(
+  userId: string,
+  config: ConsumablePurchaseConfig,
+): Promise<PurchasesPackage | null> {
   const isConfigured = await configureRevenueCat(userId);
 
   if (!isConfigured) {
@@ -34,16 +45,14 @@ async function getRefreshPackage(userId: string): Promise<PurchasesPackage | nul
 
   const PurchasesClient = await getRevenueCatPurchases();
   const offerings = await PurchasesClient.getOfferings();
-  const offeringId = getRefreshOfferingId();
-  const productId = getRefreshProductId();
-  const offering = offerings.all[offeringId] ?? offerings.current;
+  const offering = offerings.all[config.offeringId] ?? offerings.current;
 
   if (!offering) {
     return null;
   }
 
   return (
-    offering.availablePackages.find((item) => item.product.identifier === productId) ??
+    offering.availablePackages.find((item) => item.product.identifier === config.productId) ??
     offering.availablePackages[0] ??
     null
   );
@@ -63,7 +72,7 @@ export async function getRefreshOfferingInfo(userId: string): Promise<RefreshOff
     };
   }
 
-  const refreshPackage = await getRefreshPackage(userId);
+  const refreshPackage = await getConsumablePackage(userId, { offeringId, productId });
 
   return {
     isConfigured: Boolean(refreshPackage),
@@ -71,6 +80,31 @@ export async function getRefreshOfferingInfo(userId: string): Promise<RefreshOff
     packageId: refreshPackage?.identifier ?? null,
     priceLabel: refreshPackage?.product.priceString ?? '스토어 가격 확인 후 표시',
     productId: refreshPackage?.product.identifier ?? productId,
+  };
+}
+
+export async function getHeartOfferingInfo(userId: string): Promise<RefreshOfferingInfo> {
+  const offeringId = getHeartOfferingId();
+  const productId = getHeartProductId();
+
+  if (!isRevenueCatAvailable()) {
+    return {
+      isConfigured: false,
+      offeringId,
+      packageId: null,
+      priceLabel: '스토어 상품 설정 전',
+      productId,
+    };
+  }
+
+  const heartPackage = await getConsumablePackage(userId, { offeringId, productId });
+
+  return {
+    isConfigured: Boolean(heartPackage),
+    offeringId,
+    packageId: heartPackage?.identifier ?? null,
+    priceLabel: heartPackage?.product.priceString ?? '스토어 가격 확인 후 표시',
+    productId: heartPackage?.product.identifier ?? productId,
   };
 }
 
@@ -83,11 +117,14 @@ export function isRevenueCatPurchaseCancelled(error: unknown) {
   return maybeError.userCancelled === true || maybeError.code === '1';
 }
 
-export async function purchaseRefreshItem(userId: string): Promise<SyncRefreshPurchaseResponse> {
-  const refreshPackage = await getRefreshPackage(userId);
+async function purchaseConsumableItem(
+  userId: string,
+  config: ConsumablePurchaseConfig,
+): Promise<SyncRefreshPurchaseResponse> {
+  const refreshPackage = await getConsumablePackage(userId, config);
 
   if (!refreshPackage) {
-    throw new Error('RevenueCat refresh offering is not configured.');
+    throw new Error('RevenueCat consumable offering is not configured.');
   }
 
   const PurchasesClient = await getRevenueCatPurchases();
@@ -107,7 +144,7 @@ export async function purchaseRefreshItem(userId: string): Promise<SyncRefreshPu
     {
       body: {
         currency: refreshPackage.product.currencyCode,
-        offeringId: getRefreshOfferingId(),
+        offeringId: config.offeringId,
         packageId: refreshPackage.identifier,
         priceAmount: refreshPackage.product.price,
         productId: refreshPackage.product.identifier,
@@ -133,4 +170,18 @@ export async function purchaseRefreshItem(userId: string): Promise<SyncRefreshPu
   }
 
   return data;
+}
+
+export async function purchaseRefreshItem(userId: string): Promise<SyncRefreshPurchaseResponse> {
+  return purchaseConsumableItem(userId, {
+    offeringId: getRefreshOfferingId(),
+    productId: getRefreshProductId(),
+  });
+}
+
+export async function purchaseHeartItem(userId: string): Promise<SyncRefreshPurchaseResponse> {
+  return purchaseConsumableItem(userId, {
+    offeringId: getHeartOfferingId(),
+    productId: getHeartProductId(),
+  });
 }

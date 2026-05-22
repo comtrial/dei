@@ -81,7 +81,7 @@ export function CurationCard({
     ? 'absolute right-2.5 bottom-12 w-8 h-8 rounded-full bg-[#C0432A] items-center justify-center'
     : isLikeUsed
       ? 'absolute right-2.5 bottom-12 w-8 h-8 rounded-full bg-black/45 border border-white/25 items-center justify-center'
-      : 'absolute right-2.5 bottom-12 w-8 h-8 rounded-full bg-[#C0432A] items-center justify-center';
+      : 'absolute right-2.5 bottom-12 w-8 h-8 rounded-full bg-black/45 border border-white/35 items-center justify-center';
 
   return (
     <TouchableOpacity
@@ -146,12 +146,14 @@ export function CurationCard({
       {/* 좋아요 버튼 */}
       <TouchableOpacity
         accessibilityLabel={isLiked ? '좋아요 보냄' : '좋아요 보내기'}
+        accessibilityState={{ selected: isLiked }}
         className={likeButtonClassName}
         onPress={(event) => {
           event.stopPropagation();
           onLike(item.userId);
         }}
         activeOpacity={0.8}
+        testID={isLiked ? 'curation-like-button-liked' : 'curation-like-button-idle'}
       >
         <Heart
           size={14}

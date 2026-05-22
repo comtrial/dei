@@ -5,6 +5,7 @@ import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
 export type HomeScreenType = 'loading' | 'H2' | 'H3';
+export type PaidRefreshResult = 'ok' | 'exhausted' | 'no-ticket' | 'failed';
 
 export interface CurationVideo {
   poolId: string;
@@ -29,6 +30,11 @@ type PaidRefreshCurationRow = {
   user_id: string;
   video_path: string | null;
   video_url: string | null;
+};
+
+type BlockRow = {
+  blocked_user_id: string;
+  blocker_user_id: string;
 };
 
 function groupToCurationItems(rows: PaidRefreshCurationRow[]): CurationItem[] {
@@ -59,6 +65,24 @@ function groupToCurationItems(rows: PaidRefreshCurationRow[]): CurationItem[] {
   return Array.from(userMap.values());
 }
 
+async function fetchBlockedPeerUserIds(userId: string): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('blocks')
+    .select('blocked_user_id, blocker_user_id')
+    .is('unblocked_at', null)
+    .or(`blocker_user_id.eq.${userId},blocked_user_id.eq.${userId}`);
+
+  const blockedPeerUserIds = new Set<string>();
+
+  for (const row of ((data ?? []) as BlockRow[])) {
+    blockedPeerUserIds.add(
+      row.blocker_user_id === userId ? row.blocked_user_id : row.blocker_user_id
+    );
+  }
+
+  return blockedPeerUserIds;
+}
+
 async function fetchCurationPool(
   userId: string,
   excludeUserIds: string[] = []
@@ -73,13 +97,16 @@ async function fetchCurationPool(
   const selfGender = selfProfile?.gender;
   if (selfGender !== 'M' && selfGender !== 'F') return [];
   const targetGender: 'M' | 'F' = selfGender === 'M' ? 'F' : 'M';
+  const blockedPeerUserIds = await fetchBlockedPeerUserIds(userId);
 
   // Step 0b: 이성 user_id 목록 확보 (curation_pool ↔ profiles 직접 FK 없어 in 필터로 처리)
   const { data: oppositeProfiles } = await supabase
     .from('profiles')
     .select('user_id')
     .eq('gender', targetGender);
-  const allowedUserIds = (oppositeProfiles ?? []).map((row) => row.user_id);
+  const allowedUserIds = (oppositeProfiles ?? [])
+    .map((row) => row.user_id)
+    .filter((candidateUserId) => !blockedPeerUserIds.has(candidateUserId));
   if (allowedUserIds.length === 0) return [];
 
   // Step 1: 3명의 서로 다른 유저를 찾고 각자의 가장 최신 pool_date를 확정
@@ -258,11 +285,11 @@ export function useHomeScreen(userId: string | undefined) {
     return 'ok';
   }, [userId, seenUserIds]);
 
-  const handleDeveloperPaidRefresh = useCallback(async (): Promise<'ok' | 'failed'> => {
+  const handleDeveloperPaidRefresh = useCallback(async (): Promise<PaidRefreshResult> => {
     if (!userId || !__DEV__) return 'failed';
 
     const nextPool = await fetchCurationPool(userId, seenUserIds);
-    if (nextPool.length < 3) return 'failed';
+    if (nextPool.length < 3) return 'exhausted';
 
     setPages((prev) => [...prev, nextPool]);
     setSeenUserIds((prev) =>
@@ -272,7 +299,7 @@ export function useHomeScreen(userId: string | undefined) {
     return 'ok';
   }, [userId, seenUserIds]);
 
-  const handlePaidRefresh = useCallback(async (): Promise<'ok' | 'exhausted' | 'failed'> => {
+  const handlePaidRefresh = useCallback(async (): Promise<PaidRefreshResult> => {
     if (!userId) return 'failed';
 
     const { data, error } = await supabase.rpc('consume_refresh_item', {
@@ -280,11 +307,11 @@ export function useHomeScreen(userId: string | undefined) {
     });
 
     if (error) {
-      if (
-        error.message.includes('NO_CANDIDATES') ||
-        error.message.includes('NO_AVAILABLE_REFRESH_ITEM')
-      ) {
+      if (error.message.includes('NO_CANDIDATES')) {
         return 'exhausted';
+      }
+      if (error.message.includes('NO_AVAILABLE_REFRESH_ITEM')) {
+        return 'no-ticket';
       }
       return 'failed';
     }
