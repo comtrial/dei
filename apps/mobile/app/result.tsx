@@ -9,7 +9,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logger } from '@dei/shared';
 
 import { Text } from '@/components/ui/text';
-import { useSaveProfileVideo } from '@/hooks/useSaveProfileVideo';
 import { useSaveLog } from '@/hooks/useSaveLog';
 import { getRecordingUri } from '@/lib/recordingStore';
 import { formatDuration } from '@/lib/formatDuration';
@@ -20,22 +19,17 @@ import { useAccountGate } from '@/providers/account-gate-provider';
 export default function ResultScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { durationMs, purpose } = useLocalSearchParams<{
+  const { durationMs } = useLocalSearchParams<{
     durationMs: string;
-    purpose?: 'daily' | 'profile';
   }>();
   // file:// URI는 URL 파라미터 인코딩 손상 방지를 위해 모듈 변수로 전달
   const uri = useRef(getRecordingUri() ?? '').current;
   const [muted, setMuted] = useState(true);
   const { saveLog, loading } = useSaveLog();
-  const { saveProfileVideo, loading: profileVideoLoading } = useSaveProfileVideo();
   const { eligibility, refresh } = useAccountGate();
 
   const recordedMs = Number(durationMs ?? 2000);
-  const isProfileVideoFlow = purpose
-    ? purpose === 'profile'
-    : eligibility?.next_step === 'first_video';
-  const isSaving = loading || profileVideoLoading;
+  const isSaving = loading;
   const timeLabel = `${String(new Date().getHours()).padStart(2, '0')}:00`;
 
   const player = useVideoPlayer(uri ? { uri } : null, (p) => {
@@ -91,29 +85,27 @@ export default function ResultScreen() {
       return;
     }
 
-    if (isProfileVideoFlow) {
-      const result = await saveProfileVideo({ tempVideoUri: uri || undefined, recordedMs });
-      if (result.success) {
-        try {
-          await refresh();
-        } catch (err) {
-          logger.captureException(err, {
-            tags: { feature: 'result', action: 'refresh-after-profile-video' },
-          });
-        }
-        router.replace(ROUTES.videoReview as never);
-      } else {
-        Alert.alert('저장 실패', result.message || '저장에 실패했어요. 다시 시도해주세요.');
-      }
+    // 온보딩 첫 영상도 일반 영상과 동일하게 logs 로 저장한다 (검수·큐레이션 파이프라인 공유).
+    const wasOnboarding = eligibility?.next_step !== 'complete';
+
+    const result = await saveLog({ tempVideoUri: uri, recordedMs });
+    if (!result.success) {
+      Alert.alert('저장 실패', result.message || '저장에 실패했어요. 다시 시도해주세요.');
       return;
     }
 
-    const result = await saveLog({ tempVideoUri: uri, recordedMs });
-    if (result.success) {
-      router.replace(ROUTES.home as never);
-    } else {
-      Alert.alert('저장 실패', result.message || '저장에 실패했어요. 다시 시도해주세요.');
+    // 첫 로그 업로드로 서버에서 온보딩이 완료되므로, 게이트가 홈을 허용하도록 eligibility 를 갱신한다.
+    if (wasOnboarding) {
+      try {
+        await refresh();
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { feature: 'result', action: 'refresh-after-first-log' },
+        });
+      }
     }
+
+    router.replace(ROUTES.home as never);
   };
 
   return (

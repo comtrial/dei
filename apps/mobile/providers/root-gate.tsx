@@ -62,10 +62,6 @@ export function RootGate({ children }: { children: React.ReactNode }) {
       ) {
         return;
       }
-
-      if (pathname === ROUTES.videoReview && targetRoute === ROUTES.videoReview && eligibility.first_video_uploaded) {
-        return;
-      }
     }
 
     if (targetRoute === ROUTES.home && isAppRoute(pathname)) {
