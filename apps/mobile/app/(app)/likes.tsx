@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ReceivedLikesList } from '@/components/likes/ReceivedLikesList';
 import { SentLikesList } from '@/components/likes/SentLikesList';
+import { Badge } from '@/components/ui/badge';
 import { Text } from '@/components/ui/text';
 import { useLikesUnreadCount } from '@/hooks/useLikesUnreadCount';
 import { cn } from '@/lib/utils';
@@ -44,13 +45,7 @@ export default function LikesScreen() {
           >
             받은
           </Text>
-          {unread > 0 && (
-            <View className="bg-primary rounded-full px-1.5 min-w-[18px] h-[18px] items-center justify-center">
-              <Text className="text-primary-foreground text-[10px] font-bold">
-                {unread > 99 ? '99+' : String(unread)}
-              </Text>
-            </View>
-          )}
+          {unread > 0 && <Badge count={unread} testID="likes-unread-badge" />}
         </Pressable>
 
         <Pressable

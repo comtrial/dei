@@ -6,6 +6,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 
 type PaidRefreshSheetProps = {
+  description?: string;
   isDeveloperBypassEnabled?: boolean;
   isDeveloperCompleting?: boolean;
   isOpen: boolean;
@@ -17,6 +18,7 @@ type PaidRefreshSheetProps = {
 };
 
 export function PaidRefreshSheet({
+  description = '결제 성공 후 하트가 충전되고, 바로 새로운 사람 3명을 더 볼 수 있어요',
   isDeveloperBypassEnabled = false,
   isDeveloperCompleting = false,
   isOpen,
@@ -46,10 +48,10 @@ export function PaidRefreshSheet({
                 <Icon as={RefreshCw} className="text-[#9A6A22]" size={24} />
               </View>
               <Text className="text-[24px] font-bold leading-8 text-[#201B16]">
-                유료 리프레시
+                하트 충전
               </Text>
               <Text className="text-[16px] leading-6 text-[#776B5C]">
-                리프레시 아이템을 통해 바로 새로운 사람을 만나보세요
+                {description}
               </Text>
             </View>
 
@@ -65,7 +67,7 @@ export function PaidRefreshSheet({
           <View className="flex-row items-center justify-between rounded-md border border-[#E2D4BA] bg-[#FFF8EA] px-4 py-3">
             <View className="flex-row items-center gap-2">
               <Icon as={CreditCard} className="text-[#9A6A22]" size={18} />
-              <Text className="font-semibold text-[#201B16]">리프레시 1회</Text>
+              <Text className="font-semibold text-[#201B16]">하트 1개</Text>
             </View>
             <Text className="font-bold text-[#201B16]">{priceLabel}</Text>
           </View>

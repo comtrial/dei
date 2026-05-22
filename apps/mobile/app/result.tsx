@@ -47,7 +47,7 @@ export default function ResultScreen() {
 
   // 화면 방향 잠금 해제 (app.json의 기본 orientation인 portrait로 자동 복귀)
   useEffect(() => {
-    ScreenOrientation.unlockAsync().catch((err) => {
+    ScreenOrientation.unlockAsync().catch((err: unknown) => {
       logger.captureException(err, {
         tags: { feature: 'result', action: 'unlock-orientation' },
       });

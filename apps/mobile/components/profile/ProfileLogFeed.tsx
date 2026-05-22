@@ -1,3 +1,4 @@
+import { Trash2 } from 'lucide-react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { TouchableOpacity, View } from 'react-native';
 
@@ -7,6 +8,7 @@ import type { ProfileLogDay, ProfileLogItem } from '@/lib/profileLogs';
 type ProfileLogFeedProps = {
   days: ProfileLogDay[];
   emptyMessage?: string;
+  onDeleteLog?: (log: ProfileLogItem) => void;
   onLogPress?: (log: ProfileLogItem) => void;
 };
 
@@ -20,9 +22,11 @@ function formatRecordedTime(recordedAt: string): string {
 
 function ProfileLogCard({
   log,
+  onDelete,
   onPress,
 }: {
   log: ProfileLogItem;
+  onDelete?: (log: ProfileLogItem) => void;
   onPress?: (log: ProfileLogItem) => void;
 }) {
   const player = useVideoPlayer(log.videoUrl || null, (p) => {
@@ -54,6 +58,22 @@ function ProfileLogCard({
           </Text>
         </View>
       </View>
+
+      {onDelete ? (
+        <TouchableOpacity
+          accessibilityLabel="로그 삭제"
+          activeOpacity={0.82}
+          className="absolute right-2 top-2 h-9 w-9 items-center justify-center rounded-full bg-black/60"
+          hitSlop={8}
+          onPress={(event) => {
+            event?.stopPropagation?.();
+            onDelete(log);
+          }}
+          testID={`profile-log-delete-${log.id}`}
+        >
+          <Trash2 size={16} color="#fff" />
+        </TouchableOpacity>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -61,6 +81,7 @@ function ProfileLogCard({
 export function ProfileLogFeed({
   days,
   emptyMessage = '아직 올린 로그가 없어요.',
+  onDeleteLog,
   onLogPress,
 }: ProfileLogFeedProps) {
   if (days.length === 0) {
@@ -100,7 +121,12 @@ export function ProfileLogFeed({
 
           <View className="gap-3">
             {day.logs.map((log) => (
-              <ProfileLogCard key={log.id} log={log} onPress={onLogPress} />
+              <ProfileLogCard
+                key={log.id}
+                log={log}
+                onDelete={onDeleteLog}
+                onPress={onLogPress}
+              />
             ))}
           </View>
         </View>

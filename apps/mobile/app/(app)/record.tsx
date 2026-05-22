@@ -60,7 +60,7 @@ export default function RecordScreen() {
       // 가로 모드 잠금 완료 후 CameraView 마운트 → AVSession 활성 중 방향 전환 크래시 방지
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
         .then(() => setIsFocused(true))
-        .catch((err) => {
+        .catch((err: unknown) => {
           logger.captureException(err, {
             tags: { feature: 'record', action: 'lock-orientation' },
           });
@@ -74,7 +74,7 @@ export default function RecordScreen() {
         stopAnimations();
         setIsRecording(false);
         // 화면 방향 잠금 해제 (app.json의 기본 orientation인 portrait로 자동 복귀)
-        ScreenOrientation.unlockAsync().catch((err) => {
+        ScreenOrientation.unlockAsync().catch((err: unknown) => {
           logger.captureException(err, {
             tags: { feature: 'record', action: 'unlock-orientation' },
           });
@@ -282,7 +282,7 @@ export default function RecordScreen() {
           onPress={() => {
             if (isRecording) return;
 
-            ScreenOrientation.unlockAsync().catch((err) => {
+            ScreenOrientation.unlockAsync().catch((err: unknown) => {
               logger.captureException(err, {
                 tags: { feature: 'record', action: 'unlock-orientation-close' },
               });

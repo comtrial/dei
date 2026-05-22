@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 
 import { ProfileLogFeed } from '@/components/profile/ProfileLogFeed';
 import type { ProfileLogDay } from '@/lib/profileLogs';
@@ -48,5 +48,20 @@ describe('ProfileLogFeed', () => {
     const { queryByText } = render(<ProfileLogFeed days={days} />);
 
     expect(queryByText(/보관함|보관권|보관 구매/)).toBeNull();
+  });
+
+  it('renders per-log delete controls only when a delete handler is provided', () => {
+    const onDeleteLog = jest.fn();
+
+    const readOnly = render(<ProfileLogFeed days={days} />);
+    expect(readOnly.queryByTestId('profile-log-delete-log-1')).toBeNull();
+    readOnly.unmount();
+
+    const { getByTestId } = render(
+      <ProfileLogFeed days={days} onDeleteLog={onDeleteLog} />
+    );
+
+    fireEvent.press(getByTestId('profile-log-delete-log-1'));
+    expect(onDeleteLog).toHaveBeenCalledWith(days[0].logs[0]);
   });
 });

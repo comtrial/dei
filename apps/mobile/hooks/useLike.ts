@@ -6,7 +6,12 @@ import { supabase } from '@/lib/supabase';
 
 const FREE_DAILY_QUOTA = 1;
 
-export type SendLikeResult = 'already-liked' | 'daily-limit' | 'failed' | 'sent';
+export type SendLikeResult =
+  | 'already-liked'
+  | 'daily-limit'
+  | 'failed'
+  | 'heart-required'
+  | 'sent';
 
 export function useLike(userId: string | undefined) {
   const [likedUserIds, setLikedUserIds] = useState<Set<string>>(new Set());
@@ -39,7 +44,6 @@ export function useLike(userId: string | undefined) {
   const sendLike = useCallback(async (toUserId: string): Promise<SendLikeResult> => {
     if (!userId) return 'failed';
     if (likedUserIds.has(toUserId)) return 'already-liked';
-    if (remainingLikes <= 0) return 'daily-limit';
 
     const result = await send({ toUserId, attachedLogId: null });
     if (result.kind === 'ok') {
@@ -51,6 +55,11 @@ export function useLike(userId: string | undefined) {
     if (result.reason === 'daily_quota_exceeded') {
       setRemainingLikes(0);
       return 'daily-limit';
+    }
+
+    if (result.reason === 'heart_required') {
+      setRemainingLikes(0);
+      return 'heart-required';
     }
 
     if (result.reason === 'already_pending' || result.reason === 'already_matched') {
