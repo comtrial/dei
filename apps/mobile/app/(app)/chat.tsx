@@ -17,9 +17,9 @@
  * 10-D: 푸시 deeplink 에 conversationId 가 실리면 source='push' 로 이 게이트를
  * 그대로 통과 — 만료/차단 시 BLOCKED/ENDED 가 라우터에서 흡수된다. 단,
  * conversationId 없는 일반 채팅 알림의 conversation_count(>0→CH1 /=0→CH3)
- * 분기와 실제 OS 푸시 토큰 등록/탭 핸들러는 푸시 인프라(미구현, stub:
- * hooks/useNotifications.ts) 소관 — lib/chat/push-deeplink.ts 의 순수
- * 라우팅 결정 로직만 채팅 모듈이 책임진다.
+ * 분기와 OS 푸시 토큰 등록 기반은 hooks/useNotifications.ts 소관이다.
+ * 이 게이트는 lib/chat/push-deeplink.ts 의 순수 라우팅 결정 이후, 실제
+ * conversationId 진입에 대한 차단/상태 판정만 책임진다.
  *
  * 이 화면 자체는 UI 가 없는 게이트 (스피너만). DEV-SPEC CH0.
  */

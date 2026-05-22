@@ -30,6 +30,11 @@ type OwnProfileRow = Pick<
 >;
 
 export type ProfileMode = 'self' | 'public';
+export type ProfileReportInput = {
+  description?: string | null;
+  reason: string;
+  reasonCategory: 'INAPPROPRIATE' | 'FRAUD' | 'ABUSE' | 'OTHER';
+};
 
 export type ProfileSummary = {
   createdAt: string;
@@ -259,16 +264,16 @@ export function useProfileFeed(mode: ProfileMode, profileUserId: string | undefi
     load();
   }, [load]);
 
-  const reportProfile = useCallback(async (): Promise<boolean> => {
+  const reportProfile = useCallback(async (input?: ProfileReportInput): Promise<boolean> => {
     if (!profileUserId || mode !== 'public') return false;
 
     setState((prev) => ({ ...prev, isReporting: true }));
     try {
       const { error } = await supabase.rpc('create_profile_report', {
-        p_description: null,
-        p_log_id: null,
-        p_reason: '프로필 신고',
-        p_reason_category: 'OTHER',
+        p_description: input?.description ?? undefined,
+        p_log_id: undefined,
+        p_reason: input?.reason ?? '프로필 신고',
+        p_reason_category: input?.reasonCategory ?? 'OTHER',
         p_reported_id: profileUserId,
       });
 

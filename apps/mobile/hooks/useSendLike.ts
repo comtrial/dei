@@ -10,6 +10,7 @@ export type SendLikeError =
   | 'already_pending'
   | 'already_matched'
   | 'attached_log_not_owned'
+  | 'heart_required'
   | 'self_like_forbidden'
   | 'unknown';
 
@@ -29,10 +30,9 @@ export function useSendLike() {
   }): Promise<SendResult> {
     setPending(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase.rpc as any)('send_like', {
+      const { error } = await supabase.rpc('send_like', {
         p_to_user_id: toUserId,
-        p_attached_log_id: attachedLogId,
+        p_attached_log_id: attachedLogId ?? undefined,
       });
 
       if (error) {
@@ -58,6 +58,7 @@ function parseReason(message: string): SendLikeError {
   if (message.includes('already_pending')) return 'already_pending';
   if (message.includes('already_matched')) return 'already_matched';
   if (message.includes('attached_log_not_owned')) return 'attached_log_not_owned';
+  if (message.includes('heart_required')) return 'heart_required';
   if (message.includes('self_like_forbidden')) return 'self_like_forbidden';
   return 'unknown';
 }

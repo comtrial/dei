@@ -18,10 +18,9 @@
  *   2) conversationId 가 없는 일반 "채팅 왔어요" 알림이면 →
  *      activeConversationCount 로 CH1(>0) / CH3(=0) 분기.
  *
- * 푸시 인프라(expo-notifications 토큰 등록/수신 핸들러)는 이 앱에 아직
- * 없다(`hooks/useNotifications.ts` 는 stub). 이 모듈은 **deeplink payload →
- * 라우트 결정** 의 순수 로직만 책임지며, 실제 OS 푸시 등록/탭 핸들러는
- * 별도 인프라 작업이다(부재 사실 명시). I/O 없음 → Vitest 단위 대상.
+ * 공통 알림/푸시 토큰 기반은 `hooks/useNotifications.ts` 가 담당한다. 이
+ * 모듈은 **deeplink payload → 라우트 결정** 의 순수 로직만 책임지며, 실제
+ * OS 푸시 수신/탭 핸들러는 별도 인프라 작업이다. I/O 없음 → Vitest 단위 대상.
  */
 import { ROUTES } from '@/lib/routes';
 
