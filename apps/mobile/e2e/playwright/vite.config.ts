@@ -66,6 +66,7 @@ export default defineConfig({
       // RN ecosystem deps that don't resolve cleanly under RN-web/Vite and are
       // NOT load-bearing for the chat spec's testID/text assertions.
       { find: 'lucide-react-native', replacement: r('__harness_shims__/lucide.tsx') },
+      { find: 'expo-haptics', replacement: r('__harness_shims__/expo-haptics.ts') },
       { find: 'nativewind', replacement: r('__harness_shims__/nativewind.ts') },
       { find: 'react-native-reanimated', replacement: r('__harness_shims__/rn-reanimated.tsx') },
       { find: 'react-native-screens', replacement: r('__harness_shims__/rn-screens.tsx') },
