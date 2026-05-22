@@ -13,7 +13,8 @@ import { useRouter } from 'expo-router';
 import { B2Banner } from '@/components/home/B2Banner';
 import { CurationCard } from '@/components/home/CurationCard';
 import { H3EmptyContent } from '@/components/home/H3EmptyContent';
-import { HomeTopBar } from '@/components/home/HomeTopBar';
+import { HomeTopBarSlot } from '@/components/home/HomeTopBarSlot';
+import { useFeatureFlag } from '@/providers/feature-flags-provider';
 import { PaidRefreshSheet } from '@/components/home/PaidRefreshSheet';
 import { PaymentFailureDialog } from '@/components/home/PaymentFailureDialog';
 import type { CurationItem } from '@/hooks/useHomeScreen';
@@ -61,7 +62,15 @@ export default function HomeScreen() {
   const [hasUserScrolled, setHasUserScrolled] = useState(false);
   const loadMorePromptOpenRef = useRef(false);
   const isDeveloperPaymentEnabled = isLocalDevPaymentEnabled();
-  const cardHeight = contentHeight > 0 ? Math.max(180, Math.floor(contentHeight / 3)) : undefined;
+  // 큐레이션 레이아웃 variant: 'single'=1명 풀스크린 세로 스크롤(몰입형),
+  // 'stack3'=한 화면 3명 동시(스캔형, 기본). flag 로 원격 전환.
+  const curationLayout = useFeatureFlag('curation_layout', 'stack3');
+  const cardHeight =
+    contentHeight > 0
+      ? curationLayout === 'single'
+        ? contentHeight
+        : Math.max(180, Math.floor(contentHeight / 3))
+      : undefined;
 
   useEffect(() => {
     if (screen === 'H2') checkRemainingLikes();
@@ -277,7 +286,7 @@ export default function HomeScreen() {
   if (screen === 'H3') {
     return (
       <SafeAreaView className="flex-1 bg-[#F5EDDB]" edges={['left', 'right']}>
-        <HomeTopBar heartCount={heartCount} />
+        <HomeTopBarSlot heartCount={heartCount} />
         {!hasAnyVideo && <B2Banner />}
         <H3EmptyContent />
       </SafeAreaView>
@@ -288,7 +297,7 @@ export default function HomeScreen() {
   return (
     <>
     <SafeAreaView className="flex-1 bg-black" edges={['left', 'right']}>
-      <HomeTopBar heartCount={heartCount} />
+      <HomeTopBarSlot heartCount={heartCount} />
       {!hasAnyVideo && <B2Banner />}
 
       <View

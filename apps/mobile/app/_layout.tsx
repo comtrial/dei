@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AccountGateProvider } from '@/providers/account-gate-provider';
 import { AuthProvider } from '@/providers/auth-provider';
+import { FeatureFlagsProvider } from '@/providers/feature-flags-provider';
 import { RootGate } from '@/providers/root-gate';
 import { NAV_THEME } from '@/lib/theme';
 import { Sentry, initSentry } from '@/lib/sentry';
@@ -25,7 +26,8 @@ function RootLayout() {
   return (
     <AuthProvider>
       <AccountGateProvider>
-        <ThemeProvider value={NAV_THEME[themeName]}>
+        <FeatureFlagsProvider>
+          <ThemeProvider value={NAV_THEME[themeName]}>
           <RootGate>
             <Stack>
               <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -41,6 +43,7 @@ function RootLayout() {
           <StatusBar style="auto" />
           <PortalHost />
         </ThemeProvider>
+        </FeatureFlagsProvider>
       </AccountGateProvider>
     </AuthProvider>
   );
