@@ -129,6 +129,25 @@ Deno.serve(async (req) => {
       throw grantResult.error;
     }
 
+    const notificationResult = await supabase.rpc('create_notification', {
+      p_body: '결제 성공 후 하트 1개가 충전됐어요.',
+      p_dedupe_key: `payment:${paymentResult.data.id}:success`,
+      p_metadata: {
+        paymentId: paymentResult.data.id,
+        productId,
+        refreshGrantId: grantResult.data?.id ?? null,
+        source: 'sync-refresh-purchase',
+      },
+      p_route: '/home',
+      p_title: '하트가 충전됐어요',
+      p_type: 'payment_succeeded',
+      p_user_id: user.id,
+    });
+
+    if (notificationResult.error) {
+      throw notificationResult.error;
+    }
+
     const countResult = await supabase.rpc('get_available_refresh_item_count', {
       p_user_id: user.id,
     });

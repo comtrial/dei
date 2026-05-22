@@ -298,7 +298,7 @@ export function useHomeScreen(userId: string | undefined) {
     if (!userId) return 'exhausted';
     const newPool = await fetchCurationPool(userId, seenUserIds);
     if (newPool.length < 3) return 'exhausted';
-    setPages((prev) => [newPool, ...prev]);
+    setPages((prev) => [...prev, newPool]);
     setSeenUserIds((prev) => [...prev, ...newPool.map((p) => p.userId)]);
     return 'ok';
   }, [userId, seenUserIds]);
@@ -307,13 +307,11 @@ export function useHomeScreen(userId: string | undefined) {
     if (!userId || !__DEV__) return 'failed';
 
     const nextPool = await fetchCurationPool(userId, seenUserIds);
-    const fallbackPool = nextPool.length >= 3 ? nextPool : await fetchCurationPool(userId);
+    if (nextPool.length < 3) return 'failed';
 
-    if (fallbackPool.length < 3) return 'failed';
-
-    setPages((prev) => [fallbackPool, ...prev]);
+    setPages((prev) => [...prev, nextPool]);
     setSeenUserIds((prev) =>
-      Array.from(new Set([...prev, ...fallbackPool.map((p) => p.userId)]))
+      Array.from(new Set([...prev, ...nextPool.map((p) => p.userId)]))
     );
 
     return 'ok';
@@ -342,7 +340,7 @@ export function useHomeScreen(userId: string | undefined) {
       return 'exhausted';
     }
 
-    setPages((prev) => [nextPool, ...prev]);
+    setPages((prev) => [...prev, nextPool]);
     setSeenUserIds((prev) =>
       Array.from(new Set([...prev, ...nextPool.map((p) => p.userId)]))
     );
@@ -358,6 +356,7 @@ export function useHomeScreen(userId: string | undefined) {
   return {
     screen,
     pages,
+    curationItems: pages.flat(),
     currentPool: pages[0] ?? [],
     hasAnyVideo,
     noonBanner,

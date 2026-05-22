@@ -10,7 +10,6 @@ export const ROUTES = {
   profile: '/profile',
   logIntro: '/log-intro',
   firstVideo: '/record',
-  videoReview: '/video-review',
   home: '/home',
   discovery: '/discovery',
   record: '/record',
@@ -52,7 +51,6 @@ const ONBOARDING_ROUTES = new Set<string>([
   ROUTES.profile,
   ROUTES.logIntro,
   ROUTES.firstVideo,
-  ROUTES.videoReview,
 ]);
 
 const AUTH_ROUTES = new Set<string>([
@@ -91,8 +89,10 @@ export const routeForEligibility = (eligibility: Eligibility): AppRoute => {
       return ROUTES.logIntro;
     case 'first_video':
       return ROUTES.firstVideo;
+    // 'video_review'(검수 승인 대기) 단계는 폐지됨 — 첫 영상 업로드 시 즉시 complete.
+    // enum 잔재 또는 과거 상태 대비 방어적으로 홈으로 보낸다.
     case 'video_review':
-      return ROUTES.videoReview;
+      return ROUTES.home;
     case 'complete':
       return ROUTES.home;
     default:

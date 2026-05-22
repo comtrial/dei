@@ -161,6 +161,26 @@ Deno.serve(async (req) => {
       if (grantResult.error) {
         throw grantResult.error;
       }
+
+      const notificationResult = await supabase.rpc('create_notification', {
+        p_body: '결제 성공 후 하트 1개가 충전됐어요.',
+        p_dedupe_key: `payment:${paymentResult.data.id}:success`,
+        p_metadata: {
+          eventId: event.id,
+          paymentId: paymentResult.data.id,
+          productId,
+          refreshGrantId: grantResult.data?.id ?? null,
+          source: 'revenuecat-webhook',
+        },
+        p_route: '/home',
+        p_title: '하트가 충전됐어요',
+        p_type: 'payment_succeeded',
+        p_user_id: userId,
+      });
+
+      if (notificationResult.error) {
+        throw notificationResult.error;
+      }
     }
 
     if (refundEventTypes.has(event.type) && event.transaction_id) {
@@ -191,6 +211,24 @@ Deno.serve(async (req) => {
 
         if (revokeResult.error) {
           throw revokeResult.error;
+        }
+
+        const notificationResult = await supabase.rpc('create_notification', {
+          p_body: '환불 처리된 결제의 남은 하트가 회수됐어요.',
+          p_dedupe_key: `payment:${paymentResult.data.id}:refund`,
+          p_metadata: {
+            eventId: event.id,
+            paymentId: paymentResult.data.id,
+            source: 'revenuecat-webhook',
+          },
+          p_route: '/home',
+          p_title: '결제 환불이 처리됐어요',
+          p_type: 'payment_refunded',
+          p_user_id: userId,
+        });
+
+        if (notificationResult.error) {
+          throw notificationResult.error;
         }
       }
     }

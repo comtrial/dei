@@ -1,18 +1,27 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { B2Banner } from '@/components/home/B2Banner';
 import { CurationCard } from '@/components/home/CurationCard';
 import { H3EmptyContent } from '@/components/home/H3EmptyContent';
-import { HomeTopBar } from '@/components/home/HomeTopBar';
+import { HomeTopBarSlot } from '@/components/home/HomeTopBarSlot';
+import { useFeatureFlag } from '@/providers/feature-flags-provider';
 import { PaidRefreshSheet } from '@/components/home/PaidRefreshSheet';
 import { PaymentFailureDialog } from '@/components/home/PaymentFailureDialog';
-import { VideoModal } from '@/components/home/VideoModal';
 import type { CurationItem } from '@/hooks/useHomeScreen';
 import { Text } from '@/components/ui/text';
+import { useHeartBalance } from '@/hooks/useHeartBalance';
 import { useHomeScreen } from '@/hooks/useHomeScreen';
+import { useHomeSelfSummary } from '@/hooks/useHomeSelfSummary';
 import { useLike } from '@/hooks/useLike';
 import { isLocalDevPaymentEnabled } from '@/lib/dev-auth';
 import { profileRoute } from '@/lib/routes';
@@ -29,25 +38,41 @@ export default function HomeScreen() {
   const router = useRouter();
   const {
     screen,
+    curationItems,
     pages,
-    currentPool,
     hasAnyVideo,
     noonBanner,
     handleDeveloperPaidRefresh,
     handlePaidRefresh,
-    handleRefresh,
     handleNoonRefresh,
     dismissNoonBanner,
   } = useHomeScreen(user?.id);
 
   const { checkRemainingLikes, hasLikedUser, likeUsed, sendLike } = useLike(user?.id);
-  const [selectedItem, setSelectedItem] = useState<CurationItem | null>(null);
+  const { heartCount, refreshHeartBalance } = useHeartBalance(user?.id);
+  // 홈 상단 카드(B/C variant)용 내 프로필 사진 + 최근 영상 썸네일.
+  const selfSummary = useHomeSelfSummary(user?.id);
   const [isPaidRefreshOpen, setIsPaidRefreshOpen] = useState(false);
   const [isPaymentFailureOpen, setIsPaymentFailureOpen] = useState(false);
   const [isPurchasingRefresh, setIsPurchasingRefresh] = useState(false);
+  const [isUsingHeartRefresh, setIsUsingHeartRefresh] = useState(false);
   const [isDeveloperCompletingRefresh, setIsDeveloperCompletingRefresh] = useState(false);
+  const [paidRefreshPurpose, setPaidRefreshPurpose] = useState<'charge-only' | 'load-more'>(
+    'load-more'
+  );
   const [refreshPriceLabel, setRefreshPriceLabel] = useState('스토어 가격 확인 후 표시');
+  const [contentHeight, setContentHeight] = useState(0);
+  const loadMorePromptOpenRef = useRef(false);
   const isDeveloperPaymentEnabled = isLocalDevPaymentEnabled();
+  // 큐레이션 레이아웃 variant: 'single'=1명 풀스크린 세로 스크롤(몰입형),
+  // 'stack3'=한 화면 3명 동시(스캔형, 기본). flag 로 원격 전환.
+  const curationLayout = useFeatureFlag('curation_layout', 'stack3');
+  const cardHeight =
+    contentHeight > 0
+      ? curationLayout === 'single'
+        ? contentHeight
+        : Math.max(180, Math.floor(contentHeight / 3))
+      : undefined;
 
   useEffect(() => {
     if (screen === 'H2') checkRemainingLikes();
@@ -89,6 +114,7 @@ export default function HomeScreen() {
     const result = await sendLike(toUserId);
 
     if (result === 'sent') {
+      refreshHeartBalance();
       Alert.alert('', '좋아요를 보냈어요 ♥');
       return;
     }
@@ -98,8 +124,17 @@ export default function HomeScreen() {
       return;
     }
 
-    if (result === 'daily-limit') {
-      Alert.alert('', '오늘의 무료 좋아요를 이미 사용했어요.');
+    if (result === 'daily-limit' || result === 'heart-required') {
+      Alert.alert('하트가 부족해요', '오늘의 무료 좋아요를 이미 사용했어요. 하트를 충전해 더 보낼 수 있어요.', [
+        { style: 'cancel', text: '취소' },
+        {
+          text: '충전하기',
+          onPress: () => {
+            setPaidRefreshPurpose('charge-only');
+            setIsPaidRefreshOpen(true);
+          },
+        },
+      ]);
       return;
     }
 
@@ -107,15 +142,71 @@ export default function HomeScreen() {
   };
 
   const handleProfilePress = (item: CurationItem) => {
-    setSelectedItem(null);
     router.push(profileRoute(item.userId) as never);
   };
 
-  const handleRefreshPress = async () => {
-    const result = await handleRefresh();
-    if (result === 'exhausted') {
-      setIsPaidRefreshOpen(true);
+  const closePaidRefresh = () => {
+    loadMorePromptOpenRef.current = false;
+    setIsPaidRefreshOpen(false);
+  };
+
+  const handleUseHeartRefresh = async () => {
+    setIsUsingHeartRefresh(true);
+
+    try {
+      const refreshResult = await handlePaidRefresh();
+      await refreshHeartBalance();
+
+      if (refreshResult === 'exhausted') {
+        Alert.alert('', '지금 더 보여드릴 새로운 추천이 부족해요. 하트는 보관돼요.');
+      } else if (refreshResult === 'failed') {
+        setIsPaymentFailureOpen(true);
+      }
+    } finally {
+      setIsUsingHeartRefresh(false);
     }
+  };
+
+  const handleLoadMoreIntent = () => {
+    if (
+      loadMorePromptOpenRef.current ||
+      isPaidRefreshOpen ||
+      isPurchasingRefresh ||
+      isUsingHeartRefresh
+    ) {
+      return;
+    }
+
+    loadMorePromptOpenRef.current = true;
+    const resetPrompt = () => {
+      loadMorePromptOpenRef.current = false;
+    };
+
+    if (heartCount > 0) {
+      Alert.alert('하트 1개 사용', '새로운 3명을 더 볼까요?', [
+        { style: 'cancel', text: '취소', onPress: resetPrompt },
+        {
+          text: '사용하기',
+          onPress: () => {
+            resetPrompt();
+            handleUseHeartRefresh();
+          },
+        },
+      ], { onDismiss: resetPrompt });
+      return;
+    }
+
+    Alert.alert('하트가 부족해요', '충전하면 새로운 3명을 더 볼 수 있어요.', [
+      { style: 'cancel', text: '취소', onPress: resetPrompt },
+      {
+        text: '충전하기',
+        onPress: () => {
+          resetPrompt();
+          setPaidRefreshPurpose('load-more');
+          setIsPaidRefreshOpen(true);
+        },
+      },
+    ], { onDismiss: resetPrompt });
   };
 
   const handlePurchaseRefresh = async () => {
@@ -129,10 +220,22 @@ export default function HomeScreen() {
 
     try {
       await purchaseRefreshItem(user.id);
+      await refreshHeartBalance();
+
+      if (paidRefreshPurpose === 'charge-only') {
+        setIsPaidRefreshOpen(false);
+        Alert.alert('', '하트가 충전됐어요.');
+        return;
+      }
+
       const refreshResult = await handlePaidRefresh();
+      await refreshHeartBalance();
 
       if (refreshResult === 'ok') {
         setIsPaidRefreshOpen(false);
+      } else if (refreshResult === 'exhausted') {
+        setIsPaidRefreshOpen(false);
+        Alert.alert('', '결제는 완료됐지만 지금 더 보여드릴 새로운 추천이 부족해요. 하트는 보관돼요.');
       } else {
         setIsPaidRefreshOpen(false);
         setIsPaymentFailureOpen(true);
@@ -153,7 +256,10 @@ export default function HomeScreen() {
     setIsDeveloperCompletingRefresh(true);
 
     try {
+      if (paidRefreshPurpose !== 'load-more') return;
+
       const result = await handleDeveloperPaidRefresh();
+      await refreshHeartBalance();
 
       if (result === 'ok') {
         setIsPaidRefreshOpen(false);
@@ -182,7 +288,12 @@ export default function HomeScreen() {
   if (screen === 'H3') {
     return (
       <SafeAreaView className="flex-1 bg-[#F5EDDB]" edges={['left', 'right']}>
-        <HomeTopBar />
+        <HomeTopBarSlot
+          heartCount={heartCount}
+          myPhotoUrl={selfSummary.photoUrl}
+          myLatestVideoThumbUrl={selfSummary.latestVideoThumbUrl}
+          daysSinceVideo={selfSummary.daysSinceVideo}
+        />
         {!hasAnyVideo && <B2Banner />}
         <H3EmptyContent />
       </SafeAreaView>
@@ -193,23 +304,60 @@ export default function HomeScreen() {
   return (
     <>
     <SafeAreaView className="flex-1 bg-black" edges={['left', 'right']}>
-      <HomeTopBar />
+      <HomeTopBarSlot
+        heartCount={heartCount}
+        myPhotoUrl={selfSummary.photoUrl}
+        myLatestVideoThumbUrl={selfSummary.latestVideoThumbUrl}
+        daysSinceVideo={selfSummary.daysSinceVideo}
+      />
       {!hasAnyVideo && <B2Banner />}
 
-      {/* 카드 영역 */}
-      <View className="flex-1 relative">
-        {/* 3카드 세로 균등 배치 */}
-        {currentPool.map((item) => (
-          <CurationCard
-            key={item.userId}
-            item={item}
-            isLiked={hasLikedUser(item.userId)}
-            isLikeUsed={!hasAnyVideo || likeUsed}
-            onLike={handleLike}
-            onPress={setSelectedItem}
-            onProfilePress={handleProfilePress}
-          />
-        ))}
+      <View
+        className="flex-1 relative"
+        onLayout={(event) => setContentHeight(event.nativeEvent.layout.height)}
+      >
+        <FlatList
+          data={curationItems}
+          keyExtractor={(item) => item.userId}
+          // single = 1명 풀스크린 릴스식 페이지 스냅(턱턱 넘어가며 고정).
+          // stack3 = 일반 스크롤.
+          pagingEnabled={curationLayout === 'single'}
+          decelerationRate={curationLayout === 'single' ? 'fast' : 'normal'}
+          snapToInterval={curationLayout === 'single' && cardHeight ? cardHeight : undefined}
+          snapToAlignment="start"
+          // 하트 부족 팝업은 사용자가 footer "결제하고 더 볼까요?" 를 명시적으로
+          // 누를 때만 띄운다. 끝까지 스크롤(onEndReached) 시 자동 팝업은 띄우지
+          // 않는다 — 풀이 적을 때(특히 single) 스크롤만 해도 팝업이 떠 촬영 차단처럼
+          // 느껴지던 문제(이슈3) 방지.
+          renderItem={({ item }) => (
+            <View style={cardHeight ? { height: cardHeight } : undefined}>
+              <CurationCard
+                item={item}
+                isLiked={hasLikedUser(item.userId)}
+                isLikeUsed={!hasAnyVideo || (likeUsed && heartCount <= 0)}
+                onLike={handleLike}
+                onPress={handleProfilePress}
+                onProfilePress={handleProfilePress}
+              />
+            </View>
+          )}
+          ListFooterComponent={
+            <Pressable
+              className="items-center gap-2 bg-[#0D0D0D] px-5 py-5"
+              onPress={handleLoadMoreIntent}
+              testID="curation-load-more-prompt"
+            >
+              <Text className="text-sm font-semibold text-white">결제하고 더 볼까요?</Text>
+              <Text className="text-center text-xs leading-5 text-white/55">
+                {heartCount > 0
+                  ? `보유 하트 ${heartCount}개 · 1개를 사용해 새로운 3명을 불러와요`
+                  : '하트를 충전하면 새로운 3명을 이어서 볼 수 있어요'}
+              </Text>
+            </Pressable>
+          }
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+        />
 
         {/* 우측 도트 인디케이터 */}
         <View className="absolute right-2 top-1/2 -translate-y-5 gap-1.5 z-10">
@@ -220,15 +368,6 @@ export default function HomeScreen() {
             />
           ))}
         </View>
-
-        {/* FAB — 새로운 3명 보기 */}
-        <TouchableOpacity
-          className="absolute bottom-3.5 self-center bg-black/85 rounded-[20px] px-[18px] py-[7px] border border-white/15 z-10"
-          onPress={handleRefreshPress}
-          activeOpacity={0.85}
-        >
-          <Text className="text-white text-xs">새로운 3명 보기</Text>
-        </TouchableOpacity>
 
         {/* 정오 갱신 배너 */}
         {noonBanner && (
@@ -247,17 +386,17 @@ export default function HomeScreen() {
       </View>
     </SafeAreaView>
 
-    <VideoModal
-      item={selectedItem}
-      onClose={() => setSelectedItem(null)}
-      onProfilePress={handleProfilePress}
-    />
     <PaidRefreshSheet
-      isDeveloperBypassEnabled={isDeveloperPaymentEnabled}
+      description={
+        paidRefreshPurpose === 'load-more'
+          ? '결제 성공 후 하트가 충전되고, 바로 새로운 사람 3명을 더 볼 수 있어요'
+          : '결제 성공 후 하트 1개가 충전돼요. 좋아요나 더보기에 사용할 수 있어요'
+      }
+      isDeveloperBypassEnabled={isDeveloperPaymentEnabled && paidRefreshPurpose === 'load-more'}
       isDeveloperCompleting={isDeveloperCompletingRefresh}
       isOpen={isPaidRefreshOpen}
       isPurchasing={isPurchasingRefresh}
-      onClose={() => setIsPaidRefreshOpen(false)}
+      onClose={closePaidRefresh}
       onDeveloperComplete={handleDeveloperCompleteRefresh}
       onPurchase={handlePurchaseRefresh}
       priceLabel={refreshPriceLabel}

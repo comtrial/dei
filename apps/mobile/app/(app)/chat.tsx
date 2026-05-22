@@ -17,14 +17,14 @@
  * 10-D: 푸시 deeplink 에 conversationId 가 실리면 source='push' 로 이 게이트를
  * 그대로 통과 — 만료/차단 시 BLOCKED/ENDED 가 라우터에서 흡수된다. 단,
  * conversationId 없는 일반 채팅 알림의 conversation_count(>0→CH1 /=0→CH3)
- * 분기와 실제 OS 푸시 토큰 등록/탭 핸들러는 푸시 인프라(미구현, stub:
- * hooks/useNotifications.ts) 소관 — lib/chat/push-deeplink.ts 의 순수
- * 라우팅 결정 로직만 채팅 모듈이 책임진다.
+ * 분기와 OS 푸시 토큰 등록 기반은 hooks/useNotifications.ts 소관이다.
+ * 이 게이트는 lib/chat/push-deeplink.ts 의 순수 라우팅 결정 이후, 실제
+ * conversationId 진입에 대한 차단/상태 판정만 책임진다.
  *
  * 이 화면 자체는 UI 가 없는 게이트 (스피너만). DEV-SPEC CH0.
  */
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 
 import { loadConversationGate } from '@/lib/chat/chat-service';
@@ -38,17 +38,20 @@ export default function ChatRouteGate() {
   const { user } = useAuth();
   const params = useLocalSearchParams<{ conversationId?: string; source?: string }>();
   const conversationId = params.conversationId ?? null;
-  const resolvedOnce = useRef(false);
 
-  useEffect(() => {
-    if (resolvedOnce.current) return;
+  // 이 게이트 화면은 탭 네비게이터 화면(href:null)이라 인스턴스가 유지된다.
+  // useEffect + 모듈수명 ref 로 "한 번만" 막으면 재진입 시 라우팅이 안 돼
+  // 스피너 무한 로딩이 된다 → focus 마다 재평가하고, 동일 focus 내 중복만
+  // focus-scoped 플래그로 막는다.
+  useFocusEffect(
+    useCallback(() => {
+    let resolved = false;
     const myId = user?.id ?? null;
 
     // 인증/식별 불가 → 목록으로.
     if (!myId) {
       return;
     }
-    resolvedOnce.current = true;
 
     logger.addBreadcrumb({
       message: 'chat_route_evaluating',
@@ -68,6 +71,8 @@ export default function ChatRouteGate() {
         if (conversationId) {
           gate = await loadConversationGate(conversationId, myId);
         }
+        // 이미 blur 됐으면(빠른 뒤로가기 등) 라우팅하지 않는다.
+        if (resolved) return;
 
         const resolution = resolveChatRoute({
           conversationId,
@@ -120,7 +125,12 @@ export default function ChatRouteGate() {
       // 게이트 실패 시 안전하게 목록 복귀 (무음 정리 원칙).
       router.replace(ROUTES.messages);
     });
-  }, [conversationId, params.source, router, user?.id]);
+
+    return () => {
+      resolved = true;
+    };
+    }, [conversationId, params.source, router, user?.id]),
+  );
 
   return (
     <View className="bg-background flex-1 items-center justify-center" testID="chat-route-gate">

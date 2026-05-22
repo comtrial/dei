@@ -39,6 +39,10 @@ export const ChevronDown = StubIcon;
 export const ChevronLeft = StubIcon;
 export const ChevronRight = StubIcon;
 export const Check = StubIcon;
+export const House = StubIcon;
+export const Heart = StubIcon;
+export const MessageCircle = StubIcon;
+export const Video = StubIcon;
 
 export default StubIcon;
 export const __isLucideStub = true;

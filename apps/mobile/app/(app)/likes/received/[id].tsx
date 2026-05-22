@@ -5,9 +5,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ReceivedLikeFooter } from '@/components/likes/ReceivedLikeFooter';
+import { ProfileScreen } from '@/components/profile/ProfileScreen';
 import { Text } from '@/components/ui/text';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/providers/auth-provider';
 import { logger } from '@dei/shared';
 import type { ResolveResult } from '@/hooks/useLikeResolution';
 
@@ -21,33 +21,27 @@ type LikeDetail = {
 export default function ReceivedLikeDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useAuth();
   const [like, setLike] = useState<LikeDetail | null>(null);
-  const [nickname, setNickname] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
-    logger.withErrorCapture('received-like-detail.fetch', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (supabase.from('likes') as any)
+    void logger.withErrorCapture('received-like-detail.fetch', async () => {
+      const { data } = await (supabase.from('likes') as never as {
+        select: (c: string) => {
+          eq: (k: string, v: string) => {
+            single: () => Promise<{ data: LikeDetail | null }>;
+          };
+        };
+      })
         .select('from_user_id, attached_log_id, liked_at, expires_at')
         .eq('id', id)
         .single();
-      if (!data) return;
-      setLike(data as LikeDetail);
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('nickname')
-        .eq('user_id', data.from_user_id)
-        .single();
-      if (profile) setNickname(profile.nickname);
+      if (data) setLike(data);
     }, { tags: { feature: 'received-like-detail', likeId: id } });
   }, [id]);
 
   function handleResolved(result: ResolveResult) {
     if (result.kind === 'accepted') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (router.replace as any)({
         pathname: '/(app)/matched/[matchId]',
         params: { matchId: result.matchId },
@@ -67,22 +61,22 @@ export default function ReceivedLikeDetailRoute() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      {/* 상대 프로필 영역 — 06 ProfileViewer 연결 전 임시 */}
-      <View className="flex-1 items-center justify-center gap-4">
-        <View className="w-24 h-24 rounded-full bg-muted items-center justify-center">
-          <Text className="text-muted-foreground text-3xl">
-            {(nickname ?? '?').charAt(0)}
-          </Text>
-        </View>
-        <Text className="text-foreground text-xl font-semibold">{nickname ?? '—'}</Text>
-        <Text className="text-muted-foreground text-sm">
-          {like ? `받은 좋아요 ID: ${id.slice(0, 8)}…` : '불러오는 중…'}
-        </Text>
-      </View>
+    <View className="flex-1 bg-background">
+      {/* 상대 공개 프로필 (영상/사진/소개). 로드 전엔 안내. */}
+      {like ? (
+        <ProfileScreen mode="public" profileUserId={like.from_user_id} />
+      ) : (
+        <SafeAreaView className="flex-1 items-center justify-center" edges={['top']}>
+          <Text className="text-muted-foreground text-sm">불러오는 중…</Text>
+        </SafeAreaView>
+      )}
 
-      {/* 수락/거절 CTA (LK6, LK7) */}
-      {id && <ReceivedLikeFooter likeId={id} onResolved={handleResolved} />}
-    </SafeAreaView>
+      {/* 수락/거절 CTA (LK6, LK7) — 프로필 위에 하단 floating 으로 유지 */}
+      {id && (
+        <View className="absolute bottom-0 left-0 right-0">
+          <ReceivedLikeFooter likeId={id} onResolved={handleResolved} />
+        </View>
+      )}
+    </View>
   );
 }

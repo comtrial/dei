@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { ProfileScreen } from '@/components/profile/ProfileScreen';
 import { useProfileFeed } from '@/hooks/useProfileFeed';
@@ -18,6 +18,13 @@ jest.mock('expo-video', () => {
 
 jest.mock('@/hooks/useProfileFeed', () => ({
   useProfileFeed: jest.fn(),
+}));
+
+jest.mock('@/hooks/useDeleteLog', () => ({
+  useDeleteLog: () => ({
+    deleteLog: jest.fn(),
+    pending: false,
+  }),
 }));
 
 const mockUseProfileFeed = useProfileFeed as jest.Mock;
@@ -56,5 +63,45 @@ describe('ProfileScreen', () => {
     expect(getByText('차단한 프로필입니다.')).toBeTruthy();
     expect(getByText('차단을 해제하기 전까지 이 프로필과 로그를 볼 수 없어요.')).toBeTruthy();
     expect(queryByText('프로필을 찾을 수 없어요.')).toBeNull();
+  });
+
+  it('opens report/block actions from the public profile overflow menu', async () => {
+    const reportProfile = jest.fn().mockResolvedValue(true);
+    mockProfileFeedState({
+      profile: {
+        createdAt: '2026-05-12T00:00:00.000Z',
+        gender: 'F',
+        interestCategories: [],
+        interestTags: [],
+        intro: '안녕하세요',
+        mbti: 'ENTP',
+        nickname: '상대',
+        photoUrl: null,
+        regionSido: '서울',
+        regionSigungu: '강남구',
+        userId: 'profile-user-id',
+      },
+      reportProfile,
+    });
+
+    const { getByTestId, getByText } = render(
+      <ProfileScreen mode="public" profileUserId="profile-user-id" />
+    );
+
+    fireEvent.press(getByTestId('profile-more-menu'));
+    expect(getByText('신고하기')).toBeTruthy();
+    expect(getByText('차단하기')).toBeTruthy();
+
+    fireEvent.press(getByTestId('profile-report-menu-item'));
+    fireEvent.press(getByTestId('profile-report-reason-ABUSE'));
+    fireEvent.press(getByTestId('profile-report-submit'));
+
+    await waitFor(() => {
+      expect(reportProfile).toHaveBeenCalledWith({
+        description: null,
+        reason: '괴롭힘 또는 혐오 표현',
+        reasonCategory: 'ABUSE',
+      });
+    });
   });
 });
