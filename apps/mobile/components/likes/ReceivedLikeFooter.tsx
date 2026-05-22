@@ -1,7 +1,5 @@
 import { Pressable, View } from 'react-native';
 
-import { SafeAreaView } from 'react-native-safe-area-context';
-
 import { Text } from '@/components/ui/text';
 import { useLikeResolution, type ResolveResult } from '@/hooks/useLikeResolution';
 import { cn } from '@/lib/utils';
@@ -25,7 +23,7 @@ export function ReceivedLikeFooter({ likeId, onResolved }: Props) {
   }
 
   return (
-    <SafeAreaView edges={['bottom']} className="bg-background border-t border-border">
+    <View className="bg-background border-t border-border">
       <View className="flex-row gap-2 px-4 py-3">
         <Pressable
           onPress={handleReject}
@@ -51,6 +49,6 @@ export function ReceivedLikeFooter({ likeId, onResolved }: Props) {
           <Text className="text-primary-foreground font-medium">수락</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
