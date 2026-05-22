@@ -12,6 +12,10 @@ type Props = {
   heartCount?: number;
   daysSinceVideo?: number | null;
   stats?: StatItem[];
+  /** 내 프로필 사진 (signed URL). variant B/C 우측 상단 프로필에 표시. */
+  myPhotoUrl?: string | null;
+  /** 내 최근 영상 썸네일 (signed URL). variant B/C 카드 썸네일에 표시. */
+  myLatestVideoThumbUrl?: string | null;
 };
 
 /**
@@ -21,7 +25,13 @@ type Props = {
  *   C 리프레시: 압박 카드 (HomeTopVariantC)
  * flag 미설정/로드 전엔 A 로 안전 fallback.
  */
-export function HomeTopBarSlot({ heartCount, daysSinceVideo, stats }: Props) {
+export function HomeTopBarSlot({
+  heartCount,
+  daysSinceVideo,
+  stats,
+  myPhotoUrl,
+  myLatestVideoThumbUrl,
+}: Props) {
   const router = useRouter();
   const variant = useFeatureFlag('home_top_layout', 'A');
 
@@ -33,6 +43,8 @@ export function HomeTopBarSlot({ heartCount, daysSinceVideo, stats }: Props) {
       <HomeTopVariantB
         daysSinceVideo={daysSinceVideo}
         stats={stats}
+        myPhotoUrl={myPhotoUrl}
+        myLatestVideoThumbUrl={myLatestVideoThumbUrl}
         onSeeResults={goProfile}
         onRecordMore={goRecord}
       />
@@ -40,7 +52,12 @@ export function HomeTopBarSlot({ heartCount, daysSinceVideo, stats }: Props) {
   }
   if (variant === 'C') {
     return (
-      <HomeTopVariantC daysSinceVideo={daysSinceVideo} onRecordNew={goRecord} onLater={() => {}} />
+      <HomeTopVariantC
+        daysSinceVideo={daysSinceVideo}
+        myPhotoUrl={myPhotoUrl}
+        myLatestVideoThumbUrl={myLatestVideoThumbUrl}
+        onRecordNew={goRecord}
+      />
     );
   }
   return <HomeTopBar heartCount={heartCount} />;

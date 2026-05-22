@@ -35,6 +35,7 @@ export default function RecordScreen() {
   const [isFocused, setIsFocused] = useState(false);
   const [facing, setFacing] = useState<CameraFacing>('back');
   const [isRecording, setIsRecording] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
   const [zoomIndex, setZoomIndex] = useState(0);
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
@@ -55,6 +56,10 @@ export default function RecordScreen() {
       setFacing('back');
       setZoomIndex(0);
       setIsRecording(false);
+      // CameraView 는 blur 시 언마운트되므로 re-mount 때 onCameraReady 가 다시
+      // 발화한다. ready 를 false 로 초기화해야 stale ready=true 상태에서
+      // 미초기화 AVSession 에 recordAsync 를 던져 hang 하는 것을 막는다.
+      setIsCameraReady(false);
       // 가로 모드 잠금 완료 후 CameraView 마운트 → AVSession 활성 중 방향 전환 크래시 방지
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
         .then(() => setIsFocused(true))
@@ -71,6 +76,7 @@ export default function RecordScreen() {
         setShowOverwriteDialog(false);
         stopAnimations();
         setIsRecording(false);
+        setIsCameraReady(false);
         // 화면 방향 잠금 해제 (app.json의 기본 orientation인 portrait로 자동 복귀)
         ScreenOrientation.unlockAsync().catch((err: unknown) => {
           logger.captureException(err, {
@@ -99,6 +105,12 @@ export default function RecordScreen() {
   useEffect(() => {
     return () => stopAnimations();
   }, [stopAnimations]);
+
+  // 카메라 전환 시 AVSession 이 재초기화되므로 ready 를 내려 onCameraReady 재발화를
+  // 기다린다. 전환 직후 미초기화 세션에 recordAsync 던지는 것 방지.
+  useEffect(() => {
+    setIsCameraReady(false);
+  }, [facing]);
 
   const startAnimations = () => {
     progressAnim.setValue(0);
@@ -166,12 +178,20 @@ export default function RecordScreen() {
 
   const handleShutterPress = async () => {
     if (isRecording) return;
-    clearRecordingUri();
 
     if (!cameraRef.current) {
       Alert.alert('촬영 준비 중', '카메라가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
       return;
     }
+
+    // onCameraReady 전에 recordAsync 를 호출하면 iOS 에서 Promise 가 resolve 되지
+    // 않고 조용히 hang 한다 (expo-camera 문서: recordAsync 전 onCameraReady 대기 필수).
+    if (!isCameraReady) {
+      Alert.alert('촬영 준비 중', '카메라가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
+
+    clearRecordingUri();
 
     // CameraView 마운트 이후 마이크 권한 확인
     if (micPermission?.status !== 'granted') {
@@ -182,22 +202,54 @@ export default function RecordScreen() {
       }
     }
 
+    // 마이크 권한 요청을 await 하는 동안 화면을 벗어났을 수 있다 — ref 재확인.
+    const camera = cameraRef.current;
+    if (!camera) {
+      Alert.alert('촬영 준비 중', '카메라가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
+
     setIsRecording(true);
     startAnimations();
 
     let stopTimer: ReturnType<typeof setTimeout> | null = null;
+    let hangTimer: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
 
-    try {
-      stopTimer = setTimeout(() => {
-        cameraRef.current?.stopRecording();
-      }, RECORD_DURATION_MS);
-      const result = await cameraRef.current.recordAsync({ maxDuration: RECORD_DURATION_MS / 1000 });
-
+    const cleanupTimers = () => {
       if (stopTimer) {
         clearTimeout(stopTimer);
         stopTimer = null;
       }
+      if (hangTimer) {
+        clearTimeout(hangTimer);
+        hangTimer = null;
+      }
+    };
 
+    try {
+      // 의도한 길이에서 정상 종료. maxDuration 만으로는 native 가 stop 신호를
+      // 못 받는 케이스가 있어 명시적 stopRecording 도 건다.
+      stopTimer = setTimeout(() => {
+        camera.stopRecording();
+      }, RECORD_DURATION_MS);
+
+      // 안전망: recordAsync 가 어떤 이유로든 resolve/ reject 되지 않으면
+      // (조용한 hang) UI 가 isRecording 에 영구히 갇히지 않게 강제 복구한다.
+      const hangGuard = new Promise<never>((_, reject) => {
+        hangTimer = setTimeout(() => {
+          camera.stopRecording();
+          reject(new Error('recordAsync timed out (silent hang guard)'));
+        }, RECORD_DURATION_MS + 5000);
+      });
+
+      const result = await Promise.race([
+        camera.recordAsync({ maxDuration: RECORD_DURATION_MS / 1000 }),
+        hangGuard,
+      ]);
+
+      settled = true;
+      cleanupTimers();
       stopAnimations();
       setIsRecording(false);
 
@@ -208,11 +260,10 @@ export default function RecordScreen() {
 
       Alert.alert('촬영 실패', '촬영 파일을 만들지 못했어요. 다시 촬영해 주세요.');
     } catch (e) {
-      if (stopTimer) {
-        clearTimeout(stopTimer);
-      }
+      cleanupTimers();
       logger.captureException(e, {
         tags: { feature: 'record', action: 'record-video' },
+        extra: { settled, isCameraReady, facing },
       });
       stopAnimations();
       setIsRecording(false);
@@ -237,11 +288,14 @@ export default function RecordScreen() {
           mode="video"
           facing={facing}
           zoom={facing === 'front' ? 0 : ZOOM_LEVELS[zoomIndex].value}
+          onCameraReady={() => setIsCameraReady(true)}
           onMountError={(event) => {
+            setIsCameraReady(false);
             logger.captureException(new Error(event?.message ?? 'CameraView onMountError'), {
               tags: { feature: 'record', action: 'camera-mount' },
               extra: { facing, zoomIndex },
             });
+            Alert.alert('카메라 오류', '카메라를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.');
           }}
         />
       )}
@@ -430,12 +484,12 @@ export default function RecordScreen() {
           />
         )}
 
-        {/* Shutter button — 녹화 중엔 비활성 */}
+        {/* Shutter button — 녹화 중 또는 카메라 미준비 시 비활성 */}
         <TouchableOpacity
           onPress={handleShutterPress}
           activeOpacity={0.8}
           hitSlop={8}
-          disabled={isRecording}>
+          disabled={isRecording || !isCameraReady}>
           <View
             style={{
               width: 80,
@@ -444,7 +498,7 @@ export default function RecordScreen() {
               borderWidth: 4,
               borderColor: 'white',
               backgroundColor: 'white',
-              opacity: isRecording ? 0.3 : 1,
+              opacity: isRecording || !isCameraReady ? 0.3 : 1,
             }}
           />
         </TouchableOpacity>

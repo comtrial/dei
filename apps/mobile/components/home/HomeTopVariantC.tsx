@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { TouchableOpacity, View } from 'react-native';
+import { Image, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
@@ -8,15 +8,23 @@ import { ROUTES } from '@/lib/routes';
 type Props = {
   /** 최근 영상 며칠 전. */
   daysSinceVideo?: number | null;
+  /** 내 프로필 사진 (signed URL). 없으면 회색 fallback. */
+  myPhotoUrl?: string | null;
+  /** 내 최근 영상 썸네일 (signed URL). 없으면 회색 fallback. */
+  myLatestVideoThumbUrl?: string | null;
   onRecordNew?: () => void;
-  onLater?: () => void;
 };
 
 /**
  * 홈 상단 variant C — "리프레시 유도형 (압박 레버)".
  * 영상이 오래되면 매칭 풀에서 멀어진다는 압박으로 새 영상 촬영 유도.
  */
-export function HomeTopVariantC({ daysSinceVideo, onRecordNew, onLater }: Props) {
+export function HomeTopVariantC({
+  daysSinceVideo,
+  myPhotoUrl,
+  myLatestVideoThumbUrl,
+  onRecordNew,
+}: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -28,13 +36,29 @@ export function HomeTopVariantC({ daysSinceVideo, onRecordNew, onLater }: Props)
           accessibilityLabel="내 프로필"
           hitSlop={12}
           onPress={() => router.push(ROUTES.myProfile as never)}>
-          <View className="h-7 w-7 items-center justify-center rounded-full bg-[#D9C9A8]" />
+          {myPhotoUrl ? (
+            <Image
+              accessibilityLabel="내 프로필 사진"
+              className="h-7 w-7 rounded-full bg-[#D9C9A8]"
+              source={{ uri: myPhotoUrl }}
+            />
+          ) : (
+            <View className="h-7 w-7 items-center justify-center rounded-full bg-[#D9C9A8]" />
+          )}
         </TouchableOpacity>
       </View>
 
       <View className="rounded-2xl bg-[#EFE6D2] p-3" testID="home-top-variant-c">
         <View className="flex-row items-center gap-3">
-          <View className="relative h-14 w-14 items-center justify-center rounded-xl bg-[#C8C2B6]">
+          <View className="relative h-14 w-24 items-center justify-center overflow-hidden rounded-xl bg-[#C8C2B6]">
+            {myLatestVideoThumbUrl ? (
+              <Image
+                accessibilityLabel="내 최근 영상 썸네일"
+                className="absolute inset-0 h-full w-full"
+                resizeMode="cover"
+                source={{ uri: myLatestVideoThumbUrl }}
+              />
+            ) : null}
             {typeof daysSinceVideo === 'number' ? (
               <View className="rounded-md bg-black/70 px-1.5 py-0.5">
                 <Text className="text-[10px] font-bold text-white">{daysSinceVideo}일 전</Text>
@@ -56,12 +80,6 @@ export function HomeTopVariantC({ daysSinceVideo, onRecordNew, onLater }: Props)
             testID="home-top-c-record">
             <View className="h-1.5 w-1.5 rounded-full bg-[#C0432A]" />
             <Text className="text-sm font-semibold text-white">새로 찍기</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            className="rounded-xl border border-[#D9C9A8] px-4 py-2.5"
-            onPress={onLater}
-            testID="home-top-c-later">
-            <Text className="text-sm font-semibold text-[#171310]">나중에</Text>
           </TouchableOpacity>
         </View>
       </View>
