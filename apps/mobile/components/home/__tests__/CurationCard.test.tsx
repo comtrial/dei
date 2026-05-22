@@ -17,13 +17,29 @@ jest.mock('expo-video', () => ({
   VideoView: () => null,
 }));
 
+jest.mock('@/components/ui/VideoWithPoster', () => ({
+  VideoWithPoster: () => null,
+}));
+
+jest.mock('@/lib/videoCache', () => ({
+  getCachedVideoUri: jest.fn(async () => null),
+  prefetchVideo: jest.fn(),
+}));
+
 const item: CurationItem = {
   age: 29,
   displayName: '민지',
   gender: 'F',
   region: '서울',
   userId: 'target-user',
-  videos: [{ logId: 'log-1', poolId: 'pool-1', videoUrl: 'https://example.test/video.mp4' }],
+  videos: [
+    {
+      logId: 'log-1',
+      poolId: 'pool-1',
+      thumbnailUrl: null,
+      videoUrl: 'https://example.test/video.mp4',
+    },
+  ],
 };
 
 const baseProps = {

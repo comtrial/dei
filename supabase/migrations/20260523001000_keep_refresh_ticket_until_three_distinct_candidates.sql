@@ -11,6 +11,7 @@ returns table (
   log_id uuid,
   video_path text,
   video_url text,
+  thumbnail_path text,
   display_name text,
   gender text,
   redemption_id uuid
@@ -113,6 +114,7 @@ begin
     curation_pool.log_id,
     curation_pool.video_path,
     logs.video_url,
+    logs.thumbnail_path,
     coalesce(profiles.nickname, '—') as display_name,
     profiles.gender,
     selected_redemption.id as redemption_id

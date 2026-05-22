@@ -3,6 +3,8 @@ import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
 import { supabase } from '@/lib/supabase';
+import { prefetchVideos } from '@/lib/videoCache';
+import { prefetchPosters } from '@/lib/videoThumbnail';
 
 export type HomeScreenType = 'loading' | 'H2' | 'H3';
 export type PaidRefreshResult = 'ok' | 'exhausted' | 'no-ticket' | 'failed';
@@ -11,6 +13,8 @@ export interface CurationVideo {
   poolId: string;
   logId: string;
   videoUrl: string;
+  /** 서버 측 썸네일 public URL. 없으면 클라가 폴백 추출. */
+  thumbnailUrl: string | null;
 }
 
 export interface CurationItem {
@@ -30,12 +34,18 @@ type PaidRefreshCurationRow = {
   user_id: string;
   video_path: string | null;
   video_url: string | null;
+  thumbnail_path: string | null;
 };
 
 type BlockRow = {
   blocked_user_id: string;
   blocker_user_id: string;
 };
+
+function resolveThumbnailUrl(rawPath: string | null | undefined): string | null {
+  if (!rawPath) return null;
+  return supabase.storage.from('thumbnails').getPublicUrl(rawPath).data.publicUrl;
+}
 
 function groupToCurationItems(rows: PaidRefreshCurationRow[]): CurationItem[] {
   const userMap = new Map<string, CurationItem>();
@@ -45,8 +55,14 @@ function groupToCurationItems(rows: PaidRefreshCurationRow[]): CurationItem[] {
     const videoUrl = rawPath
       ? supabase.storage.from('logs').getPublicUrl(rawPath).data.publicUrl
       : '';
+    const thumbnailUrl = resolveThumbnailUrl(row.thumbnail_path);
 
-    const video: CurationVideo = { poolId: row.pool_id, logId: row.log_id, videoUrl };
+    const video: CurationVideo = {
+      poolId: row.pool_id,
+      logId: row.log_id,
+      videoUrl,
+      thumbnailUrl,
+    };
 
     if (userMap.has(row.user_id)) {
       userMap.get(row.user_id)!.videos.push(video);
@@ -143,7 +159,7 @@ async function fetchCurationPool(
     Array.from(userLatestDate.entries()).map(([uid, date]) =>
       supabase
         .from('curation_pool')
-        .select('id, user_id, log_id, video_path, logs(video_url)')
+        .select('id, user_id, log_id, video_path, logs(video_url, thumbnail_path)')
         .eq('user_id', uid)
         .eq('pool_date', date)
         .eq('검수_YN', 'Y')
@@ -171,11 +187,14 @@ async function fetchCurationPool(
       const profile = profileMap.get(uid);
 
       const videos: CurationVideo[] = poolEntries.map((entry) => {
-        const rawPath = (entry.video_path ?? (entry.logs as any)?.video_url ?? '') as string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const logRow = entry.logs as any;
+        const rawPath = (entry.video_path ?? logRow?.video_url ?? '') as string;
         const videoUrl = rawPath
           ? supabase.storage.from('logs').getPublicUrl(rawPath).data.publicUrl
           : '';
-        return { poolId: entry.id, logId: entry.log_id, videoUrl };
+        const thumbnailUrl = resolveThumbnailUrl(logRow?.thumbnail_path ?? null);
+        return { poolId: entry.id, logId: entry.log_id, videoUrl, thumbnailUrl };
       });
 
       const age = profile?.birth_date
@@ -275,6 +294,32 @@ export function useHomeScreen(userId: string | undefined) {
     });
     return () => sub.remove();
   }, [fetchAll]);
+
+  // 보이는 페이지의 모든 영상/포스터 워밍업 (백그라운드, best-effort).
+  // 첫 화면 진입 후 검은 화면 갭을 최소화하기 위함.
+  useEffect(() => {
+    const currentPool = pages[0] ?? [];
+    if (currentPool.length === 0) return;
+    const videoInputs: Array<{ url: string | null; cacheKey: string | null }> = [];
+    const posterInputs: Array<{
+      videoUrl: string | null;
+      cacheKey: string | null;
+    }> = [];
+    for (const item of currentPool) {
+      for (const video of item.videos) {
+        videoInputs.push({ url: video.videoUrl || null, cacheKey: video.logId });
+        // 서버 포스터가 없는 영상에 한해 클라 추출을 미리 트리거
+        if (!video.thumbnailUrl) {
+          posterInputs.push({
+            videoUrl: video.videoUrl || null,
+            cacheKey: video.logId,
+          });
+        }
+      }
+    }
+    prefetchVideos(videoInputs);
+    if (posterInputs.length > 0) prefetchPosters(posterInputs);
+  }, [pages]);
 
   const handleRefresh = useCallback(async (): Promise<'ok' | 'exhausted'> => {
     if (!userId) return 'exhausted';

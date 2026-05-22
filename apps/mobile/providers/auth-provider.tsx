@@ -112,7 +112,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data.session;
   }, [session]);
 
-
   const signOut = useCallback(async () => {
     await logOutRevenueCat();
 

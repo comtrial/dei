@@ -1,6 +1,0 @@
--- Remote history placeholder.
---
--- The remote project already records migration version 20260522000000. The
--- same effective schema is represented locally by
--- 20260522061444_unify_first_video_into_logs.sql, so this file intentionally
--- contains no schema changes.

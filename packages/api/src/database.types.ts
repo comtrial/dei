@@ -545,6 +545,7 @@ export type Database = {
           hour_slot: number
           id: string
           recorded_at: string
+          thumbnail_path: string | null
           thumbnail_urls: string[]
           user_id: string
           video_url: string
@@ -557,6 +558,7 @@ export type Database = {
           hour_slot: number
           id?: string
           recorded_at: string
+          thumbnail_path?: string | null
           thumbnail_urls?: string[]
           user_id: string
           video_url: string
@@ -569,6 +571,7 @@ export type Database = {
           hour_slot?: number
           id?: string
           recorded_at?: string
+          thumbnail_path?: string | null
           thumbnail_urls?: string[]
           user_id?: string
           video_url?: string
@@ -869,6 +872,7 @@ export type Database = {
           removed_at: string | null
           storage_bucket: string
           storage_path: string
+          thumbnail_path: string | null
           updated_at: string
           user_id: string
         }
@@ -886,6 +890,7 @@ export type Database = {
           removed_at?: string | null
           storage_bucket?: string
           storage_path: string
+          thumbnail_path?: string | null
           updated_at?: string
           user_id: string
         }
@@ -903,6 +908,7 @@ export type Database = {
           removed_at?: string | null
           storage_bucket?: string
           storage_path?: string
+          thumbnail_path?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1533,6 +1539,7 @@ export type Database = {
           log_id: string
           pool_id: string
           redemption_id: string
+          thumbnail_path: string
           user_id: string
           video_path: string
           video_url: string
@@ -1625,6 +1632,7 @@ export type Database = {
           hour_slot: number
           id: string
           recorded_at: string
+          thumbnail_path: string
           user_id: string
           video_url: string
         }[]

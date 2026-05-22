@@ -1,6 +1,7 @@
 import { logger } from '@dei/shared';
 import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
@@ -70,22 +71,67 @@ export function useSaveLog() {
 
       // 새 영상 업로드 — RN fetch+blob 은 file:// URI 에서 size 0 Blob 버그가 있어 File API로 읽는다.
       const contentType = getVideoContentType(tempVideoUri);
-      const fileName = `${userId}/${Date.now()}.${getVideoExtension(tempVideoUri)}`;
+      const ts = Date.now();
+      const fileName = `${userId}/${ts}.${getVideoExtension(tempVideoUri)}`;
       const arrayBuffer = await new File(tempVideoUri).arrayBuffer();
 
       if (arrayBuffer.byteLength === 0) {
         throw new Error('촬영 파일을 읽을 수 없어요. 다시 촬영해 주세요.');
       }
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      // 영상 업로드와 썸네일 생성/업로드를 병렬로. 썸네일 실패는 영상 저장을 막지 않는다.
+      const videoUploadPromise = supabase.storage
         .from('logs')
         .upload(fileName, arrayBuffer, { contentType, upsert: false });
+
+      const thumbnailUploadPromise = (async (): Promise<string | null> => {
+        try {
+          const { uri: thumbLocalUri } = await VideoThumbnails.getThumbnailAsync(
+            tempVideoUri,
+            { time: 0, quality: 0.7 }
+          );
+          const thumbBuffer = await new File(thumbLocalUri).arrayBuffer();
+          if (thumbBuffer.byteLength === 0) {
+            await FileSystem.deleteAsync(thumbLocalUri, { idempotent: true }).catch(
+              () => undefined
+            );
+            return null;
+          }
+          const thumbName = `${userId}/${ts}.jpg`;
+          const { data: thumbData, error: thumbError } = await supabase.storage
+            .from('thumbnails')
+            .upload(thumbName, thumbBuffer, { contentType: 'image/jpeg', upsert: false });
+          await FileSystem.deleteAsync(thumbLocalUri, { idempotent: true }).catch(
+            () => undefined
+          );
+          if (thumbError) {
+            logger.captureException(thumbError, {
+              tags: { feature: 'save-log-thumbnail' },
+              extra: { step: 'upload', thumbName },
+            });
+            return null;
+          }
+          return thumbData?.path ?? null;
+        } catch (thumbError) {
+          logger.captureException(thumbError, {
+            tags: { feature: 'save-log-thumbnail' },
+            extra: { step: 'extract' },
+          });
+          return null;
+        }
+      })();
+
+      const [
+        { data: uploadData, error: uploadError },
+        thumbnailPath,
+      ] = await Promise.all([videoUploadPromise, thumbnailUploadPromise]);
 
       if (uploadError) throw uploadError;
 
       const { error: insertError } = await supabase.from('logs').insert({
         user_id: userId,
         video_url: uploadData.path,
+        thumbnail_path: thumbnailPath,
         hour_slot: hourSlot,
         duration_sec: Math.round(recordedMs / 1000),
         검수_YN: 'N',

@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { AppState, Pressable, StyleSheet, View } from 'react-native';
 
 import { useEvent } from 'expo';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer } from 'expo-video';
 
 import { Text } from '@/components/ui/text';
+import { VideoWithPoster } from '@/components/ui/VideoWithPoster';
+import { useCachedVideoSource } from '@/hooks/useCachedVideoSource';
+import { resolveLogVideoUrl, resolveThumbnailUrl } from '@/lib/videoUrls';
 import type { Database } from '@dei/api';
 
 type LogRow = Database['public']['Tables']['logs']['Row'];
@@ -20,7 +23,13 @@ export function SequentialPlayer({ logs, index, onComplete, onTap = 'toggle' }: 
   const current = logs[index];
   const completeFired = useRef(false);
 
-  const player = useVideoPlayer(current?.video_url ?? null, (p) => {
+  const currentVideoUrl = current?.video_url ? resolveLogVideoUrl(current.video_url) : null;
+  const currentThumbnailUrl = current?.thumbnail_path
+    ? resolveThumbnailUrl(current.thumbnail_path)
+    : null;
+  const cachedSource = useCachedVideoSource(currentVideoUrl, current?.id ?? null);
+
+  const player = useVideoPlayer(cachedSource ?? null, (p) => {
     p.loop = false;
     p.muted = false;
     p.play();
@@ -30,11 +39,11 @@ export function SequentialPlayer({ logs, index, onComplete, onTap = 'toggle' }: 
 
   // index 변경 시 영상 교체
   useEffect(() => {
-    if (!current?.video_url) return;
+    if (!currentVideoUrl) return;
     completeFired.current = false;
-    player.replace({ uri: current.video_url });
+    player.replace({ uri: currentVideoUrl });
     player.play();
-  }, [current?.video_url]);
+  }, [currentVideoUrl, player]);
 
   // 영상 종료 감지 — currentTime이 duration에 근접할 때
   useEffect(() => {
@@ -73,8 +82,11 @@ export function SequentialPlayer({ logs, index, onComplete, onTap = 'toggle' }: 
 
   return (
     <Pressable onPress={handleTap} style={StyleSheet.absoluteFillObject}>
-      <VideoView
+      <VideoWithPoster
         player={player}
+        posterUrl={currentThumbnailUrl}
+        videoUrl={currentVideoUrl}
+        posterCacheKey={current?.id ?? null}
         style={StyleSheet.absoluteFillObject}
         contentFit="cover"
         nativeControls={false}

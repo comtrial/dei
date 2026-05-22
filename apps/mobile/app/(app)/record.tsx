@@ -9,7 +9,11 @@ import { logger } from '@dei/shared';
 
 import { Text } from '@/components/ui/text';
 import { useTodayClip } from '@/hooks/useTodayClip';
-import { clearRecordingUri, setRecordingUri } from '@/lib/recordingStore';
+import {
+  clearRecordingUri,
+  consumeOverwriteAcknowledged,
+  setRecordingUri,
+} from '@/lib/recordingStore';
 import { ROUTES } from '@/lib/routes';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -39,6 +43,10 @@ export default function RecordScreen() {
   const [zoomIndex, setZoomIndex] = useState(0);
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
+  // CameraView 의 key. iOS 에서 RN <Modal> 이 카메라 위에 덮이는 동안 AVCaptureSession
+  // 이 suspend 되었다가 dismiss 후에도 자동 restart 되지 않는 케이스 방어 — dialog 닫힐
+  // 때 key 증가로 CameraView 를 강제 unmount/remount.
+  const [cameraSessionKey, setCameraSessionKey] = useState(0);
   const didInitRef = useRef(false);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -92,11 +100,15 @@ export default function RecordScreen() {
       if (clipLoading || !permission || didInitRef.current) return;
       didInitRef.current = true;
 
+      // result(검수) 의 "다시 촬영" 으로 돌아온 직후라면 1회성 ack 가 set 됨.
+      // 사용자가 직전에 같은 dialog 를 confirm 한 의도를 존중해 중복 표시를 건너뛴다.
+      const skipOverwrite = consumeOverwriteAcknowledged();
+
       if (permission.status === 'undetermined') {
         setShowPermissionDialog(true);
       } else if (permission.status === 'denied') {
         router.back();
-      } else if (permission.status === 'granted' && hasClipToday) {
+      } else if (permission.status === 'granted' && hasClipToday && !skipOverwrite) {
         setShowOverwriteDialog(true);
       }
     }, [permission, hasClipToday, clipLoading, router])
@@ -140,7 +152,12 @@ export default function RecordScreen() {
         return;
       }
       await requestMicPermission();
-      if (hasClipToday) setShowOverwriteDialog(true);
+      if (hasClipToday) {
+        setShowOverwriteDialog(true);
+      } else {
+        // permission dialog 만 떴다 닫힌 경로 — Modal dismiss 후 카메라 session 강제 재생성
+        setCameraSessionKey((k) => k + 1);
+      }
     } catch (err) {
       logger.captureException(err, {
         tags: { feature: 'record', action: 'request-permissions' },
@@ -154,7 +171,12 @@ export default function RecordScreen() {
     router.back();
   };
 
-  const handleOverwriteConfirm = () => setShowOverwriteDialog(false);
+  const handleOverwriteConfirm = () => {
+    setShowOverwriteDialog(false);
+    // Modal 위 dismiss 후 카메라 session 이 stuck 되는 케이스 (사용자 보고: "다시 촬영"
+    // 누른 직후 카메라 프리뷰 정지) 방지 — key 증가로 CameraView 를 강제 remount.
+    setCameraSessionKey((k) => k + 1);
+  };
   const handleOverwriteCancel = () => {
     setShowOverwriteDialog(false);
     router.back();
@@ -283,6 +305,8 @@ export default function RecordScreen() {
       {/* flash 는 video 모드에서 torch 로만 동작 — UI 제거. selectedLens / onAvailableLensesChanged 는 native crash 이력으로 보류 */}
       {shouldMountCamera && (
         <CameraView
+          // key 증가 시 native AVCaptureSession 을 강제 재생성한다 (Modal dismiss stuck 대응).
+          key={cameraSessionKey}
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           mode="video"
@@ -293,7 +317,7 @@ export default function RecordScreen() {
             setIsCameraReady(false);
             logger.captureException(new Error(event?.message ?? 'CameraView onMountError'), {
               tags: { feature: 'record', action: 'camera-mount' },
-              extra: { facing, zoomIndex },
+              extra: { facing, zoomIndex, cameraSessionKey },
             });
             Alert.alert('카메라 오류', '카메라를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.');
           }}
