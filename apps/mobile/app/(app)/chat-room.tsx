@@ -11,7 +11,7 @@
  * OP3(매칭 후 상대 공개 프로필) 은 공개 프로필 라우트 `/profiles/[userId]` 로
  * 구현돼 있고 `enterOpponentProfile` seam 이 그쪽으로 navigate 한다.
  */
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, MoreVertical } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -71,8 +71,17 @@ export default function ChatRoomScreen() {
   const nickname = otherProfile?.nickname || params.otherNickname || '상대';
   const photoUrl = otherProfile?.photoUrl ?? null;
 
-  const { messages, loading, ended, sendFailure, clearSendFailure, send, retry } =
+  const { messages, loading, ended, sendFailure, clearSendFailure, send, retry, reload } =
     useChatRoom(conversationId, myId);
+
+  // 탭 네비게이터에서 이 화면 인스턴스가 유지돼, 동일 conversationId 로 재진입
+  // 시 useChatRoom 의 useEffect 가 재실행되지 않아 무한 로딩이 났다 → focus
+  // 마다 재로드해 복구. (CH0 게이트도 동일 이유로 useFocusEffect 로 전환됨.)
+  useFocusEffect(
+    useCallback(() => {
+      reload();
+    }, [reload]),
+  );
   const [moreOpen, setMoreOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -177,11 +186,10 @@ export default function ChatRoomScreen() {
             className="h-10 w-10 items-center justify-center rounded-md active:bg-accent"
             onPress={() => {
               logger.addBreadcrumb({ message: 'chat_back_tapped', category: 'chat' });
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace(ROUTES.messages);
-              }
+              // 채팅방의 논리적 부모는 항상 DM 목록(CH1). 탭 네비게이터에서
+              // router.back() 은 탭 히스토리(다른 탭)로 새기 쉽고 CH0 replace 로
+              // 스택이 꼬이므로, 명시적으로 DM 탭으로 보낸다.
+              router.replace(ROUTES.messages);
             }}
             testID="chat-header-back">
             <Icon as={ChevronLeft} className="text-foreground" size={24} />
