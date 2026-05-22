@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { TouchableOpacity, View } from 'react-native';
+import { Image, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
@@ -11,6 +11,10 @@ type Props = {
   /** 최근 영상 며칠 전 (없으면 배너 생략). */
   daysSinceVideo?: number | null;
   stats?: StatItem[];
+  /** 내 프로필 사진 (signed URL). 없으면 회색 fallback. */
+  myPhotoUrl?: string | null;
+  /** 내 최근 영상 썸네일 (signed URL). 없으면 회색 fallback. */
+  myLatestVideoThumbUrl?: string | null;
   onSeeResults?: () => void;
   onRecordMore?: () => void;
 };
@@ -20,7 +24,14 @@ type Props = {
  * 최근 영상의 반응 통계(조회/좋아요/매칭)를 보여주고 "한 편 더 찍기" 유도.
  * 데이터가 없으면 통계는 0 으로 표기.
  */
-export function HomeTopVariantB({ daysSinceVideo, stats, onSeeResults, onRecordMore }: Props) {
+export function HomeTopVariantB({
+  daysSinceVideo,
+  stats,
+  myPhotoUrl,
+  myLatestVideoThumbUrl,
+  onSeeResults,
+  onRecordMore,
+}: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const items: StatItem[] = stats ?? [
@@ -37,13 +48,30 @@ export function HomeTopVariantB({ daysSinceVideo, stats, onSeeResults, onRecordM
           accessibilityLabel="내 프로필"
           hitSlop={12}
           onPress={() => router.push(ROUTES.myProfile as never)}>
-          <View className="h-7 w-7 items-center justify-center rounded-full bg-[#D9C9A8]" />
+          {myPhotoUrl ? (
+            <Image
+              accessibilityLabel="내 프로필 사진"
+              className="h-7 w-7 rounded-full bg-[#D9C9A8]"
+              source={{ uri: myPhotoUrl }}
+            />
+          ) : (
+            <View className="h-7 w-7 items-center justify-center rounded-full bg-[#D9C9A8]" />
+          )}
         </TouchableOpacity>
       </View>
 
       <View className="rounded-2xl bg-[#EFE6D2] p-3" testID="home-top-variant-b">
         <View className="flex-row items-center gap-3">
-          <View className="h-14 w-14 rounded-xl bg-[#D9C9A8]" />
+          {myLatestVideoThumbUrl ? (
+            <Image
+              accessibilityLabel="내 최근 영상 썸네일"
+              className="h-14 w-24 rounded-xl bg-[#D9C9A8]"
+              resizeMode="cover"
+              source={{ uri: myLatestVideoThumbUrl }}
+            />
+          ) : (
+            <View className="h-14 w-24 rounded-xl bg-[#D9C9A8]" />
+          )}
           <View className="flex-1">
             <Text className="text-base font-bold text-[#171310]">반응이 오고 있어요</Text>
             <Text className="text-xs text-[#7A6F5C]">

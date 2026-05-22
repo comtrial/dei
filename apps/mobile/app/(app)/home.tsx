@@ -21,6 +21,7 @@ import type { CurationItem } from '@/hooks/useHomeScreen';
 import { Text } from '@/components/ui/text';
 import { useHeartBalance } from '@/hooks/useHeartBalance';
 import { useHomeScreen } from '@/hooks/useHomeScreen';
+import { useHomeSelfSummary } from '@/hooks/useHomeSelfSummary';
 import { useLike } from '@/hooks/useLike';
 import { isLocalDevPaymentEnabled } from '@/lib/dev-auth';
 import { profileRoute } from '@/lib/routes';
@@ -49,6 +50,8 @@ export default function HomeScreen() {
 
   const { checkRemainingLikes, hasLikedUser, likeUsed, sendLike } = useLike(user?.id);
   const { heartCount, refreshHeartBalance } = useHeartBalance(user?.id);
+  // 홈 상단 카드(B/C variant)용 내 프로필 사진 + 최근 영상 썸네일.
+  const selfSummary = useHomeSelfSummary(user?.id);
   const [isPaidRefreshOpen, setIsPaidRefreshOpen] = useState(false);
   const [isPaymentFailureOpen, setIsPaymentFailureOpen] = useState(false);
   const [isPurchasingRefresh, setIsPurchasingRefresh] = useState(false);
@@ -59,7 +62,6 @@ export default function HomeScreen() {
   );
   const [refreshPriceLabel, setRefreshPriceLabel] = useState('스토어 가격 확인 후 표시');
   const [contentHeight, setContentHeight] = useState(0);
-  const [hasUserScrolled, setHasUserScrolled] = useState(false);
   const loadMorePromptOpenRef = useRef(false);
   const isDeveloperPaymentEnabled = isLocalDevPaymentEnabled();
   // 큐레이션 레이아웃 variant: 'single'=1명 풀스크린 세로 스크롤(몰입형),
@@ -286,7 +288,12 @@ export default function HomeScreen() {
   if (screen === 'H3') {
     return (
       <SafeAreaView className="flex-1 bg-[#F5EDDB]" edges={['left', 'right']}>
-        <HomeTopBarSlot heartCount={heartCount} />
+        <HomeTopBarSlot
+          heartCount={heartCount}
+          myPhotoUrl={selfSummary.photoUrl}
+          myLatestVideoThumbUrl={selfSummary.latestVideoThumbUrl}
+          daysSinceVideo={selfSummary.daysSinceVideo}
+        />
         {!hasAnyVideo && <B2Banner />}
         <H3EmptyContent />
       </SafeAreaView>
@@ -297,7 +304,12 @@ export default function HomeScreen() {
   return (
     <>
     <SafeAreaView className="flex-1 bg-black" edges={['left', 'right']}>
-      <HomeTopBarSlot heartCount={heartCount} />
+      <HomeTopBarSlot
+        heartCount={heartCount}
+        myPhotoUrl={selfSummary.photoUrl}
+        myLatestVideoThumbUrl={selfSummary.latestVideoThumbUrl}
+        daysSinceVideo={selfSummary.daysSinceVideo}
+      />
       {!hasAnyVideo && <B2Banner />}
 
       <View
@@ -307,15 +319,16 @@ export default function HomeScreen() {
         <FlatList
           data={curationItems}
           keyExtractor={(item) => item.userId}
-          onEndReached={() => {
-            if (hasUserScrolled) handleLoadMoreIntent();
-          }}
-          onEndReachedThreshold={0.35}
-          onScroll={(event) => {
-            if (!hasUserScrolled && event.nativeEvent.contentOffset.y > 24) {
-              setHasUserScrolled(true);
-            }
-          }}
+          // single = 1명 풀스크린 릴스식 페이지 스냅(턱턱 넘어가며 고정).
+          // stack3 = 일반 스크롤.
+          pagingEnabled={curationLayout === 'single'}
+          decelerationRate={curationLayout === 'single' ? 'fast' : 'normal'}
+          snapToInterval={curationLayout === 'single' && cardHeight ? cardHeight : undefined}
+          snapToAlignment="start"
+          // 하트 부족 팝업은 사용자가 footer "결제하고 더 볼까요?" 를 명시적으로
+          // 누를 때만 띄운다. 끝까지 스크롤(onEndReached) 시 자동 팝업은 띄우지
+          // 않는다 — 풀이 적을 때(특히 single) 스크롤만 해도 팝업이 떠 촬영 차단처럼
+          // 느껴지던 문제(이슈3) 방지.
           renderItem={({ item }) => (
             <View style={cardHeight ? { height: cardHeight } : undefined}>
               <CurationCard

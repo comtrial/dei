@@ -230,15 +230,16 @@ begin
     variants := f.rollout_variants;
     if variants is not null and jsonb_typeof(variants) = 'array'
        and jsonb_array_length(variants) > 0 then
+      -- variants 있음 = A/B 테스트: 그 중 안정적으로 랜덤 분배.
       vcount := jsonb_array_length(variants);
-      -- variant 도 안정적으로 분배 (다른 salt)
       result := result || jsonb_build_object(
         f.key,
         variants -> ((abs(hashtextextended(f.key || uid::text, 1)) % vcount)::int)
       );
     else
-      -- on/off rollout: percentage 안에 들면 true (또는 default 가 "A" 면 그대로)
-      result := result || jsonb_build_object(f.key, to_jsonb(true));
+      -- variants 없음 = 전원 강제: default_value 를 그대로 준다.
+      -- ("전원에게 특정 화면 보여주기" — admin 이 variants 비우고 default 만 설정).
+      result := result || jsonb_build_object(f.key, f.default_value);
     end if;
   end loop;
 
