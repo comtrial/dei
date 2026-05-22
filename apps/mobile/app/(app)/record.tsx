@@ -11,7 +11,6 @@ import { Text } from '@/components/ui/text';
 import { useTodayClip } from '@/hooks/useTodayClip';
 import { clearRecordingUri, setRecordingUri } from '@/lib/recordingStore';
 import { ROUTES } from '@/lib/routes';
-import { useAccountGate } from '@/providers/account-gate-provider';
 import { useAuth } from '@/providers/auth-provider';
 
 type CameraFacing = 'front' | 'back';
@@ -31,7 +30,6 @@ export default function RecordScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
   const { user } = useAuth();
-  const { eligibility, refresh } = useAccountGate();
   const { hasClipToday, currentSlotLabel, isLoading: clipLoading } = useTodayClip(user?.id);
 
   const [isFocused, setIsFocused] = useState(false);
@@ -151,10 +149,7 @@ export default function RecordScreen() {
   };
 
   const navigateToResult = useCallback(
-    async (uri: string) => {
-      const latestEligibility = await refresh().catch(() => eligibility);
-      const nextStep = latestEligibility?.next_step ?? eligibility?.next_step;
-
+    (uri: string) => {
       setRecordingUri(uri);
       setIsFocused(false);
       setTimeout(() => {
@@ -162,12 +157,11 @@ export default function RecordScreen() {
           pathname: '/result',
           params: {
             durationMs: String(RECORD_DURATION_MS),
-            purpose: nextStep === 'first_video' ? 'profile' : 'daily',
           },
         });
       }, 600);
     },
-    [eligibility, refresh, router],
+    [router],
   );
 
   const handleShutterPress = async () => {
@@ -208,7 +202,7 @@ export default function RecordScreen() {
       setIsRecording(false);
 
       if (result?.uri) {
-        await navigateToResult(result.uri);
+        navigateToResult(result.uri);
         return;
       }
 

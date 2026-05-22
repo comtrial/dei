@@ -12,7 +12,7 @@ export default function DiscoveryScreen() {
     <Screen
       eyebrow="Discover"
       title="오늘의 2초 프로필"
-      description="본인 확인과 영상 승인을 마친 프로필만 이 화면에 들어옵니다.">
+      description="본인 확인과 첫 영상 촬영을 마치면 입장합니다. 영상 검수를 통과하면 다른 사람의 추천에 노출됩니다.">
       <View className="gap-6">
         <View>
           <StatusRow
@@ -21,9 +21,9 @@ export default function DiscoveryScreen() {
             value={eligibility?.identity_verified ? '완료' : '대기'}
           />
           <StatusRow
-            label="영상 승인"
+            label="영상 검수"
             tone={eligibility?.first_video_approved ? 'success' : 'warning'}
-            value={eligibility?.first_video_approved ? '완료' : '대기'}
+            value={eligibility?.first_video_approved ? '통과' : '검수 중'}
           />
         </View>
 
