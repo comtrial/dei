@@ -10,7 +10,7 @@ import { logger } from '@dei/shared';
 
 import { Text } from '@/components/ui/text';
 import { useSaveLog } from '@/hooks/useSaveLog';
-import { getRecordingUri } from '@/lib/recordingStore';
+import { getRecordingUri, setOverwriteAcknowledged } from '@/lib/recordingStore';
 import { formatDuration } from '@/lib/formatDuration';
 import { ROUTES } from '@/lib/routes';
 
@@ -73,6 +73,10 @@ export default function ResultScreen() {
 
   const handleRedo = async () => {
     await cleanupTempFile('redo');
+    // 직전에 사용자가 record 에서 overwrite dialog 를 confirm 한 상태이므로, back 후
+    // record 가 다시 focus 될 때 같은 dialog 를 한 번 더 띄우지 않도록 ack 를 set 한다.
+    // (record.useFocusEffect 가 consumeOverwriteAcknowledged 로 1회 적용 후 자동 초기화)
+    setOverwriteAcknowledged();
     // result.tsx 는 record 에서 push 로 진입했으므로 back 하면 record 로 복귀.
     // router.replace('/(app)/record') 는 Tabs 내부 라우트를 stack 으로 다시 쌓아
     // CameraView 가 중복 마운트되며 AVCaptureSession 충돌 → native crash 유발.

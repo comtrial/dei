@@ -8,6 +8,7 @@ export type ProfileLogSource = {
   recorded_at: string;
   user_id?: string;
   video_url: string;
+  thumbnail_path?: string | null;
   검수_YN?: string;
   검수_상태?: string;
 };
@@ -24,6 +25,7 @@ export type ProfileLogItem = {
   userId?: string;
   videoPath: string;
   videoUrl: string;
+  thumbnailUrl: string | null;
 };
 
 export type ProfileLogDay = {
@@ -99,8 +101,10 @@ export function groupProfileLogsByDate(logs: ProfileLogItem[]): ProfileLogDay[] 
 
 export function toProfileLogItem(
   log: ProfileLogSource,
-  resolveVideoUrl: (path: string) => string
+  resolveVideoUrl: (path: string) => string,
+  resolveThumbnailUrl?: (path: string) => string | null
 ): ProfileLogItem {
+  const thumbnailPath = log.thumbnail_path ?? null;
   return {
     createdAt: log.created_at ?? null,
     durationSec: log.duration_sec,
@@ -113,5 +117,6 @@ export function toProfileLogItem(
     userId: log.user_id,
     videoPath: log.video_url,
     videoUrl: resolveVideoUrl(log.video_url),
+    thumbnailUrl: thumbnailPath && resolveThumbnailUrl ? resolveThumbnailUrl(thumbnailPath) : null,
   };
 }

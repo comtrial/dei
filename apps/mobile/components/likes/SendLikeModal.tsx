@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useRouter } from 'expo-router';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer } from 'expo-video';
 
 import {
   Dialog,
@@ -13,9 +13,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Text } from '@/components/ui/text';
+import { VideoWithPoster } from '@/components/ui/VideoWithPoster';
+import { useCachedVideoSource } from '@/hooks/useCachedVideoSource';
 import { type SendLikeError, useSendLike } from '@/hooks/useSendLike';
 import { useTodayLogs } from '@/hooks/useTodayLogs';
 import { cn } from '@/lib/utils';
+import { resolveLogVideoUrl, resolveThumbnailUrl } from '@/lib/videoUrls';
 import { useAuth } from '@/providers/auth-provider';
 
 interface Props {
@@ -25,17 +28,22 @@ interface Props {
 }
 
 function LogThumb({
+  logId,
   videoUrl,
+  thumbnailUrl,
   hourSlot,
   selected,
   onPress,
 }: {
+  logId: string;
   videoUrl: string;
+  thumbnailUrl: string | null;
   hourSlot: number;
   selected: boolean;
   onPress: () => void;
 }) {
-  const player = useVideoPlayer(videoUrl, (p) => {
+  const cachedSource = useCachedVideoSource(videoUrl, logId);
+  const player = useVideoPlayer(cachedSource ?? null, (p) => {
     p.loop = true;
     p.muted = true;
     p.pause();
@@ -49,11 +57,16 @@ function LogThumb({
         selected ? 'border-primary' : 'border-transparent'
       )}
     >
-      <VideoView
+      <VideoWithPoster
         player={player}
+        posterUrl={thumbnailUrl}
+        videoUrl={videoUrl}
+        posterCacheKey={logId}
         style={StyleSheet.absoluteFillObject}
         contentFit="cover"
         nativeControls={false}
+        // 정지된 첫 프레임을 썸네일처럼 보여주는 의도 — 포커스 복귀 시 자동재생 X
+        resumeOnFocus={false}
       />
       <View className="absolute bottom-1 left-1 bg-black/60 rounded px-1.5 py-0.5">
         <Text className="text-white text-[10px]">{hourSlot}시</Text>
@@ -129,7 +142,9 @@ export function SendLikeModal({ open, onOpenChange, toUserId }: Props) {
             {todayLogs.map((log) => (
               <LogThumb
                 key={log.id}
-                videoUrl={log.video_url}
+                logId={log.id}
+                videoUrl={resolveLogVideoUrl(log.video_url)}
+                thumbnailUrl={resolveThumbnailUrl(log.thumbnail_path)}
                 hourSlot={log.hour_slot}
                 selected={selectedLogId === log.id}
                 onPress={() =>

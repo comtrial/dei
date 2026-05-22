@@ -8,9 +8,33 @@ jest.mock('expo-video', () => {
 
   return {
     VideoView: ({ testID }: { testID?: string }) => <View testID={testID ?? 'video-view'} />,
-    useVideoPlayer: jest.fn(() => ({ loop: false, muted: true })),
+    useVideoPlayer: jest.fn(() => ({
+      loop: false,
+      muted: true,
+      playing: false,
+      status: 'idle',
+    })),
   };
 });
+
+jest.mock('expo', () => ({
+  useEvent: (
+    _player: unknown,
+    _event: string,
+    initial: Record<string, unknown>
+  ) => initial,
+}));
+
+jest.mock('expo-image', () => {
+  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    Image: (props: { testID?: string }) => <View testID={props.testID ?? 'expo-image'} />,
+  };
+});
+
+jest.mock('@react-navigation/native', () => ({
+  useIsFocused: () => true,
+}));
 
 const days: ProfileLogDay[] = [
   {
@@ -30,6 +54,7 @@ const days: ProfileLogDay[] = [
         slotLabel: '저녁',
         videoPath: 'logs/log-1.mp4',
         videoUrl: 'https://example.test/log-1.mp4',
+        thumbnailUrl: null,
       },
     ],
   },

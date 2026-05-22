@@ -1,9 +1,11 @@
 import { Modal, Pressable, TouchableOpacity, View } from 'react-native';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer } from 'expo-video';
 import { X, Volume2, VolumeX, UserRound } from 'lucide-react-native';
 import { useState } from 'react';
 
 import { Text } from '@/components/ui/text';
+import { VideoWithPoster } from '@/components/ui/VideoWithPoster';
+import { useCachedVideoSource } from '@/hooks/useCachedVideoSource';
 import type { CurationItem } from '@/hooks/useHomeScreen';
 
 interface Props {
@@ -15,7 +17,13 @@ interface Props {
 export function VideoModal({ item, onClose, onProfilePress }: Props) {
   const [muted, setMuted] = useState(false);
 
-  const player = useVideoPlayer(item?.videos?.[0]?.videoUrl || null, (p) => {
+  const firstVideo = item?.videos?.[0] ?? null;
+  const cachedSource = useCachedVideoSource(
+    firstVideo?.videoUrl ?? null,
+    firstVideo?.logId ?? null
+  );
+
+  const player = useVideoPlayer(cachedSource ?? null, (p) => {
     p.loop = true;
     p.muted = false;
     p.play();
@@ -50,8 +58,11 @@ export function VideoModal({ item, onClose, onProfilePress }: Props) {
           onPress={(e) => e.stopPropagation()}
         >
           {/* 영상 */}
-          <VideoView
+          <VideoWithPoster
             player={player}
+            posterUrl={firstVideo?.thumbnailUrl ?? null}
+            videoUrl={firstVideo?.videoUrl ?? null}
+            posterCacheKey={firstVideo?.logId ?? null}
             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
             contentFit="cover"
             nativeControls={false}
