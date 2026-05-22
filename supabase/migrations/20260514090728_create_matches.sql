@@ -14,6 +14,7 @@ CREATE INDEX IF NOT EXISTS matches_user_b_idx ON public.matches (user_b_id, crea
 
 ALTER TABLE public.matches ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "users can read own matches" ON public.matches;
 CREATE POLICY "users can read own matches"
   ON public.matches FOR SELECT
   USING (user_a_id = auth.uid() OR user_b_id = auth.uid());;

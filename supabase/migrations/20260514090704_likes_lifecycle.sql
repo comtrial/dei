@@ -14,6 +14,7 @@ CREATE INDEX IF NOT EXISTS likes_from_user_status_idx
   ON public.likes (from_user_id, status, liked_at DESC);
 
 DROP POLICY IF EXISTS "users can read own likes" ON public.likes;
+DROP POLICY IF EXISTS "users can read sent or received likes" ON public.likes;
 CREATE POLICY "users can read sent or received likes"
   ON public.likes FOR SELECT
   USING (from_user_id = auth.uid() OR to_user_id = auth.uid());
