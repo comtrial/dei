@@ -90,16 +90,26 @@ export async function startIdentityVerification(): Promise<IdentityVerificationR
   };
 }
 
-export async function confirmIdentityVerification(response: IdentityVerificationResponse) {
+export async function confirmIdentityVerification(
+  response: IdentityVerificationResponse,
+  fallbackIdentityVerificationId?: string,
+) {
   if (response.code) {
     throw new Error(response.message || '본인확인이 완료되지 않았어요.');
+  }
+
+  const identityVerificationId =
+    response.identityVerificationId?.trim() || fallbackIdentityVerificationId?.trim();
+
+  if (!identityVerificationId) {
+    throw new Error('본인확인 결과 식별자를 확인할 수 없어요. 다시 시도해 주세요.');
   }
 
   const { data, error } = await supabase.functions.invoke<ConfirmIdentityVerificationResponse>(
     'confirm-identity-verification',
     {
       body: {
-        identityVerificationId: response.identityVerificationId,
+        identityVerificationId,
         identityVerificationTxId: response.identityVerificationTxId,
       },
     },

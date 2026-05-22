@@ -132,7 +132,10 @@ export default function PhoneScreen() {
               setIsConfirmingVerification(true);
 
               try {
-                const result = await confirmIdentityVerification(response);
+                const result = await confirmIdentityVerification(
+                  response,
+                  verificationRequest.identityVerificationId,
+                );
                 const nextEligibility = await refresh();
                 setVerificationRequest(null);
                 router.replace(

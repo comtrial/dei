@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     const storeId = getRequiredEnv('PORTONE_STORE_ID');
     const channelKey = getRequiredEnv('PORTONE_IDENTITY_CHANNEL_KEY');
     const { supabase, user } = await getAuthenticatedUser(req);
-    const identityVerificationId = `dei-${crypto.randomUUID()}`;
+    const identityVerificationId = `dei${crypto.randomUUID().replaceAll('-', '')}`;
     const customData = JSON.stringify({ userId: user.id });
 
     const { error } = await supabase.from('identity_verifications').insert({

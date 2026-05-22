@@ -30,6 +30,33 @@ type ExistingAccountSnapshot = {
   profileComplete: boolean;
 };
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (error && typeof error === 'object') {
+    const maybeError = error as {
+      code?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      message?: unknown;
+    };
+    const parts = [maybeError.message, maybeError.code, maybeError.details, maybeError.hint]
+      .filter((part): part is string => typeof part === 'string' && part.length > 0);
+
+    if (parts.length > 0) {
+      return parts.join(' ');
+    }
+  }
+
+  return fallback;
+};
+
 const toSafeProviderMetadata = (
   identityVerification: PortOneIdentityVerification,
   identityVerificationTxId?: string,
@@ -149,6 +176,8 @@ Deno.serve(async (req) => {
     return errorResponse('method not allowed', 405);
   }
 
+  let stage = 'parse_request';
+
   try {
     const body = await req.json() as ConfirmBody;
     const identityVerificationId = body.identityVerificationId?.trim();
@@ -157,9 +186,12 @@ Deno.serve(async (req) => {
       return errorResponse('identityVerificationId is required');
     }
 
+    stage = 'load_env';
     const apiSecret = getRequiredEnv('PORTONE_API_SECRET');
+    stage = 'authenticate';
     const { supabase, user } = await getAuthenticatedUser(req);
 
+    stage = 'find_pending_verification';
     const { data: pendingVerification, error: pendingError } = await supabase
       .from('identity_verifications')
       .select('id, user_id, status')
@@ -176,6 +208,7 @@ Deno.serve(async (req) => {
       return errorResponse('identity verification request was not found', 404);
     }
 
+    stage = 'fetch_portone_verification';
     const portOneResponse = await fetch(
       `https://api.portone.io/identity-verifications/${encodeURIComponent(identityVerificationId)}`,
       {
@@ -204,6 +237,7 @@ Deno.serve(async (req) => {
       return errorResponse(portOneBody?.message ?? 'PortOne verification lookup failed', 502);
     }
 
+    stage = 'parse_portone_response';
     const identityVerification = (portOneBody.identityVerification
       ?? portOneBody) as PortOneIdentityVerification;
 
@@ -228,6 +262,7 @@ Deno.serve(async (req) => {
     const verifiedAt = identityVerification.verifiedAt ?? new Date().toISOString();
     const verifiedCustomer = identityVerification.verifiedCustomer;
     const phoneNumber = verifiedCustomer?.phoneNumber;
+    stage = 'hash_verified_customer';
     const ciHash = await getIdentityHash('ci', verifiedCustomer?.ci);
     const diHash = await getIdentityHash('di', verifiedCustomer?.di);
     const phoneHash = await getPhoneHash(phoneNumber);
@@ -235,6 +270,7 @@ Deno.serve(async (req) => {
     const identityMatchFilter = getIdentityMatchFilter({ ciHash, diHash, phoneHash });
 
     if (identityMatchFilter) {
+      stage = 'find_existing_profile';
       const { data: existingProfile, error: existingProfileError } = await supabase
         .from('private_profiles')
         .select('user_id, ci_hash, di_hash, phone_hash')
@@ -248,6 +284,7 @@ Deno.serve(async (req) => {
       }
 
       if (existingProfile) {
+        stage = 'load_existing_account';
         const { data: existingAccount, error: existingAccountError } = await supabase
           .from('account_status')
           .select('account_state, onboarding_state, profile_completed_at, first_video_uploaded_at, discovery_enabled_at')
@@ -273,6 +310,7 @@ Deno.serve(async (req) => {
           existingProfile,
           phoneHash,
         });
+        stage = 'transfer_existing_member_account';
         const { error: transferError } = await supabase.rpc('transfer_existing_member_account', {
           p_from_user_id: existingProfile.user_id,
           p_to_user_id: user.id,
@@ -282,6 +320,7 @@ Deno.serve(async (req) => {
           throw transferError;
         }
 
+        stage = 'update_transferred_verification';
         const { error: transferredVerificationUpdateError } = await supabase
           .from('identity_verifications')
           .update({
@@ -311,6 +350,7 @@ Deno.serve(async (req) => {
           throw transferredVerificationUpdateError;
         }
 
+        stage = 'update_transferred_profile';
         const { error: transferredProfileUpdateError } = await supabase
           .from('private_profiles')
           .update({
@@ -325,6 +365,7 @@ Deno.serve(async (req) => {
           throw transferredProfileUpdateError;
         }
 
+        stage = 'update_transferred_account';
         const { error: transferredAccountUpdateError } = await supabase
           .from('account_status')
           .update({
@@ -337,6 +378,7 @@ Deno.serve(async (req) => {
           throw transferredAccountUpdateError;
         }
 
+        stage = 'select_transferred_account';
         const { data: transferredAccount, error: transferredAccountSelectError } =
           await supabase
             .from('account_status')
@@ -365,6 +407,7 @@ Deno.serve(async (req) => {
           }
         }
 
+        stage = 'delete_old_auth_user';
         const { error: oldAuthUserDeleteError } = await supabase.auth.admin.deleteUser(
           existingProfile.user_id,
         );
@@ -384,6 +427,7 @@ Deno.serve(async (req) => {
       }
     }
 
+    stage = 'update_verification';
     const { error: verificationUpdateError } = await supabase
       .from('identity_verifications')
       .update({
@@ -401,6 +445,7 @@ Deno.serve(async (req) => {
       throw verificationUpdateError;
     }
 
+    stage = 'update_private_profile';
     const { error: profileUpdateError } = await supabase
       .from('private_profiles')
       .update({
@@ -415,6 +460,7 @@ Deno.serve(async (req) => {
       throw profileUpdateError;
     }
 
+    stage = 'update_account_identity';
     const { error: accountUpdateError } = await supabase
       .from('account_status')
       .update({
@@ -426,6 +472,7 @@ Deno.serve(async (req) => {
       throw accountUpdateError;
     }
 
+    stage = 'update_onboarding_state';
     const { error: onboardingUpdateError } = await supabase
       .from('account_status')
       .update({
@@ -438,6 +485,7 @@ Deno.serve(async (req) => {
       throw onboardingUpdateError;
     }
 
+    stage = 'select_account';
     const { data: account, error: accountSelectError } = await supabase
       .from('account_status')
       .select('profile_completed_at, first_video_approved_at, discovery_enabled_at')
@@ -467,6 +515,13 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ identityVerifiedAt: verifiedAt });
   } catch (error) {
-    return errorResponse(error instanceof Error ? error.message : 'failed to confirm verification');
+    const message = getErrorMessage(error, 'failed to confirm verification');
+    console.error('confirm-identity-verification failed', { message, stage });
+    const publicMessage =
+      message.includes('configured') || message.includes('authentication required')
+        ? message
+        : '본인확인 결과를 저장할 수 없어요.';
+
+    return errorResponse(publicMessage, 400, { stage });
   }
 });
