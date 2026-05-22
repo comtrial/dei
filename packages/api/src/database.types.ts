@@ -225,6 +225,50 @@ export type Database = {
         }
         Relationships: []
       }
+      conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string | null
+          last_message_preview: string | null
+          match_id: string
+          status: string
+          updated_at: string
+          user_a_id: string
+          user_b_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          match_id: string
+          status?: string
+          updated_at?: string
+          user_a_id: string
+          user_b_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          match_id?: string
+          status?: string
+          updated_at?: string
+          user_a_id?: string
+          user_b_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: true
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       curation_pool: {
         Row: {
           created_at: string
@@ -416,6 +460,7 @@ export type Database = {
           hour_slot: number
           id: string
           recorded_at: string
+          thumbnail_path: string | null
           user_id: string
           video_url: string
           검수_YN: string
@@ -427,6 +472,7 @@ export type Database = {
           hour_slot: number
           id?: string
           recorded_at: string
+          thumbnail_path?: string | null
           user_id: string
           video_url: string
           검수_YN?: string
@@ -438,6 +484,7 @@ export type Database = {
           hour_slot?: number
           id?: string
           recorded_at?: string
+          thumbnail_path?: string | null
           user_id?: string
           video_url?: string
           검수_YN?: string
@@ -449,21 +496,30 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          matched_at: string
           source_like_id: string | null
+          status: string
+          updated_at: string
           user_a_id: string
           user_b_id: string
         }
         Insert: {
           created_at?: string
           id?: string
+          matched_at?: string
           source_like_id?: string | null
+          status?: string
+          updated_at?: string
           user_a_id: string
           user_b_id: string
         }
         Update: {
           created_at?: string
           id?: string
+          matched_at?: string
           source_like_id?: string | null
+          status?: string
+          updated_at?: string
           user_a_id?: string
           user_b_id?: string
         }
@@ -473,6 +529,44 @@ export type Database = {
             columns: ["source_like_id"]
             isOneToOne: false
             referencedRelation: "likes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          body: string
+          conversation_id: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          sender_user_id: string
+          status: string
+        }
+        Insert: {
+          body: string
+          conversation_id: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          sender_user_id: string
+          status?: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          sender_user_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
         ]
@@ -648,6 +742,7 @@ export type Database = {
           removed_at: string | null
           storage_bucket: string
           storage_path: string
+          thumbnail_path: string | null
           updated_at: string
           user_id: string
         }
@@ -665,6 +760,7 @@ export type Database = {
           removed_at?: string | null
           storage_bucket?: string
           storage_path: string
+          thumbnail_path?: string | null
           updated_at?: string
           user_id: string
         }
@@ -682,6 +778,7 @@ export type Database = {
           removed_at?: string | null
           storage_bucket?: string
           storage_path?: string
+          thumbnail_path?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1164,8 +1261,16 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      block_profile_user: {
+        Args: { p_blocked_user_id: string; p_reason?: string }
+        Returns: string
+      }
       can_enter_discovery: {
         Args: { target_user_id?: string }
+        Returns: boolean
+      }
+      chat_is_blocked_between: {
+        Args: { p_user_a: string; p_user_b: string }
         Returns: boolean
       }
       complete_local_dev_identity_verification: {
@@ -1265,23 +1370,24 @@ export type Database = {
           log_id: string
           pool_id: string
           redemption_id: string
+          thumbnail_path: string
           user_id: string
           video_path: string
           video_url: string
         }[]
       }
-      block_profile_user: {
-        Args: { p_blocked_user_id: string; p_reason?: string | null }
-        Returns: string
-      }
       create_profile_report: {
         Args: {
-          p_description?: string | null
-          p_log_id?: string | null
+          p_description?: string
+          p_log_id?: string
           p_reason?: string
           p_reason_category?: string
           p_reported_id: string
         }
+        Returns: string
+      }
+      ensure_conversation_for_match: {
+        Args: { p_user_x: string; p_user_y: string }
         Returns: string
       }
       expire_overdue_likes: { Args: { p_user_id: string }; Returns: number }
@@ -1312,16 +1418,16 @@ export type Database = {
         Args: { p_profile_user_id: string }
         Returns: {
           created_at: string
-          gender: string | null
-          interest_categories: string[] | null
-          interest_tags: string[] | null
-          intro: string | null
-          mbti: string | null
-          nickname: string | null
-          photo_url: string | null
+          gender: string
+          interest_categories: string[]
+          interest_tags: string[]
+          intro: string
+          mbti: string
+          nickname: string
+          photo_url: string
           profile_user_id: string
-          region_sido: string | null
-          region_sigungu: string | null
+          region_sido: string
+          region_sigungu: string
         }[]
       }
       get_public_profile_logs: {
@@ -1332,6 +1438,7 @@ export type Database = {
           hour_slot: number
           id: string
           recorded_at: string
+          thumbnail_path: string
           user_id: string
           video_url: string
         }[]
@@ -1366,6 +1473,19 @@ export type Database = {
         }
       }
       is_admin: { Args: never; Returns: boolean }
+      is_public_profile_visible: {
+        Args: { p_profile_user_id: string; p_viewer_user_id: string }
+        Returns: boolean
+      }
+      leave_conversation: {
+        Args: { p_conversation_id: string }
+        Returns: {
+          conversation_id: string
+          match_id: string
+          other_user_id: string
+          status: string
+        }[]
+      }
       recalculate_daily_log: { Args: { p_user_id: string }; Returns: undefined }
       recalculate_daily_log_for_date: {
         Args: { p_log_date: string; p_user_id: string }
@@ -1457,6 +1577,17 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      send_message: {
+        Args: { p_body: string; p_conversation_id: string }
+        Returns: {
+          body: string
+          conversation_id: string
+          created_at: string
+          id: string
+          sender_user_id: string
+          status: string
+        }[]
       }
       transfer_existing_member_account: {
         Args: { p_from_user_id: string; p_to_user_id: string }
@@ -1665,3 +1796,4 @@ export const Constants = {
     },
   },
 } as const
+

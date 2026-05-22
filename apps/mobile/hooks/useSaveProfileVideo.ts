@@ -1,6 +1,7 @@
 import { logger } from '@dei/shared';
 import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
@@ -52,6 +53,7 @@ export function useSaveProfileVideo() {
 
       let fileSizeBytes: number | null = null;
       let storagePath = `${userId}/dev-${Date.now()}.mp4`;
+      let thumbnailPath: string | null = null;
 
       if (tempVideoUri) {
         const fileInfo = await FileSystem.getInfoAsync(tempVideoUri);
@@ -69,22 +71,68 @@ export function useSaveProfileVideo() {
           throw new Error('촬영 파일을 읽을 수 없어요. 다시 촬영해 주세요.');
         }
 
-        const fileName = `${userId}/${Date.now()}.${getVideoExtension(tempVideoUri)}`;
+        const ts = Date.now();
+        const fileName = `${userId}/${ts}.${getVideoExtension(tempVideoUri)}`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        // 영상 + 썸네일 병렬 업로드. 썸네일 실패는 영상 업로드를 막지 않음.
+        const videoUploadPromise = supabase.storage
           .from('profile-videos')
           .upload(fileName, arrayBuffer, { contentType, upsert: false });
+
+        const thumbnailUploadPromise = (async (): Promise<string | null> => {
+          try {
+            const { uri: thumbLocalUri } = await VideoThumbnails.getThumbnailAsync(
+              tempVideoUri,
+              { time: 0, quality: 0.7 }
+            );
+            const thumbBuffer = await new File(thumbLocalUri).arrayBuffer();
+            if (thumbBuffer.byteLength === 0) {
+              await FileSystem.deleteAsync(thumbLocalUri, { idempotent: true }).catch(
+                () => undefined
+              );
+              return null;
+            }
+            const thumbName = `${userId}/${ts}.jpg`;
+            const { data: thumbData, error: thumbError } = await supabase.storage
+              .from('thumbnails')
+              .upload(thumbName, thumbBuffer, { contentType: 'image/jpeg', upsert: false });
+            await FileSystem.deleteAsync(thumbLocalUri, { idempotent: true }).catch(
+              () => undefined
+            );
+            if (thumbError) {
+              logger.captureException(thumbError, {
+                tags: { feature: 'save-profile-video-thumbnail' },
+                extra: { step: 'upload', thumbName },
+              });
+              return null;
+            }
+            return thumbData?.path ?? null;
+          } catch (thumbError) {
+            logger.captureException(thumbError, {
+              tags: { feature: 'save-profile-video-thumbnail' },
+              extra: { step: 'extract' },
+            });
+            return null;
+          }
+        })();
+
+        const [
+          { data: uploadData, error: uploadError },
+          resolvedThumbnailPath,
+        ] = await Promise.all([videoUploadPromise, thumbnailUploadPromise]);
 
         if (uploadError) {
           throw uploadError;
         }
 
         storagePath = uploadData.path;
+        thumbnailPath = resolvedThumbnailPath;
       }
 
       const { error: insertError } = await supabase.from('profile_videos').insert({
         user_id: userId,
         storage_path: storagePath,
+        thumbnail_path: thumbnailPath,
         duration_ms: clampProfileVideoDuration(recordedMs),
         file_size_bytes: fileSizeBytes,
         mime_type: tempVideoUri ? getVideoContentType(tempVideoUri) : 'video/mp4',

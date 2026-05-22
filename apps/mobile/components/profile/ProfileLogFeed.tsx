@@ -1,7 +1,9 @@
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer } from 'expo-video';
 import { TouchableOpacity, View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
+import { VideoWithPoster } from '@/components/ui/VideoWithPoster';
+import { useCachedVideoSource } from '@/hooks/useCachedVideoSource';
 import type { ProfileLogDay, ProfileLogItem } from '@/lib/profileLogs';
 
 type ProfileLogFeedProps = {
@@ -25,7 +27,8 @@ function ProfileLogCard({
   log: ProfileLogItem;
   onPress?: (log: ProfileLogItem) => void;
 }) {
-  const player = useVideoPlayer(log.videoUrl || null, (p) => {
+  const cachedSource = useCachedVideoSource(log.videoUrl || null, log.id);
+  const player = useVideoPlayer(cachedSource ?? null, (p) => {
     p.loop = true;
     p.muted = true;
     p.play();
@@ -40,10 +43,13 @@ function ProfileLogCard({
       style={{ aspectRatio: 3 / 4 }}
       testID={`profile-log-card-${log.id}`}
     >
-      <VideoView
+      <VideoWithPoster
         contentFit="cover"
         nativeControls={false}
         player={player}
+        posterUrl={log.thumbnailUrl}
+        videoUrl={log.videoUrl}
+        posterCacheKey={log.id}
         style={{ bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 }}
       />
 

@@ -9,6 +9,8 @@ import {
   type ProfileLogSource,
 } from '@/lib/profileLogs';
 import { supabase } from '@/lib/supabase';
+import { prefetchVideos } from '@/lib/videoCache';
+import { prefetchPosters } from '@/lib/videoThumbnail';
 
 type PublicProfileRow =
   Database['public']['Functions']['get_public_profile']['Returns'][number];
@@ -125,7 +127,11 @@ function mapOwnProfile(row: OwnProfileRow, photoUrl: string | null): ProfileSumm
 function toDays(logs: ProfileLogSource[]): ProfileLogDay[] {
   return groupProfileLogsByDate(
     logs.map((log) =>
-      toProfileLogItem(log, (path) => publicStorageUrl('logs', path) ?? '')
+      toProfileLogItem(
+        log,
+        (path) => publicStorageUrl('logs', path) ?? '',
+        (path) => publicStorageUrl('thumbnails', path)
+      )
     )
   );
 }
@@ -139,6 +145,7 @@ function toProfileLogSource(row: PublicProfileLogRow): ProfileLogSource {
     recorded_at: row.recorded_at,
     user_id: row.user_id,
     video_url: row.video_url,
+    thumbnail_path: row.thumbnail_path,
   };
 }
 
@@ -186,7 +193,9 @@ export function useProfileFeed(mode: ProfileMode, profileUserId: string | undefi
             .maybeSingle(),
           supabase
             .from('logs')
-            .select('id, user_id, video_url, hour_slot, duration_sec, recorded_at, created_at')
+            .select(
+              'id, user_id, video_url, thumbnail_path, hour_slot, duration_sec, recorded_at, created_at'
+            )
             .eq('user_id', profileUserId)
             .order('recorded_at', { ascending: false }),
         ]);
@@ -259,14 +268,24 @@ export function useProfileFeed(mode: ProfileMode, profileUserId: string | undefi
     load();
   }, [load]);
 
+  // 프로필 진입 시 최신 로그 6개 영상/포스터 워밍업.
+  useEffect(() => {
+    const flatLogs = state.days.flatMap((day) => day.logs).slice(0, 6);
+    if (flatLogs.length === 0) return;
+    prefetchVideos(flatLogs.map((log) => ({ url: log.videoUrl, cacheKey: log.id })));
+    const posterInputs = flatLogs
+      .filter((log) => !log.thumbnailUrl)
+      .map((log) => ({ videoUrl: log.videoUrl, cacheKey: log.id }));
+    if (posterInputs.length > 0) prefetchPosters(posterInputs);
+  }, [state.days]);
+
   const reportProfile = useCallback(async (): Promise<boolean> => {
     if (!profileUserId || mode !== 'public') return false;
 
     setState((prev) => ({ ...prev, isReporting: true }));
     try {
+      // p_description, p_log_id 는 default null 이라 생략 (rpc 타입이 nullable 을 안 받아서)
       const { error } = await supabase.rpc('create_profile_report', {
-        p_description: null,
-        p_log_id: null,
         p_reason: '프로필 신고',
         p_reason_category: 'OTHER',
         p_reported_id: profileUserId,
