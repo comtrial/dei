@@ -1,6 +1,7 @@
-import { logger } from '@dei/shared';
 import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+import { logger } from '@dei/shared';
 
 import { configureRevenueCat, logOutRevenueCat } from '@/lib/revenuecat';
 import { supabase } from '@/lib/supabase';
@@ -15,6 +16,14 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function isInvalidRefreshTokenError(error: unknown) {
+  return error instanceof Error && error.message.includes('Invalid Refresh Token');
+}
+
+async function clearLocalAuthSession() {
+  await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,36 +31,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
+    const loadSession = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+
         if (!mounted) {
+          return;
+        }
+
+        if (error) {
+          if (!isInvalidRefreshTokenError(error)) {
+            logger.captureException(error, {
+              tags: { feature: 'auth', action: 'get-session' },
+            });
+          }
+          await clearLocalAuthSession();
+          setSession(null);
           return;
         }
 
         setSession(data.session);
-        setIsLoading(false);
-      })
-      .catch(async (error) => {
-        // Refresh token 손상 등으로 getSession 이 reject 되는 경우 isLoading 이 풀리지 않아
-        // RootGate 가 무한 대기 → 화면이 splash 에서 멈춘다. 로컬 세션을 정리하고 unauthenticated 로 진행.
-        logger.captureException(error, {
-          tags: { feature: 'auth-get-session-init' },
-        });
-
-        try {
-          await supabase.auth.signOut();
-        } catch {
-          /* signOut 자체도 실패할 수 있으나 그래도 unauthenticated 로 떨어뜨려야 한다. */
-        }
-
+      } catch (error) {
         if (!mounted) {
           return;
         }
 
+        if (!isInvalidRefreshTokenError(error)) {
+          logger.captureException(error, {
+            tags: { feature: 'auth', action: 'get-session' },
+          });
+        }
+        await clearLocalAuthSession();
         setSession(null);
-        setIsLoading(false);
-      });
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadSession();
 
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
@@ -92,7 +111,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(data.session);
     return data.session;
   }, [session]);
-
 
   const signOut = useCallback(async () => {
     await logOutRevenueCat();

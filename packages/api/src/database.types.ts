@@ -1418,6 +1418,30 @@ export type Database = {
         Args: { p_user_a: string; p_user_b: string }
         Returns: boolean
       }
+      complete_local_dev_consumable_purchase: {
+        Args: { p_product_id?: string }
+        Returns: {
+          consumed_at: string | null
+          created_at: string
+          granted_at: string
+          granted_count: number
+          id: string
+          payment_id: string
+          product_id: string
+          remaining_count: number
+          revoke_reason: string | null
+          revoked_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "refresh_item_grants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       complete_local_dev_identity_verification: {
         Args: never
         Returns: {
@@ -1557,6 +1581,10 @@ export type Database = {
       }
       evaluate_my_flags: { Args: never; Returns: Json }
       expire_overdue_likes: { Args: { p_user_id: string }; Returns: number }
+      get_available_heart_count: {
+        Args: { p_user_id?: string }
+        Returns: number
+      }
       get_available_refresh_item_count: {
         Args: { p_user_id?: string }
         Returns: number
@@ -1639,8 +1667,13 @@ export type Database = {
         }
       }
       is_admin: { Args: never; Returns: boolean }
+      is_heart_product: { Args: { p_product_id: string }; Returns: boolean }
       is_public_profile_visible: {
         Args: { p_profile_user_id: string; p_viewer_user_id: string }
+        Returns: boolean
+      }
+      is_refresh_item_product: {
+        Args: { p_product_id: string }
         Returns: boolean
       }
       leave_conversation: {
@@ -2023,4 +2056,3 @@ export const Constants = {
     },
   },
 } as const
-

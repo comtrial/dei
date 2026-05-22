@@ -1,4 +1,7 @@
 import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+
+import { logger } from '@dei/shared';
 
 import { useSendLike } from '@/hooks/useSendLike';
 import { getToday } from '@/lib/dateHelpers';
@@ -21,20 +24,63 @@ export function useLike(userId: string | undefined) {
   const likeUsed = remainingLikes <= 0;
 
   const checkRemainingLikes = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) {
+      setLikedUserIds(new Set());
+      setRemainingLikes(0);
+      return;
+    }
+
     setChecking(true);
     const today = getToday();
-    const { data } = await supabase
-      .from('likes')
-      .select('to_user_id')
-      .eq('from_user_id', userId)
-      .gte('liked_at', `${today}T00:00:00.000Z`);
+    const todayStart = new Date(`${today}T00:00:00.000+09:00`);
+    const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+    const nowIso = new Date().toISOString();
 
-    const likedIds = data?.map((like) => like.to_user_id) ?? [];
-    setLikedUserIds(new Set(likedIds));
-    setRemainingLikes(Math.max(0, FREE_DAILY_QUOTA - likedIds.length));
-    setChecking(false);
+    try {
+      const [todayLikesResult, sentLikesResult] = await Promise.all([
+        supabase
+          .from('likes')
+          .select('id')
+          .eq('from_user_id', userId)
+          .gte('liked_at', todayStart.toISOString())
+          .lt('liked_at', tomorrowStart.toISOString()),
+        supabase
+          .from('likes')
+          .select('to_user_id, status, expires_at')
+          .eq('from_user_id', userId)
+          .in('status', ['pending', 'accepted']),
+      ]);
+
+      if (todayLikesResult.error) throw todayLikesResult.error;
+      if (sentLikesResult.error) throw sentLikesResult.error;
+
+      const activeLikedIds =
+        sentLikesResult.data
+          ?.filter(
+            (like) => like.status === 'accepted' || new Date(like.expires_at).toISOString() > nowIso
+          )
+          .map((like) => like.to_user_id) ?? [];
+      const todayLikeCount = todayLikesResult.data?.length ?? 0;
+
+      setLikedUserIds(new Set(activeLikedIds));
+      setRemainingLikes(Math.max(0, FREE_DAILY_QUOTA - todayLikeCount));
+    } catch (error) {
+      logger.captureException(error, {
+        tags: { feature: 'likes', action: 'check-remaining' },
+        extra: { userId },
+      });
+      setLikedUserIds(new Set());
+      setRemainingLikes(0);
+    } finally {
+      setChecking(false);
+    }
   }, [userId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void checkRemainingLikes();
+    }, [checkRemainingLikes])
+  );
 
   const hasLikedUser = useCallback(
     (toUserId: string) => likedUserIds.has(toUserId),

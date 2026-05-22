@@ -32,6 +32,14 @@ export function getRefreshProductId() {
   return process.env.EXPO_PUBLIC_REVENUECAT_REFRESH_PRODUCT_ID?.trim() || 'dei_refresh_1';
 }
 
+export function getHeartOfferingId() {
+  return process.env.EXPO_PUBLIC_REVENUECAT_HEART_OFFERING_ID?.trim() || 'heart';
+}
+
+export function getHeartProductId() {
+  return process.env.EXPO_PUBLIC_REVENUECAT_HEART_PRODUCT_ID?.trim() || 'dei_heart_1';
+}
+
 export function isRevenueCatAvailable() {
   return Boolean(getRevenueCatApiKey()) && Platform.OS !== 'web';
 }

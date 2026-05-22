@@ -17,10 +17,15 @@ describe('HomeTopBar', () => {
     mockPush.mockClear();
   });
 
-  it('shows the current heart balance and keeps the fixed notification button removed', () => {
-    const { getByText, queryByLabelText } = render(<HomeTopBar heartCount={3} />);
+  it('shows the current heart and refresh ticket balances and keeps the fixed notification button removed', () => {
+    const { getByText, queryByLabelText } = render(
+      <HomeTopBar heartCount={3} refreshItemCount={2} />,
+    );
 
     expect(getByText('3')).toBeTruthy();
+    expect(getByText('2')).toBeTruthy();
+    expect(queryByLabelText('보유 하트 3개')).toBeTruthy();
+    expect(queryByLabelText('보유 이용권 2개')).toBeTruthy();
     expect(queryByLabelText('알림')).toBeNull();
   });
 

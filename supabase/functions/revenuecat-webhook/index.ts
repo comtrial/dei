@@ -4,6 +4,7 @@ import {
   getPaymentAmount,
   getRefreshProductId,
   getUuidCandidate,
+  isHeartProduct,
   toIsoDateFromMillis,
   type RevenueCatWebhookEvent,
 } from '../_shared/revenuecat.ts';
@@ -74,8 +75,10 @@ Deno.serve(async (req) => {
 
     const productId = event.product_id;
     const refreshProductId = getRefreshProductId();
+    const isHeart = productId ? isHeartProduct(productId) : false;
+    const isKnownProduct = productId === refreshProductId || isHeart;
 
-    if (!productId || productId !== refreshProductId || event.type === 'TEST') {
+    if (!productId || !isKnownProduct || event.type === 'TEST') {
       await supabase
         .from('revenuecat_webhook_events')
         .update({ processed_at: new Date().toISOString() })
@@ -118,7 +121,7 @@ Deno.serve(async (req) => {
         offering_id: event.presented_offering_id ?? null,
         payment_method: 'IAP',
         product_id: productId,
-        product_type: 'REFRESH',
+        product_type: isHeart ? 'HEART' : 'REFRESH',
         provider: 'revenuecat',
         purchased_at: toIsoDateFromMillis(event.purchased_at_ms) ?? new Date().toISOString(),
         raw_payload: {
@@ -163,7 +166,9 @@ Deno.serve(async (req) => {
       }
 
       const notificationResult = await supabase.rpc('create_notification', {
-        p_body: '결제 성공 후 하트 1개가 충전됐어요.',
+        p_body: isHeart
+          ? '결제 성공 후 하트 1개가 충전됐어요.'
+          : '결제 성공 후 신규 3명 매칭 이용권이 충전됐어요.',
         p_dedupe_key: `payment:${paymentResult.data.id}:success`,
         p_metadata: {
           eventId: event.id,
@@ -173,7 +178,7 @@ Deno.serve(async (req) => {
           source: 'revenuecat-webhook',
         },
         p_route: '/home',
-        p_title: '하트가 충전됐어요',
+        p_title: isHeart ? '하트가 충전됐어요' : '매칭 이용권이 충전됐어요',
         p_type: 'payment_succeeded',
         p_user_id: userId,
       });

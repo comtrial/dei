@@ -15,10 +15,12 @@ type PaidRefreshSheetProps = {
   onDeveloperComplete: () => void;
   onPurchase: () => void;
   priceLabel?: string;
+  productLabel?: string;
+  title?: string;
 };
 
 export function PaidRefreshSheet({
-  description = '결제 성공 후 하트가 충전되고, 바로 새로운 사람 3명을 더 볼 수 있어요',
+  description = '결제하면 새로운 3명을 이어서 볼 수 있어요',
   isDeveloperBypassEnabled = false,
   isDeveloperCompleting = false,
   isOpen,
@@ -27,6 +29,8 @@ export function PaidRefreshSheet({
   onDeveloperComplete,
   onPurchase,
   priceLabel = '스토어 가격 확인 후 표시',
+  productLabel = '신규 3명 매칭 이용권',
+  title = '신규 3명 매칭 이용권',
 }: PaidRefreshSheetProps) {
   return (
     <Modal
@@ -48,7 +52,7 @@ export function PaidRefreshSheet({
                 <Icon as={RefreshCw} className="text-[#9A6A22]" size={24} />
               </View>
               <Text className="text-[24px] font-bold leading-8 text-[#201B16]">
-                하트 충전
+                {title}
               </Text>
               <Text className="text-[16px] leading-6 text-[#776B5C]">
                 {description}
@@ -67,7 +71,7 @@ export function PaidRefreshSheet({
           <View className="flex-row items-center justify-between rounded-md border border-[#E2D4BA] bg-[#FFF8EA] px-4 py-3">
             <View className="flex-row items-center gap-2">
               <Icon as={CreditCard} className="text-[#9A6A22]" size={18} />
-              <Text className="font-semibold text-[#201B16]">하트 1개</Text>
+              <Text className="font-semibold text-[#201B16]">{productLabel}</Text>
             </View>
             <Text className="font-bold text-[#201B16]">{priceLabel}</Text>
           </View>

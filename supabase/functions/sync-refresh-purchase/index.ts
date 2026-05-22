@@ -5,6 +5,7 @@ import {
   getPaymentAmount,
   getRequiredEnv,
   getRefreshProductId,
+  isHeartProduct,
   type RevenueCatSubscriberResponse,
 } from '../_shared/revenuecat.ts';
 
@@ -31,6 +32,7 @@ Deno.serve(async (req) => {
     const { supabase, user } = await getAuthenticatedUser(req);
     const body = await req.json() as SyncRefreshPurchaseBody;
     const productId = body.productId?.trim() || getRefreshProductId();
+    const isHeart = isHeartProduct(productId);
     const transactionId = body.transactionId?.trim();
 
     if (!transactionId) {
@@ -86,7 +88,7 @@ Deno.serve(async (req) => {
       package_id: body.packageId ?? null,
       payment_method: 'IAP',
       product_id: productId,
-      product_type: 'REFRESH',
+      product_type: isHeart ? 'HEART' : 'REFRESH',
       provider: 'revenuecat',
       purchased_at: purchase.purchase_date ?? body.purchaseDate ?? new Date().toISOString(),
       raw_payload: {
@@ -130,7 +132,9 @@ Deno.serve(async (req) => {
     }
 
     const notificationResult = await supabase.rpc('create_notification', {
-      p_body: '결제 성공 후 하트 1개가 충전됐어요.',
+      p_body: isHeart
+        ? '결제 성공 후 하트 1개가 충전됐어요.'
+        : '결제 성공 후 신규 3명 매칭 이용권이 충전됐어요.',
       p_dedupe_key: `payment:${paymentResult.data.id}:success`,
       p_metadata: {
         paymentId: paymentResult.data.id,
@@ -139,7 +143,7 @@ Deno.serve(async (req) => {
         source: 'sync-refresh-purchase',
       },
       p_route: '/home',
-      p_title: '하트가 충전됐어요',
+      p_title: isHeart ? '하트가 충전됐어요' : '매칭 이용권이 충전됐어요',
       p_type: 'payment_succeeded',
       p_user_id: user.id,
     });
@@ -148,16 +152,23 @@ Deno.serve(async (req) => {
       throw notificationResult.error;
     }
 
-    const countResult = await supabase.rpc('get_available_refresh_item_count', {
+    const refreshCountResult = await supabase.rpc('get_available_refresh_item_count', {
+      p_user_id: user.id,
+    });
+    const heartCountResult = await supabase.rpc('get_available_heart_count', {
       p_user_id: user.id,
     });
 
-    if (countResult.error) {
-      throw countResult.error;
+    if (refreshCountResult.error) {
+      throw refreshCountResult.error;
+    }
+    if (heartCountResult.error) {
+      throw heartCountResult.error;
     }
 
     return jsonResponse({
-      availableRefreshCount: countResult.data ?? 0,
+      availableHeartCount: heartCountResult.data ?? 0,
+      availableRefreshCount: refreshCountResult.data ?? 0,
       paymentId: paymentResult.data.id,
       refreshGrantId: grantResult.data?.id,
     });
