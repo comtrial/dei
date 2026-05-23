@@ -33,6 +33,13 @@ type ConsumablePurchaseConfig = {
   productId: string;
 };
 
+export function findPackageByProductId(
+  packages: PurchasesPackage[],
+  productId: string,
+): PurchasesPackage | null {
+  return packages.find((item) => item.product.identifier === productId) ?? null;
+}
+
 async function getConsumablePackage(
   userId: string,
   config: ConsumablePurchaseConfig,
@@ -45,17 +52,13 @@ async function getConsumablePackage(
 
   const PurchasesClient = await getRevenueCatPurchases();
   const offerings = await PurchasesClient.getOfferings();
-  const offering = offerings.all[config.offeringId] ?? offerings.current;
+  const offering = offerings.all[config.offeringId];
 
   if (!offering) {
     return null;
   }
 
-  return (
-    offering.availablePackages.find((item) => item.product.identifier === config.productId) ??
-    offering.availablePackages[0] ??
-    null
-  );
+  return findPackageByProductId(offering.availablePackages, config.productId);
 }
 
 export async function getRefreshOfferingInfo(userId: string): Promise<RefreshOfferingInfo> {
