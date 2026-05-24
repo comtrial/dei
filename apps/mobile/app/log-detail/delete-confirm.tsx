@@ -3,6 +3,8 @@ import { View } from 'react-native';
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
+import { analytics } from '@dei/shared';
+
 import { DeleteConfirmDialog } from '@/components/log-detail/DeleteConfirmDialog';
 import { Toast } from '@/components/ui/toast';
 import { useDeleteLog } from '@/hooks/useDeleteLog';
@@ -46,6 +48,11 @@ export default function DeleteConfirmRoute() {
     }
 
     if (willBecomeIncomplete === '1') {
+      // DL8 데일리 로그 미완성 토스트 표시 시점 — 리텐션 계측.
+      analytics.capture('daily_log_incomplete', {
+        previous_log_count:
+          result.kind === 'ok-remaining' ? result.remainingCount + 1 : undefined,
+      });
       setToastVisible(true);
     } else {
       router.back();

@@ -74,7 +74,7 @@ export default function ReceivedLikeDetailRoute() {
       {/* 수락/거절 CTA (LK6, LK7) — 프로필 위에 하단 floating 으로 유지 */}
       {id && (
         <View className="absolute bottom-0 left-0 right-0">
-          <ReceivedLikeFooter likeId={id} onResolved={handleResolved} />
+          <ReceivedLikeFooter likeId={id} likedAt={like?.liked_at} onResolved={handleResolved} />
         </View>
       )}
     </View>

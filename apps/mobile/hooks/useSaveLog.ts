@@ -35,7 +35,7 @@ export function useSaveLog() {
   }: {
     tempVideoUri: string;
     recordedMs: number;
-  }): Promise<{ success: true } | { success: false; message: string }> => {
+  }): Promise<{ success: true; logId: string | null } | { success: false; message: string }> => {
     setLoading(true);
     try {
       const {
@@ -128,16 +128,20 @@ export function useSaveLog() {
 
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from('logs').insert({
-        user_id: userId,
-        video_url: uploadData.path,
-        thumbnail_path: thumbnailPath,
-        hour_slot: hourSlot,
-        duration_sec: Math.round(recordedMs / 1000),
-        검수_YN: 'N',
-        검수_상태: 'PENDING',
-        recorded_at: new Date().toISOString(),
-      });
+      const { data: insertedLog, error: insertError } = await supabase
+        .from('logs')
+        .insert({
+          user_id: userId,
+          video_url: uploadData.path,
+          thumbnail_path: thumbnailPath,
+          hour_slot: hourSlot,
+          duration_sec: Math.round(recordedMs / 1000),
+          검수_YN: 'N',
+          검수_상태: 'PENDING',
+          recorded_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
 
       if (insertError) throw insertError;
 
@@ -152,7 +156,7 @@ export function useSaveLog() {
         });
       }
 
-      return { success: true };
+      return { success: true, logId: insertedLog?.id ?? null };
     } catch (e) {
       logger.captureException(e, {
         tags: { feature: 'save-log' },

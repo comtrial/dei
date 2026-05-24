@@ -31,7 +31,7 @@ import { loadConversationGate } from '@/lib/chat/chat-service';
 import { resolveChatRoute } from '@/lib/chat/route-gate';
 import { ROUTES } from '@/lib/routes';
 import { useAuth } from '@/providers/auth-provider';
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 export default function ChatRouteGate() {
   const router = useRouter();
@@ -86,6 +86,13 @@ export default function ChatRouteGate() {
           message: 'chat_route_resolved',
           category: 'chat',
           data: { outcome: resolution.outcome },
+        });
+
+        // NSM Conversation funnel: CH0 라우터가 판정한 outcome 을 그대로 계측.
+        // resolveChatRoute(순수함수)의 ChatRouteResolution.outcome 을 1:1 전달.
+        analytics.capture('chat_route_resolved', {
+          outcome: resolution.outcome,
+          conversation_id: resolution.conversationId ?? undefined,
         });
 
         switch (resolution.outcome) {
