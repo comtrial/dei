@@ -12,8 +12,10 @@ import { FeatureFlagsProvider } from '@/providers/feature-flags-provider';
 import { RootGate } from '@/providers/root-gate';
 import { NAV_THEME } from '@/lib/theme';
 import { Sentry, initSentry } from '@/lib/sentry';
+import { initPostHog } from '@/lib/posthog';
 
 initSentry();
+initPostHog();
 
 export const unstable_settings = {
   anchor: '(auth)',
