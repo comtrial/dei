@@ -31,12 +31,12 @@ jest.mock('@/lib/recordingStore', () => ({
   setOverwriteAcknowledged: jest.fn(),
 }));
 
-// expo-video / orientation / linear-gradient / file-system: 네이티브 의존성 제거.
+// expo-video / linear-gradient / file-system: 네이티브 의존성 제거.
+// (expo-screen-orientation 은 result.tsx 에서 orientation-turbo 도입과 함께 제거됨)
 jest.mock('expo-video', () => ({
   useVideoPlayer: () => ({ loop: false, muted: true, play: jest.fn() }),
   VideoView: () => null,
 }));
-jest.mock('expo-screen-orientation', () => ({ unlockAsync: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual<typeof import('react-native')>('react-native');
   return { LinearGradient: View };

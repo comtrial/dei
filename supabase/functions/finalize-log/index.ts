@@ -15,6 +15,7 @@
 //   videoPath:        Storage 'logs' 버킷의 객체 path (필수) — 클라가 직전에 업로드 완료
 //   thumbnailPath:    Storage 'thumbnails' 버킷의 객체 path (선택)
 //   recordedMs:       클라가 측정한 실제 녹화 길이 (ms, 1..60000)
+//   comment:          영상 검수 화면에서 입력한 코멘트 (선택, 최대 50자)
 //
 // 응답:
 //   200 { logId, hourSlot, recordedAt }                       정상 저장
@@ -28,10 +29,12 @@ type FinalizeLogBody = {
   videoPath?: string;
   thumbnailPath?: string | null;
   recordedMs?: number;
+  comment?: string | null;
 };
 
 const MAX_RECORDED_MS = 60_000; // 1분 — 현 정책상 2초지만 여유 상한
 const MIN_RECORDED_MS = 1;
+const MAX_COMMENT_LENGTH = 50; // logs_comment_length_check 와 동일 — DB CHECK 가 최후 방어선
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -62,6 +65,8 @@ Deno.serve(async (req) => {
         ? body.thumbnailPath.trim()
         : null;
     const recordedMs = typeof body.recordedMs === 'number' ? body.recordedMs : null;
+    const commentRaw = typeof body.comment === 'string' ? body.comment.trim() : '';
+    const comment = commentRaw.length > 0 ? commentRaw : null;
 
     if (!videoPath) {
       return errorResponse('videoPath is required', 400, { retryable: false });
@@ -78,12 +83,37 @@ Deno.serve(async (req) => {
         { retryable: false },
       );
     }
+    if (comment !== null && comment.length > MAX_COMMENT_LENGTH) {
+      return errorResponse(
+        `comment must be ${MAX_COMMENT_LENGTH} characters or less`,
+        400,
+        { retryable: false },
+      );
+    }
 
     // 서버 시계 기준 — 클라 시계가 잘못된 경우(폰 수동 조작 등)에도 슬롯 일관성 보장.
-    // hour_slot 정책은 UTC 기준 hour. (기존 클라 로직과 동일한 동작 유지)
+    //
+    // hour_slot 정책은 한국시간(Asia/Seoul) 기준 hour 다. 조회 측 코드 (useTodayClip,
+    // useTodayLogs, useProfileFeed, useLogDetail, useSaveLog 의 폴백 등) 가 모두 폰
+    // 로컬 시계(KST)로 hour_slot 을 비교하므로 서버 측도 동일하게 KST 로 계산해야
+    // dialog/중복 cleanup 등 정합성이 깨지지 않는다.
+    //
+    // 이전 버전은 getUTCHours() 를 써서 KST 15시 촬영 영상이 hour_slot=6 으로 박혔고,
+    // useTodayClip 이 hour_slot=15 로 검색해 매칭 실패 → "이미 OO시에 촬영된 로그가
+    // 있습니다" dialog 가 안 떴다. 동시에 same-slot cleanup 의 select 도 매칭 실패해
+    // 같은 KST 시간대에 중복 row 가 누적되는 부작용까지 있었다.
     const recordedAt = new Date();
-    const hourSlot = recordedAt.getUTCHours();
-    const todayUtc = recordedAt.toISOString().slice(0, 10); // YYYY-MM-DD
+    const kstNow = new Date(recordedAt.getTime() + 9 * 60 * 60 * 1000);
+    const hourSlot = kstNow.getUTCHours(); // KST hour (0..23)
+    const todayKst = kstNow.toISOString().slice(0, 10); // KST YYYY-MM-DD
+    // KST 자정 ~ 다음날 자정 직전을 UTC ISO 로 환산. KST = UTC+9 이므로
+    // KST 00:00:00 == UTC 전날 15:00:00, KST 23:59:59.999 == UTC 당일 14:59:59.999.
+    const kstDayStartUtc = new Date(
+      Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate(), -9, 0, 0, 0),
+    ).toISOString();
+    const kstDayEndUtc = new Date(
+      Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate(), 14, 59, 59, 999),
+    ).toISOString();
 
     // 1) 기존 같은 슬롯 row 조회 (RLS 통과 — 본인 row 만)
     const { data: existing, error: selectError } = await supabaseAsUser
@@ -91,8 +121,8 @@ Deno.serve(async (req) => {
       .select('id, video_url, thumbnail_path')
       .eq('user_id', user.id)
       .eq('hour_slot', hourSlot)
-      .gte('recorded_at', `${todayUtc}T00:00:00.000Z`)
-      .lte('recorded_at', `${todayUtc}T23:59:59.999Z`)
+      .gte('recorded_at', kstDayStartUtc)
+      .lte('recorded_at', kstDayEndUtc)
       .maybeSingle();
 
     if (selectError) {
@@ -143,6 +173,7 @@ Deno.serve(async (req) => {
         thumbnail_path: thumbnailPath,
         hour_slot: hourSlot,
         duration_sec: Math.max(1, Math.round(recordedMs / 1000)),
+        comment,
         '검수_YN': 'N',
         '검수_상태': 'PENDING',
         recorded_at: recordedAt.toISOString(),

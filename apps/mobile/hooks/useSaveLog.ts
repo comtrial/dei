@@ -32,9 +32,11 @@ export function useSaveLog() {
   const saveLog = async ({
     tempVideoUri,
     recordedMs,
+    comment,
   }: {
     tempVideoUri: string;
     recordedMs: number;
+    comment?: string | null;
   }): Promise<{ success: true; logId: string | null } | { success: false; message: string }> => {
     setLoading(true);
     try {
@@ -43,6 +45,9 @@ export function useSaveLog() {
       } = await supabase.auth.getSession();
       const userId = session?.user.id;
       if (!userId) throw new Error('Not authenticated');
+
+      const trimmedComment = (comment ?? '').trim();
+      const normalizedComment = trimmedComment.length > 0 ? trimmedComment : null;
 
       const fileInfo = await FileSystem.getInfoAsync(tempVideoUri);
 
@@ -122,6 +127,7 @@ export function useSaveLog() {
         videoPath: uploadData.path,
         thumbnailPath,
         recordedMs,
+        comment: normalizedComment,
       });
 
       // PostHog log_recorded 의 log_id 용. Edge 응답이 우선, 폴백 시 insert 결과로 채운다.
@@ -142,6 +148,7 @@ export function useSaveLog() {
           hourSlot,
           today,
           recordedMs,
+          comment: normalizedComment,
         });
       }
 
@@ -186,6 +193,7 @@ async function invokeFinalizeLog(args: {
   videoPath: string;
   thumbnailPath: string | null;
   recordedMs: number;
+  comment: string | null;
 }): Promise<FinalizeLogInvoke> {
   try {
     const { data, error } = await supabase.functions.invoke<{
@@ -198,6 +206,7 @@ async function invokeFinalizeLog(args: {
         videoPath: args.videoPath,
         thumbnailPath: args.thumbnailPath,
         recordedMs: args.recordedMs,
+        comment: args.comment,
       },
     });
 
@@ -220,8 +229,9 @@ async function fallbackFinalizeOnClient(args: {
   hourSlot: number;
   today: string;
   recordedMs: number;
+  comment: string | null;
 }): Promise<string | null> {
-  const { userId, videoPath, thumbnailPath, hourSlot, today, recordedMs } = args;
+  const { userId, videoPath, thumbnailPath, hourSlot, today, recordedMs, comment } = args;
 
   // 같은 슬롯의 기존 row + storage 정리. 폴백 경로에서는 부분 실패 위험을 감수 (메인은 Edge).
   const { data: existing } = await supabase
@@ -252,6 +262,7 @@ async function fallbackFinalizeOnClient(args: {
       thumbnail_path: thumbnailPath,
       hour_slot: hourSlot,
       duration_sec: Math.max(1, Math.round(recordedMs / 1000)),
+      comment,
       검수_YN: 'N',
       검수_상태: 'PENDING',
       recorded_at: new Date().toISOString(),

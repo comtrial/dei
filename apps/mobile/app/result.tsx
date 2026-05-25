@@ -1,10 +1,18 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as ScreenOrientation from 'expo-screen-orientation';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { analytics, logger } from '@dei/shared';
 
@@ -16,6 +24,8 @@ import { ROUTES } from '@/lib/routes';
 
 import { useAccountGate } from '@/providers/account-gate-provider';
 
+const COMMENT_MAX_LENGTH = 50;
+
 export default function ResultScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -25,6 +35,8 @@ export default function ResultScreen() {
   // file:// URI는 URL 파라미터 인코딩 손상 방지를 위해 모듈 변수로 전달
   const uri = useRef(getRecordingUri() ?? '').current;
   const [muted, setMuted] = useState(true);
+  const [comment, setComment] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { saveLog, loading } = useSaveLog();
   const { eligibility, refresh } = useAccountGate();
 
@@ -39,13 +51,22 @@ export default function ResultScreen() {
     setTimeout(() => p.play(), 300);
   });
 
-  // 화면 방향 잠금 해제 (app.json의 기본 orientation인 portrait로 자동 복귀)
+  // 코멘트 입력 중 키보드가 영상 위 hourBadge / 하단 버튼을 가리지 않도록 두 영역을
+  // 키보드 높이만큼 같이 들어올린다. iOS 는 will* 이벤트로 애니메이션과 동기, Android 는
+  // did* 만 신뢰 가능 (will* 이 일관되게 발화 안 됨).
   useEffect(() => {
-    ScreenOrientation.unlockAsync().catch((err: unknown) => {
-      logger.captureException(err, {
-        tags: { feature: 'result', action: 'unlock-orientation' },
-      });
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
     });
+    const hideSub = Keyboard.addListener(hideEvt, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   const handleMuteToggle = () => {
@@ -67,11 +88,13 @@ export default function ResultScreen() {
   };
 
   const handleCancel = async () => {
+    Keyboard.dismiss();
     await cleanupTempFile('cancel');
     router.back();
   };
 
   const handleRedo = async () => {
+    Keyboard.dismiss();
     await cleanupTempFile('redo');
     // 직전에 사용자가 record 에서 overwrite dialog 를 confirm 한 상태이므로, back 후
     // record 가 다시 focus 될 때 같은 dialog 를 한 번 더 띄우지 않도록 ack 를 set 한다.
@@ -84,6 +107,7 @@ export default function ResultScreen() {
   };
 
   const handleSave = async () => {
+    Keyboard.dismiss();
     if (!uri) {
       Alert.alert('저장 실패', '촬영 파일이 없어 저장할 수 없어요. 다시 촬영해 주세요.');
       return;
@@ -92,7 +116,7 @@ export default function ResultScreen() {
     // 온보딩 첫 영상도 일반 영상과 동일하게 logs 로 저장한다 (검수·큐레이션 파이프라인 공유).
     const wasOnboarding = eligibility?.next_step !== 'complete';
 
-    const result = await saveLog({ tempVideoUri: uri, recordedMs });
+    const result = await saveLog({ tempVideoUri: uri, recordedMs, comment });
     if (!result.success) {
       Alert.alert('저장 실패', result.message || '저장에 실패했어요. 다시 시도해주세요.');
       return;
@@ -133,6 +157,14 @@ export default function ResultScreen() {
         />
       ) : null}
 
+      {/* 영상 영역 탭 → 키보드 닫기 (TextInput / 상단 바 / 버튼 영역은 제외) */}
+      <Pressable
+        style={StyleSheet.absoluteFillObject}
+        onPress={Keyboard.dismiss}
+        // accessible=false 로 두면 스크린리더가 큰 투명 영역을 빈 버튼으로 잘못 읽지 않음
+        accessible={false}
+      />
+
       {/* 2. 상단 바 */}
       <View style={[styles.topBar, {
         paddingTop: insets.top + 12,
@@ -153,19 +185,41 @@ export default function ResultScreen() {
         <Text style={styles.loopText}>LOOP</Text>
       </View>
 
-      {/* 4. 시간대 배지 */}
-      <View style={[styles.hourBadge, { bottom: insets.bottom + 100 }]}>
+      {/* 4. 시간대 + 코멘트 입력 — 키보드 열림 시 같이 위로 이동 */}
+      <View
+        style={[
+          styles.hourBadge,
+          { bottom: insets.bottom + 100 + keyboardHeight },
+        ]}
+        // 자식 TextInput 외 영역 (시간 텍스트 등) 은 통과시켜 영상 Pressable 이 받게 함
+        pointerEvents="box-none"
+      >
         <Text style={styles.hourText}>{timeLabel}</Text>
         <Text style={styles.durationText}>{formatDuration(recordedMs)}</Text>
+        <TextInput
+          value={comment}
+          onChangeText={setComment}
+          placeholder="코멘트 추가"
+          placeholderTextColor="rgba(255,255,255,0.55)"
+          maxLength={COMMENT_MAX_LENGTH}
+          multiline={false}
+          returnKeyType="done"
+          blurOnSubmit
+          onSubmitEditing={Keyboard.dismiss}
+          style={styles.commentInput}
+          testID="result-comment-input"
+          editable={!isSaving}
+        />
       </View>
 
-      {/* 5. 하단 버튼 */}
+      {/* 5. 하단 버튼 — 키보드 열림 시 같이 위로 이동 */}
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.65)']}
         style={[styles.bottomGradient, {
           paddingBottom: insets.bottom + 24,
           paddingLeft: insets.left + 14,
           paddingRight: insets.right + 14,
+          bottom: keyboardHeight,
         }]}>
         <View style={styles.actionRow}>
           <TouchableOpacity
@@ -224,6 +278,17 @@ const styles = StyleSheet.create({
   },
   hourText: { color: '#fff', fontSize: 20, fontFamily: 'monospace', letterSpacing: 2, fontWeight: '500' },
   durationText: { color: 'rgba(255,255,255,0.4)', fontSize: 11, fontFamily: 'monospace' },
+  commentInput: {
+    marginTop: 6,
+    minWidth: 140,
+    maxWidth: 260,
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
 
   bottomGradient: {
     position: 'absolute',

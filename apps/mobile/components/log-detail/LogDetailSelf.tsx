@@ -108,6 +108,15 @@ export function LogDetailSelf({ userId, date, startLogId }: Props) {
       <SafeAreaView edges={['bottom']} className="absolute bottom-0 left-0 right-0">
         <View className="px-6 pb-4 gap-3">
           <ProgressDots total={logs.length} current={index} />
+          {current.comment ? (
+            <Text
+              className="text-white text-base text-center font-medium"
+              numberOfLines={2}
+              testID="log-detail-comment"
+            >
+              {current.comment}
+            </Text>
+          ) : null}
           <Text className="text-white text-sm text-center">
             {formatTime(current.recorded_at)}
           </Text>

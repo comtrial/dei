@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useFocusEffect, useRouter } from 'expo-router';
-// expo-screen-orientation@9.0.9 + iOS 26 에서 ScreenOrientationRegistry 의 main thread ↔
-// internal queue 사이 양방향 sync dispatch deadlock 으로 5초 watchdog kill (0x8BADF00D).
-// app.json 의 orientation="default" + Info.plist 4방향 허용으로 OS 자동 회전이 이미
-// 가능하므로 강제 lockAsync 자체를 사용하지 않는다 (사용자가 폰을 가로로 들면 자동 회전).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import {
+  lockToLandscape,
+  unlockAllOrientations,
+  LandscapeDirection,
+} from 'react-native-orientation-turbo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logger } from '@dei/shared';
 
@@ -77,9 +78,15 @@ export default function RecordScreen() {
       // 발화한다. ready 를 false 로 초기화해야 stale ready=true 상태에서
       // 미초기화 AVSession 에 recordAsync 를 던져 hang 하는 것을 막는다.
       setIsCameraReady(false);
-      // 카메라 화면 노출 — orientation 잠금은 사용하지 않는다 (위 import 주석 참조).
-      // OS 자동 회전이 app.json/Info.plist 설정으로 이미 허용되어 있어 사용자가
-      // 폰을 가로로 들면 자연스럽게 가로 모드로 표시된다.
+      try {
+        // 셔터 버튼이 home indicator(폰 하단) 쪽에 오도록 RIGHT 로 고정.
+        // (LEFT 로 두면 셔터가 home indicator 반대쪽으로 가 오른손 엄지 위치가 어색)
+        lockToLandscape(LandscapeDirection.RIGHT);
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { feature: 'record', action: 'lock-orientation' },
+        });
+      }
       setIsFocused(true);
       return () => {
         setIsFocused(false); // 포커스 잃으면 CameraView 언마운트 → AVSession 해제
@@ -99,6 +106,13 @@ export default function RecordScreen() {
         isRecordingRef.current = false;
         setIsRecording(false);
         setIsCameraReady(false);
+        try {
+          unlockAllOrientations();
+        } catch (err) {
+          logger.captureException(err, {
+            tags: { feature: 'record', action: 'unlock-orientation' },
+          });
+        }
       };
     }, [stopAnimations])
   );
@@ -128,8 +142,20 @@ export default function RecordScreen() {
 
   // 카메라 전환 시 AVSession 이 재초기화되므로 ready 를 내려 onCameraReady 재발화를
   // 기다린다. 전환 직후 미초기화 세션에 recordAsync 던지는 것 방지.
+  //
+  // facing prop 변경만으로는 expo-camera 가 internal AVSession 만 swap 하고
+  // onCameraReady 가 다시 발화하지 않는 케이스가 있다 (iOS 26 / RN 0.81 조합 관찰).
+  // 그러면 isCameraReady 가 영구히 false 로 남아 셔터가 비활성된 채 풀리지 않는다.
+  // cameraSessionKey 를 같이 증가시켜 CameraView 를 강제 remount → onCameraReady
+  // 콜백 재발화를 보장한다.
+  const facingInitRef = useRef(true);
   useEffect(() => {
+    if (facingInitRef.current) {
+      facingInitRef.current = false;
+      return; // 마운트 직후 초기 facing='back' 에서는 remount 트리거 불필요
+    }
     setIsCameraReady(false);
+    setCameraSessionKey((k) => k + 1);
   }, [facing]);
 
   const startAnimations = () => {
@@ -396,7 +422,7 @@ export default function RecordScreen() {
           onPress={() => {
             if (isRecording) return;
 
-            // orientation 잠금/해제 호출은 deadlock 회피를 위해 사용하지 않는다 (위 import 주석 참조).
+            // useFocusEffect cleanup 이 unlockAllOrientations 를 수행한다.
             setIsFocused(false);
 
             // AVSession 해제 시간을 주고 navigate (즉시 router.back 시 카메라 native view 와 충돌)
