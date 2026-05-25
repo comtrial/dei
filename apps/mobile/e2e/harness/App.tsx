@@ -1,58 +1,26 @@
 /**
  * Playwright web harness app.
  *
- * Mounts the *real* chat screens / components against react-native-web so a
- * real browser exercises the production UI code (the load-bearing logic the
- * chat spec cares about) at the DOM level. expo-router / auth-provider are
- * shimmed (see e2e/playwright/vite.config.ts aliases) and the Supabase data
- * layer is replaced by mockChatService — keeping the run hermetic (no Docker).
+ * Phase 1 정리: 옛 채팅(1:1) 화면 마운트 로직 제거.
+ * 옛 채팅 spec 들도 같이 삭제되어 현재 e2e-web 게이트는 새 도메인 spec 추가
+ * (Phase 4) 까지 일시적으로 비어있다.
  *
- * Route is chosen via `?screen=` query param; scenario via `?scenario=`.
+ * Phase 4 에서 다음 형태로 재작성 예정:
+ *   - 방 분할 피드 (`/room/[roomId]`)
+ *   - 방 채팅 (`/room/[roomId]/chat`)
+ *   - 묶음 구성 (`/group/new`)
+ *   - 부스터 (`/booster`)
+ * 등의 화면을 `?screen=` 쿼리로 마운트.
+ *
+ * 지금은 빈 placeholder 만 둬서 빌드/타입체크 깨짐 방지.
  */
-import { useMemo } from 'react';
 import { View } from 'react-native';
 
-import MessagesScreen from '@/app/(app)/messages';
-import ChatRoomScreen from '@/app/(app)/chat-room';
-import ChatRouteGate from '@/app/(app)/chat';
-import { __setHarnessRouteParams } from '@/__harness_shims__/expo-router';
-
-type ScreenName = 'messages' | 'chat-room' | 'chat';
-
-function readQuery() {
-  const p = new URLSearchParams(window.location.search);
-  return {
-    screen: (p.get('screen') as ScreenName) ?? 'messages',
-    scenario: p.get('scenario') ?? 'list-populated',
-  };
-}
-
 export default function HarnessApp() {
-  const { screen, scenario } = useMemo(readQuery, []);
-
-  // Drive the mock data layer + the shimmed router params.
-  (globalThis as { __CHAT_SCENARIO__?: string }).__CHAT_SCENARIO__ = scenario;
-  __setHarnessRouteParams({
-    conversationId: 'conv-fixture-1',
-    otherUserId: 'other-user-id',
-    otherNickname: '하늘',
-    source: 'list',
-  });
-
-  // Explicit pixel height: RN-web resolves `flex:1` chains only when an
-  // ancestor has a concrete height. The browser viewport is 100vh; mirror it
-  // so the chat-room's SafeAreaView/KeyboardAvoidingView don't collapse to 0.
   return (
     <View
       style={{ height: '100vh' as unknown as number, width: '100%', maxWidth: 480, alignSelf: 'center' }}
-      testID="harness-root">
-      {screen === 'chat-room' ? (
-        <ChatRoomScreen />
-      ) : screen === 'chat' ? (
-        <ChatRouteGate />
-      ) : (
-        <MessagesScreen />
-      )}
-    </View>
+      testID="harness-root"
+    />
   );
 }

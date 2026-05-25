@@ -1,5 +1,11 @@
 import type { Database } from '@dei/api';
 
+/**
+ * 라우트 단일 source of truth.
+ *
+ * Phase 1 정리: 옛 도메인 엔트리(discovery/likes/matched/matches/messages/chat*)
+ * 제거. Phase 3 에서 새 도메인 엔트리(room/group/booster/solo-join) 추가 예정.
+ */
 export const ROUTES = {
   root: '/',
   welcome: '/welcome',
@@ -11,16 +17,9 @@ export const ROUTES = {
   logIntro: '/log-intro',
   firstVideo: '/record',
   home: '/home',
-  discovery: '/discovery',
   record: '/record',
   result: '/result',
   logDetail: '/log-detail',
-  likes: '/likes',
-  matched: '/matched',
-  matches: '/matches',
-  messages: '/messages',
-  chatRoute: '/chat',
-  chatRoom: '/chat-room',
   settings: '/settings',
   myProfile: '/my-profile',
   profiles: '/profiles',
@@ -33,16 +32,9 @@ export type Eligibility =
 
 const APP_ROUTES = new Set<string>([
   ROUTES.home,
-  ROUTES.discovery,
   ROUTES.record,
   ROUTES.result,
   ROUTES.logDetail,
-  ROUTES.likes,
-  ROUTES.matched,
-  ROUTES.matches,
-  ROUTES.messages,
-  ROUTES.chatRoute,
-  ROUTES.chatRoom,
   ROUTES.settings,
   ROUTES.myProfile,
 ]);

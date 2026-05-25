@@ -1,5 +1,16 @@
 import type { RegisterPushTokenInput } from '@/lib/notifications';
 
+/**
+ * 푸시 알림 헬퍼.
+ *
+ * Phase 1 정리: 1:1 채팅 conversation deeplink 파싱 로직 제거.
+ * 새 도메인(방/묶음) deeplink 매핑은 Phase 3 에서 추가 — 매핑 표는
+ * docs/rooms-spec/screens.md 의 "라우팅 deeplink" 섹션 참고.
+ *
+ * 현재 살아있는 로직: project id 추출, platform normalize,
+ * register_user_push_token RPC payload 빌드, generic `data.route` 사용.
+ */
+
 export type PushRegistrationPlatform = RegisterPushTokenInput['platform'];
 
 type ExpoConstantsLike = {
@@ -66,58 +77,16 @@ export function buildRegisterPushTokenArgs(
   };
 }
 
-export function getPushConversationIdFromData(data: Record<string, unknown> | null | undefined) {
-  const conversationId = data?.conversationId;
-
-  if (typeof conversationId === 'string' && conversationId.trim()) {
-    return conversationId.trim();
-  }
-
-  return getConversationIdFromRoute(typeof data?.route === 'string' ? data.route : null);
-}
-
-function getConversationIdFromRoute(route: string | null | undefined) {
-  const trimmedRoute = route?.trim();
-
-  if (!trimmedRoute) {
-    return null;
-  }
-
-  if (trimmedRoute.startsWith('/chat?')) {
-    const params = new URLSearchParams(trimmedRoute.slice(trimmedRoute.indexOf('?') + 1));
-    const conversationId = params.get('conversationId')?.trim();
-    return conversationId || null;
-  }
-
-  if (!trimmedRoute.startsWith('dei://')) {
-    return null;
-  }
-
-  try {
-    const url = new URL(trimmedRoute);
-
-    if (url.hostname !== 'chat') {
-      return null;
-    }
-
-    const conversationId = decodeURIComponent(url.pathname.replace(/^\//, '')).trim();
-    return conversationId || null;
-  } catch {
-    return null;
-  }
-}
-
-function chatRouteFromConversationId(conversationId: string) {
-  return `/chat?conversationId=${encodeURIComponent(conversationId)}&source=push`;
-}
-
+/**
+ * Push payload 의 `data.route` 를 expo-router 가 받을 수 있는 in-app pathname 으로
+ * 정규화한다. 외부 URL 또는 dei:// 같은 deeplink 는 거부하고 in-app 경로만 통과.
+ *
+ * Phase 1 정리 후 의도적으로 매우 단순함 — 옛 chat conversation deeplink 파싱
+ * 로직 제거. 새 도메인 deeplink 매핑은 Phase 3 에서 이 함수에 case 를 추가하는
+ * 형태로 확장 (예: `dei://room/<id>/upload` → `/room/<id>/upload`).
+ */
 export function getPushRouteFromData(data: Record<string, unknown> | null | undefined) {
   const route = data?.route;
-  const conversationId = getPushConversationIdFromData(data);
-
-  if (conversationId) {
-    return chatRouteFromConversationId(conversationId);
-  }
 
   if (typeof route !== 'string') {
     return null;

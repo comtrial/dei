@@ -263,6 +263,6 @@ export async function getProfileDisplayName(supabase: any, userId: string) {
   return nickname || "새로운 사람";
 }
 
-export function chatPushRoute(conversationId: string) {
-  return `dei://chat/${encodeURIComponent(conversationId)}`;
-}
+// Phase 1 정리: 옛 1:1 채팅 deeplink 헬퍼(chatPushRoute) 제거.
+// 새 도메인 라우트 헬퍼는 Phase 2 에서 `roomPushRoute()` 형태로 추가 예정.
+// 매핑 표: docs/rooms-spec/screens.md 의 "라우팅 deeplink" 섹션 참고.

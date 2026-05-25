@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildRegisterPushTokenArgs,
-  getPushConversationIdFromData,
   getExpoProjectIdFromConstants,
   getPushRouteFromData,
   normalizePushPlatform,
 } from '../push-notifications.helpers';
 
+/**
+ * Phase 1 정리: 1:1 채팅 conversation deeplink 파싱 케이스 제거.
+ * 새 도메인(방) deeplink 케이스는 Phase 3 에서 `getPushRouteFromData` 가
+ * `dei://room/...` 를 in-app 경로로 변환하는 로직과 함께 다시 추가 예정.
+ */
 describe('push notification helpers', () => {
   it('resolves Expo project id from EAS or app config', () => {
     expect(getExpoProjectIdFromConstants({
@@ -46,23 +50,13 @@ describe('push notification helpers', () => {
     });
   });
 
-  it('accepts only app routes from notification data', () => {
+  it('accepts only in-app pathname routes from notification data', () => {
     expect(getPushRouteFromData({ route: '/home' })).toBe('/home');
     expect(getPushRouteFromData({ route: '/profiles/user-1' })).toBe('/profiles/user-1');
     expect(getPushRouteFromData({ route: 'https://example.test' })).toBeNull();
     expect(getPushRouteFromData({ route: '//example.test' })).toBeNull();
+    expect(getPushRouteFromData({ route: 'dei://chat/anything' })).toBeNull();
     expect(getPushRouteFromData({ route: '' })).toBeNull();
     expect(getPushRouteFromData(null)).toBeNull();
-  });
-
-  it('maps chat push payloads to the CH0 route gate', () => {
-    expect(getPushConversationIdFromData({ conversationId: 'conv-1' })).toBe('conv-1');
-    expect(getPushConversationIdFromData({ route: 'dei://chat/conv-2' })).toBe('conv-2');
-    expect(getPushRouteFromData({ conversationId: 'conv 3' })).toBe(
-      '/chat?conversationId=conv%203&source=push',
-    );
-    expect(getPushRouteFromData({ route: 'dei://chat/conv-4' })).toBe(
-      '/chat?conversationId=conv-4&source=push',
-    );
   });
 });

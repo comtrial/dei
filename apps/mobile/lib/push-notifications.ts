@@ -8,13 +8,18 @@ import { logger } from '@dei/shared';
 import type { RegisterPushTokenInput } from '@/lib/notifications';
 import {
   buildRegisterPushTokenArgs,
-  getPushConversationIdFromData,
   getExpoProjectIdFromConstants,
   getPushRouteFromData,
   normalizePushPlatform,
 } from '@/lib/push-notifications.helpers';
-import { getActiveChatPushConversation } from '@/lib/push-notifications-state';
 import { supabase } from '@/lib/supabase';
+
+/**
+ * Phase 1 정리: 1:1 채팅 active conversation tracking 제거.
+ * 옛 도메인의 "현재 보고 있는 채팅방 푸시는 무음 처리" 기능을 새 도메인(방)에
+ * 다시 도입할 시점은 Phase 3 — 그때 `getActiveRoomPushTracking()` 같은 새
+ * state 모듈로 추가하면 된다. 지금은 단순화 (suppress 로직 제거).
+ */
 
 const INSTALLATION_ID_STORAGE_KEY = 'dei.push.installationId.v1';
 const ANDROID_DEFAULT_CHANNEL_ID = 'default';
@@ -77,24 +82,12 @@ export async function configureForegroundPushNotifications() {
   didConfigureForegroundNotifications = true;
 
   Notifications.setNotificationHandler({
-    handleNotification: async (notification) => {
-      const conversationId = getPushConversationIdFromData(
-        notification.request.content.data,
-      );
-      const activeChatConversationId = getActiveChatPushConversation();
-      const shouldSuppressChatPush = Boolean(
-        activeChatConversationId
-        && conversationId
-        && activeChatConversationId === conversationId,
-      );
-
-      return {
-        shouldPlaySound: false,
-        shouldSetBadge: !shouldSuppressChatPush,
-        shouldShowBanner: !shouldSuppressChatPush,
-        shouldShowList: !shouldSuppressChatPush,
-      };
-    },
+    handleNotification: async () => ({
+      shouldPlaySound: false,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
   });
 
   if (Platform.OS !== 'android') {
