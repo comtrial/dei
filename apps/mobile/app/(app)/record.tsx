@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useFocusEffect, useRouter } from 'expo-router';
-import * as ScreenOrientation from 'expo-screen-orientation';
+// expo-screen-orientation@9.0.9 + iOS 26 에서 ScreenOrientationRegistry 의 main thread ↔
+// internal queue 사이 양방향 sync dispatch deadlock 으로 5초 watchdog kill (0x8BADF00D).
+// app.json 의 orientation="default" + Info.plist 4방향 허용으로 OS 자동 회전이 이미
+// 가능하므로 강제 lockAsync 자체를 사용하지 않는다 (사용자가 폰을 가로로 들면 자동 회전).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,12 +22,9 @@ import { useAuth } from '@/providers/auth-provider';
 
 type CameraFacing = 'front' | 'back';
 
-const ZOOM_LEVELS = [
-  { label: '1', value: 0.05 },
-  { label: '2', value: 0.15 },
-] as const;
-
-const RECORD_DURATION_MS = 2000;
+// 셔터 press-and-hold 의 **최대** 녹화 길이. 사용자가 손을 떼면 그 즉시 종료되며,
+// 안 떼더라도 이 시간이 지나면 강제 종료되어 영상이 무한정 길어지지 않는다.
+const RECORD_MAX_DURATION_MS = 2000;
 const RING_SIZE = 92;
 
 export default function RecordScreen() {
@@ -40,7 +40,6 @@ export default function RecordScreen() {
   const [facing, setFacing] = useState<CameraFacing>('back');
   const [isRecording, setIsRecording] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
-  const [zoomIndex, setZoomIndex] = useState(0);
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
   // CameraView 의 key. iOS 에서 RN <Modal> 이 카메라 위에 덮이는 동안 AVCaptureSession
@@ -48,6 +47,16 @@ export default function RecordScreen() {
   // 때 key 증가로 CameraView 를 강제 unmount/remount.
   const [cameraSessionKey, setCameraSessionKey] = useState(0);
   const didInitRef = useRef(false);
+
+  // press-and-hold 셔터 — onPressOut 시점에 isRecording state 가 아직 commit
+  // 안 된 race 를 피하기 위해 ref 로도 isRecording 을 추적한다.
+  const isRecordingRef = useRef(false);
+  // 실제 녹화 경과 시간 계산용 — recordAsync 시작 직전 timestamp.
+  const recordStartMsRef = useRef<number>(0);
+  // 녹화 stop/hang 타이머. press-and-hold 중 onPressOut 으로 stopRecording 을 호출하면
+  // 이 타이머들은 더 이상 필요 없으므로 cleanup 한다.
+  const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hangTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const barAnim = useRef(new Animated.Value(0)).current;
@@ -62,35 +71,34 @@ export default function RecordScreen() {
       didInitRef.current = false;
       // stale state 초기화 — Tabs 는 unmount 안 하므로 진입 때마다 reset 필수
       setFacing('back');
-      setZoomIndex(0);
+      isRecordingRef.current = false;
       setIsRecording(false);
       // CameraView 는 blur 시 언마운트되므로 re-mount 때 onCameraReady 가 다시
       // 발화한다. ready 를 false 로 초기화해야 stale ready=true 상태에서
       // 미초기화 AVSession 에 recordAsync 를 던져 hang 하는 것을 막는다.
       setIsCameraReady(false);
-      // 가로 모드 잠금 완료 후 CameraView 마운트 → AVSession 활성 중 방향 전환 크래시 방지
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
-        .then(() => setIsFocused(true))
-        .catch((err: unknown) => {
-          logger.captureException(err, {
-            tags: { feature: 'record', action: 'lock-orientation' },
-          });
-          setIsFocused(true); // 잠금 실패해도 카메라는 보여줌
-        });
+      // 카메라 화면 노출 — orientation 잠금은 사용하지 않는다 (위 import 주석 참조).
+      // OS 자동 회전이 app.json/Info.plist 설정으로 이미 허용되어 있어 사용자가
+      // 폰을 가로로 들면 자연스럽게 가로 모드로 표시된다.
+      setIsFocused(true);
       return () => {
         setIsFocused(false); // 포커스 잃으면 CameraView 언마운트 → AVSession 해제
         didInitRef.current = false;
         setShowPermissionDialog(false);
         setShowOverwriteDialog(false);
         stopAnimations();
+        // 녹화 도중 화면 이탈 시 stop/hang timer 가 dangling 되지 않도록 정리.
+        if (stopTimerRef.current) {
+          clearTimeout(stopTimerRef.current);
+          stopTimerRef.current = null;
+        }
+        if (hangTimerRef.current) {
+          clearTimeout(hangTimerRef.current);
+          hangTimerRef.current = null;
+        }
+        isRecordingRef.current = false;
         setIsRecording(false);
         setIsCameraReady(false);
-        // 화면 방향 잠금 해제 (app.json의 기본 orientation인 portrait로 자동 복귀)
-        ScreenOrientation.unlockAsync().catch((err: unknown) => {
-          logger.captureException(err, {
-            tags: { feature: 'record', action: 'unlock-orientation' },
-          });
-        });
       };
     }, [stopAnimations])
   );
@@ -128,16 +136,18 @@ export default function RecordScreen() {
     progressAnim.setValue(0);
     barAnim.setValue(0);
 
+    // press-and-hold 의 최대 길이 기준으로 진행. 손을 일찍 떼면 stopAnimations() 로
+    // 그 시점에서 멈춘다 (UI 가 마지막 진행도에서 자연스럽게 정지).
     Animated.timing(progressAnim, {
       toValue: 1,
-      duration: RECORD_DURATION_MS,
+      duration: RECORD_MAX_DURATION_MS,
       easing: Easing.linear,
       useNativeDriver: false,
     }).start();
 
     Animated.timing(barAnim, {
       toValue: 1,
-      duration: RECORD_DURATION_MS,
+      duration: RECORD_MAX_DURATION_MS,
       easing: Easing.linear,
       useNativeDriver: false,
     }).start();
@@ -183,14 +193,14 @@ export default function RecordScreen() {
   };
 
   const navigateToResult = useCallback(
-    (uri: string) => {
+    (uri: string, recordedMs: number) => {
       setRecordingUri(uri);
       setIsFocused(false);
       setTimeout(() => {
         router.push({
           pathname: '/result',
           params: {
-            durationMs: String(RECORD_DURATION_MS),
+            durationMs: String(Math.round(recordedMs)),
           },
         });
       }, 600);
@@ -198,8 +208,22 @@ export default function RecordScreen() {
     [router],
   );
 
-  const handleShutterPress = async () => {
-    if (isRecording) return;
+  const cleanupRecordingTimers = useCallback(() => {
+    if (stopTimerRef.current) {
+      clearTimeout(stopTimerRef.current);
+      stopTimerRef.current = null;
+    }
+    if (hangTimerRef.current) {
+      clearTimeout(hangTimerRef.current);
+      hangTimerRef.current = null;
+    }
+  }, []);
+
+  // 셔터 press-in: 누르는 순간 녹화 시작.
+  // press-and-hold 정책 — 사용자가 손을 떼면(handleShutterPressOut) 그 즉시 종료되고,
+  // 안 떼더라도 RECORD_MAX_DURATION_MS 후 자동 종료된다.
+  const handleShutterPressIn = async () => {
+    if (isRecordingRef.current) return;
 
     if (!cameraRef.current) {
       Alert.alert('촬영 준비 중', '카메라가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
@@ -213,90 +237,109 @@ export default function RecordScreen() {
       return;
     }
 
-    clearRecordingUri();
-
-    // CameraView 마운트 이후 마이크 권한 확인
+    // 마이크 권한 — 미허용이면 다이얼로그 띄우고 이번 누름은 무시한다.
+    // (press-and-hold 도중 권한 다이얼로그를 띄우는 건 UX 가 어색하므로 다음 누름에서
+    //  정상 흐름으로 진입하도록 유도)
     if (micPermission?.status !== 'granted') {
       const micResult = await requestMicPermission();
       if (micResult.status !== 'granted') {
         Alert.alert('마이크 권한 필요', '로그 촬영을 위해 마이크 권한이 필요해요.');
-        return;
       }
-    }
-
-    // 마이크 권한 요청을 await 하는 동안 화면을 벗어났을 수 있다 — ref 재확인.
-    const camera = cameraRef.current;
-    if (!camera) {
-      Alert.alert('촬영 준비 중', '카메라가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
       return;
     }
 
+    // 마이크 권한 체크 사이에 화면을 벗어났을 수 있다 — ref 재확인.
+    const camera = cameraRef.current;
+    if (!camera) return;
+
+    clearRecordingUri();
+
+    isRecordingRef.current = true;
+    recordStartMsRef.current = Date.now();
     setIsRecording(true);
     startAnimations();
 
-    let stopTimer: ReturnType<typeof setTimeout> | null = null;
-    let hangTimer: ReturnType<typeof setTimeout> | null = null;
     let settled = false;
 
-    const cleanupTimers = () => {
-      if (stopTimer) {
-        clearTimeout(stopTimer);
-        stopTimer = null;
-      }
-      if (hangTimer) {
-        clearTimeout(hangTimer);
-        hangTimer = null;
-      }
-    };
-
     try {
-      // 의도한 길이에서 정상 종료. maxDuration 만으로는 native 가 stop 신호를
-      // 못 받는 케이스가 있어 명시적 stopRecording 도 건다.
-      stopTimer = setTimeout(() => {
-        camera.stopRecording();
-      }, RECORD_DURATION_MS);
+      // 최대 길이 boundary — 사용자가 손을 안 떼도 이 시간이 지나면 강제 종료.
+      // (expo-camera 의 maxDuration 만으로는 native 가 stop 신호를 못 받는 케이스가
+      //  있어 명시적 stopRecording 도 함께 건다.)
+      stopTimerRef.current = setTimeout(() => {
+        try {
+          camera.stopRecording();
+        } catch {
+          // no-op
+        }
+      }, RECORD_MAX_DURATION_MS);
 
-      // 안전망: recordAsync 가 어떤 이유로든 resolve/ reject 되지 않으면
+      // 안전망: recordAsync 가 어떤 이유로든 resolve/reject 되지 않으면
       // (조용한 hang) UI 가 isRecording 에 영구히 갇히지 않게 강제 복구한다.
       const hangGuard = new Promise<never>((_, reject) => {
-        hangTimer = setTimeout(() => {
-          camera.stopRecording();
+        hangTimerRef.current = setTimeout(() => {
+          try {
+            camera.stopRecording();
+          } catch {
+            // no-op
+          }
           reject(new Error('recordAsync timed out (silent hang guard)'));
-        }, RECORD_DURATION_MS + 5000);
+        }, RECORD_MAX_DURATION_MS + 5000);
       });
 
       const result = await Promise.race([
-        camera.recordAsync({ maxDuration: RECORD_DURATION_MS / 1000 }),
+        camera.recordAsync({ maxDuration: RECORD_MAX_DURATION_MS / 1000 }),
         hangGuard,
       ]);
 
       settled = true;
-      cleanupTimers();
+      cleanupRecordingTimers();
       stopAnimations();
+      isRecordingRef.current = false;
       setIsRecording(false);
 
       if (result?.uri) {
-        navigateToResult(result.uri);
+        // 실제 녹화 경과 시간 (손 뗀 시점 또는 max 도달 시점) 을 result 로 전달.
+        // 0 ≤ elapsed ≤ RECORD_MAX_DURATION_MS 로 clamp.
+        const elapsedMs = Math.min(
+          Math.max(Date.now() - recordStartMsRef.current, 0),
+          RECORD_MAX_DURATION_MS,
+        );
+        navigateToResult(result.uri, elapsedMs);
         return;
       }
 
       Alert.alert('촬영 실패', '촬영 파일을 만들지 못했어요. 다시 촬영해 주세요.');
     } catch (e) {
-      cleanupTimers();
+      cleanupRecordingTimers();
       logger.captureException(e, {
         tags: { feature: 'record', action: 'record-video' },
         extra: { settled, isCameraReady, facing },
       });
       stopAnimations();
+      isRecordingRef.current = false;
       setIsRecording(false);
       Alert.alert('촬영 실패', '촬영 파일을 저장하지 못했어요. 다시 촬영해 주세요.');
     }
   };
 
+  // 셔터 press-out: 손을 떼는 순간 녹화 종료.
+  // stopRecording 만 호출하면 recordAsync 가 resolve 되고 그 시점의 경과 시간으로
+  // navigateToResult 로 이어진다 (cleanup 은 위 try 블록의 정상 경로에서 수행).
+  const handleShutterPressOut = () => {
+    if (!isRecordingRef.current) return;
+    const camera = cameraRef.current;
+    if (!camera) return;
+    try {
+      camera.stopRecording();
+    } catch (err) {
+      logger.captureException(err, {
+        tags: { feature: 'record', action: 'stop-recording' },
+      });
+    }
+  };
+
   // CameraView 렌더링은 카메라 권한만으로 충분. 마이크는 recordAsync 직전에 확인
   const isGranted = permission?.status === 'granted';
-  // 상단 가운데 시계 — 현재 시각의 시 슬롯 (예: "21:00"). useTodayClip 의 currentSlotLabel 과 동일 정책.
-  const currentHourLabel = `${String(new Date().getHours()).padStart(2, '0')}:00`;
   const shouldMountCamera = isGranted && isFocused;
 
   return (
@@ -311,13 +354,12 @@ export default function RecordScreen() {
           style={StyleSheet.absoluteFill}
           mode="video"
           facing={facing}
-          zoom={facing === 'front' ? 0 : ZOOM_LEVELS[zoomIndex].value}
           onCameraReady={() => setIsCameraReady(true)}
           onMountError={(event) => {
             setIsCameraReady(false);
             logger.captureException(new Error(event?.message ?? 'CameraView onMountError'), {
               tags: { feature: 'record', action: 'camera-mount' },
-              extra: { facing, zoomIndex, cameraSessionKey },
+              extra: { facing, cameraSessionKey },
             });
             Alert.alert('카메라 오류', '카메라를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.');
           }}
@@ -354,11 +396,7 @@ export default function RecordScreen() {
           onPress={() => {
             if (isRecording) return;
 
-            ScreenOrientation.unlockAsync().catch((err: unknown) => {
-              logger.captureException(err, {
-                tags: { feature: 'record', action: 'unlock-orientation-close' },
-              });
-            });
+            // orientation 잠금/해제 호출은 deadlock 회피를 위해 사용하지 않는다 (위 import 주석 참조).
             setIsFocused(false);
 
             // AVSession 해제 시간을 주고 navigate (즉시 router.back 시 카메라 native view 와 충돌)
@@ -390,17 +428,6 @@ export default function RecordScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* 현재 시각 (시 슬롯) — 녹화 ms 카운터 대신 표시 */}
-        <View className="items-center">
-          <Text
-            className="font-mono text-base font-semibold"
-            style={{ color: 'white' }}>
-            {currentHourLabel}
-          </Text>
-        </View>
-
-        {/* X 버튼과 동일 크기의 invisible spacer — 타이머 중앙 정렬 유지 (flash 버튼 제거됨) */}
-        <View style={{ width: 44, height: 44 }} />
       </View>
 
       {/* Focus frame */}
@@ -437,39 +464,8 @@ export default function RecordScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Zoom buttons — 촬영 버튼 바로 위 (가로로 배치) */}
-      <View
-        className="absolute flex-row items-center gap-4"
-        style={{ 
-          right: insets.right + 32,
-          bottom: '50%',
-          marginBottom: RING_SIZE / 2 + 20,
-          zIndex: 100
-        }}>
-        {ZOOM_LEVELS.map((level, index) => (
-          <TouchableOpacity key={level.label} onPress={() => setZoomIndex(index)} hitSlop={12} disabled={isRecording}>
-            <View
-              style={{
-                backgroundColor: index === zoomIndex ? 'rgba(255,255,255,0.2)' : 'transparent',
-                borderRadius: 20,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-              }}>
-              <Text
-                style={{
-                  fontFamily: 'monospace',
-                  fontSize: index === zoomIndex ? 15 : 13,
-                  fontWeight: index === zoomIndex ? '700' : '400',
-                  color: index === zoomIndex ? 'white' : 'rgba(255,255,255,0.5)',
-                }}>
-                {level.label}×
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* 촬영 버튼 — 가로 모드에서 오른쪽 중앙 (오른손 엄지 위치) */}
+      {/* 촬영 버튼 — 가로 모드에서 오른쪽 중앙 (오른손 엄지 위치).
+         press-and-hold: 누르고 있는 동안 녹화, 손 떼면 즉시 종료. */}
       <View 
         style={{ 
           position: 'absolute',
@@ -508,12 +504,14 @@ export default function RecordScreen() {
           />
         )}
 
-        {/* Shutter button — 녹화 중 또는 카메라 미준비 시 비활성 */}
+        {/* Shutter button — press-and-hold.
+           카메라 미준비 시에만 disabled (녹화 중에는 onPressOut 받아야 하므로 disabled 금지). */}
         <TouchableOpacity
-          onPress={handleShutterPress}
+          onPressIn={handleShutterPressIn}
+          onPressOut={handleShutterPressOut}
           activeOpacity={0.8}
           hitSlop={8}
-          disabled={isRecording || !isCameraReady}>
+          disabled={!isCameraReady}>
           <View
             style={{
               width: 80,
@@ -522,28 +520,11 @@ export default function RecordScreen() {
               borderWidth: 4,
               borderColor: 'white',
               backgroundColor: 'white',
-              opacity: isRecording || !isCameraReady ? 0.3 : 1,
+              opacity: isRecording ? 0.6 : !isCameraReady ? 0.3 : 1,
             }}
           />
         </TouchableOpacity>
       </View>
-
-      {/* NO CLIP — 가로 모드에서 오른쪽 하단 */}
-      <TouchableOpacity 
-        hitSlop={12} 
-        disabled={isRecording}
-        style={{
-          position: 'absolute',
-          bottom: insets.bottom + 32,
-          right: insets.right + 20,
-          zIndex: 100
-        }}>
-        <View className="h-12 w-12 items-center justify-center rounded border border-white/40">
-          <Text className="text-center font-mono text-[9px] font-semibold leading-tight text-white">
-            NO{'\n'}CLIP
-          </Text>
-        </View>
-      </TouchableOpacity>
 
       {/* 01B · Permission dialog */}
       <Modal
