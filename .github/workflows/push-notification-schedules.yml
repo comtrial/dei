@@ -1,0 +1,123 @@
+name: Push Notification Schedules
+
+on:
+  schedule:
+    # Log reminder policy: every 4 hours, expressed in UTC for KST slots
+    # 00:00, 04:00, 08:00, 12:00, 16:00, 20:00.
+    - cron: '0 3,7,11,15,19,23 * * *'
+    # Curation-ready notification: 09:00 KST.
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Which notification batch to run'
+        options:
+          - both
+          - log-reminders
+          - curation-ready
+        required: true
+        type: choice
+        default: both
+      dry_run:
+        description: 'Run without sending push notifications'
+        required: true
+        type: boolean
+        default: true
+      limit:
+        description: 'Maximum users to scan'
+        required: true
+        type: number
+        default: 200
+
+concurrency:
+  group: push-notification-schedules-${{ github.event_name }}-${{ github.event.schedule || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  SUPABASE_FUNCTIONS_URL: https://sjlzidjnpczysygnlmtk.supabase.co/functions/v1
+
+jobs:
+  run-schedule:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Select scheduled batches
+        id: select
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="${{ github.event.inputs.target || '' }}"
+          dry_run="${{ github.event.inputs.dry_run || 'false' }}"
+          limit="${{ github.event.inputs.limit || '500' }}"
+
+          run_logs=false
+          run_curation=false
+
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            case "${{ github.event.schedule }}" in
+              "0 3,7,11,15,19,23 * * *") run_logs=true ;;
+              "0 0 * * *") run_curation=true ;;
+              *) echo "::error::Unknown schedule: ${{ github.event.schedule }}"; exit 1 ;;
+            esac
+          else
+            case "$target" in
+              both) run_logs=true; run_curation=true ;;
+              log-reminders) run_logs=true ;;
+              curation-ready) run_curation=true ;;
+              *) echo "::error::Unknown target: $target"; exit 1 ;;
+            esac
+          fi
+
+          {
+            echo "run_logs=$run_logs"
+            echo "run_curation=$run_curation"
+            echo "dry_run=$dry_run"
+            echo "limit=$limit"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::error::Missing SUPABASE_SERVICE_ROLE_KEY repository secret"
+            exit 1
+          fi
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: Invoke notification batches
+        shell: bash
+        env:
+          DRY_RUN: ${{ steps.select.outputs.dry_run }}
+          LIMIT: ${{ steps.select.outputs.limit }}
+          RUN_CURATION: ${{ steps.select.outputs.run_curation }}
+          RUN_LOGS: ${{ steps.select.outputs.run_logs }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          call_function() {
+            local name="$1"
+            local payload
+            payload="$(jq -nc \
+              --argjson dryRun "$DRY_RUN" \
+              --argjson limit "$LIMIT" \
+              '{ dryRun: $dryRun, limit: $limit }')"
+
+            echo "Invoking $name with payload: $payload"
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              --header "Content-Type: application/json" \
+              --data "$payload" \
+              "${SUPABASE_FUNCTIONS_URL}/${name}"
+            echo
+          }
+
+          if [ "$RUN_LOGS" = "true" ]; then
+            call_function "send-log-reminders"
+          fi
+
+          if [ "$RUN_CURATION" = "true" ]; then
+            call_function "send-curation-ready"
+          fi
