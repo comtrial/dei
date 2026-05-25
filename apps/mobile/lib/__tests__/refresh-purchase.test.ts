@@ -1,4 +1,8 @@
-import type { PurchasesPackage } from 'react-native-purchases';
+import type {
+  PurchasesOffering,
+  PurchasesOfferings,
+  PurchasesPackage,
+} from 'react-native-purchases';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase', () => ({
@@ -19,7 +23,10 @@ vi.mock('@/lib/revenuecat', () => ({
   isRevenueCatAvailable: vi.fn(),
 }));
 
-import { findPackageByProductId } from '../refresh-purchase';
+import {
+  findConsumablePackageInOfferings,
+  findPackageByProductId,
+} from '../refresh-purchase';
 
 function makePackage(productId: string): PurchasesPackage {
   return {
@@ -28,6 +35,12 @@ function makePackage(productId: string): PurchasesPackage {
       identifier: productId,
     },
   } as PurchasesPackage;
+}
+
+function makeOffering(packages: PurchasesPackage[]): PurchasesOffering {
+  return {
+    availablePackages: packages,
+  } as PurchasesOffering;
 }
 
 describe('findPackageByProductId', () => {
@@ -43,6 +56,38 @@ describe('findPackageByProductId', () => {
   it('does not fall back to the first package when the product id is absent', () => {
     expect(
       findPackageByProductId([makePackage('dei_refresh_1')], 'dei_heart_1'),
+    ).toBeNull();
+  });
+});
+
+describe('findConsumablePackageInOfferings', () => {
+  it('falls back to current offering but still requires the exact product id', () => {
+    const refreshPackage = makePackage('dei_refresh_1');
+    const heartPackage = makePackage('dei_heart_1');
+    const offerings = {
+      all: {},
+      current: makeOffering([refreshPackage, heartPackage]),
+    } as PurchasesOfferings;
+
+    expect(
+      findConsumablePackageInOfferings(offerings, {
+        offeringId: 'heart',
+        productId: 'dei_heart_1',
+      }),
+    ).toBe(heartPackage);
+  });
+
+  it('does not fall back to an unrelated current offering package', () => {
+    const offerings = {
+      all: {},
+      current: makeOffering([makePackage('dei_refresh_1')]),
+    } as PurchasesOfferings;
+
+    expect(
+      findConsumablePackageInOfferings(offerings, {
+        offeringId: 'heart',
+        productId: 'dei_heart_1',
+      }),
     ).toBeNull();
   });
 });

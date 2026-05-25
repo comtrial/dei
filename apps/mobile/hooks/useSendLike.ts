@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { analytics, logger } from '@dei/shared';
 
+import { getFunctionErrorMessage } from '@/lib/function-errors';
 import { supabase } from '@/lib/supabase';
 
 export type SendLikeError =
@@ -32,28 +33,41 @@ export function useSendLike() {
   }): Promise<SendResult> {
     setPending(true);
     try {
-      // LK12 보내기: 좋아요 제출 시점(검증 통과 후 RPC 호출 직전).
+      // LK12 보내기: 좋아요 제출 시점(검증 통과 후 서버 호출 직전).
       analytics.capture('like_sent', {
         peer_user_id: toUserId,
         attached_log_id: attachedLogId ?? undefined,
         used_grant: usedGrant,
       });
 
-      const { error } = await supabase.rpc('send_like', {
-        p_to_user_id: toUserId,
-        p_attached_log_id: attachedLogId ?? undefined,
+      const { error } = await supabase.functions.invoke('send-like', {
+        body: {
+          attachedLogId,
+          toUserId,
+        },
       });
 
       if (error) {
-        const reason = parseReason(error.message);
-        if (reason === 'unknown') {
-          logger.captureException(error, { tags: { feature: 'send-like', toUserId } });
+        logger.captureException(error, {
+          tags: { feature: 'send-like', layer: 'edge', toUserId },
+        });
+
+        const { error: rpcError } = await supabase.rpc('send_like', {
+          p_to_user_id: toUserId,
+          p_attached_log_id: attachedLogId ?? undefined,
+        });
+
+        if (rpcError) {
+          const message = await getFunctionErrorMessage(error, rpcError.message);
+          const reason = parseReason(rpcError.message || message);
+          if (reason === 'unknown') {
+            logger.captureException(rpcError, { tags: { feature: 'send-like', toUserId } });
+          }
+          return { kind: 'error', reason };
         }
-        return { kind: 'error', reason };
       }
 
-      // send_like RPC 200 응답 직후 — client 가 발송 성공을 확인한 시점.
-      // RPC(SQL)는 HTTP 를 못 쏘므로 호출자 측에서 persisted 를 capture 한다.
+      // 좋아요 발송 성공 응답 직후 — client 가 서버 저장 성공을 확인한 시점.
       analytics.capture('like_send_persisted', {
         peer_user_id: toUserId,
       });

@@ -4,6 +4,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { logger } from '@dei/shared';
 
 import type { AppNotification, RegisterPushTokenInput } from '@/lib/notifications';
+import { requestAndRegisterPushToken as requestAndRegisterDevicePushToken } from '@/lib/push-notifications';
 import { supabase } from '@/lib/supabase';
 
 export function useNotifications(userId: string | undefined) {
@@ -121,6 +122,11 @@ export function useNotifications(userId: string | undefined) {
     [userId]
   );
 
+  const requestAndRegisterPushToken = useCallback(
+    async () => requestAndRegisterDevicePushToken(userId),
+    [userId]
+  );
+
   useEffect(() => {
     refresh();
   }, [refresh]);
@@ -168,9 +174,19 @@ export function useNotifications(userId: string | undefined) {
       markAllRead,
       markRead,
       refresh,
+      requestAndRegisterPushToken,
       registerPushToken,
       unreadCount,
     }),
-    [isLoading, items, markAllRead, markRead, refresh, registerPushToken, unreadCount]
+    [
+      isLoading,
+      items,
+      markAllRead,
+      markRead,
+      refresh,
+      registerPushToken,
+      requestAndRegisterPushToken,
+      unreadCount,
+    ]
   );
 }

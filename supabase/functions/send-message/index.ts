@@ -12,22 +12,37 @@
 //   200 { message: {...} }                전송 성공 → 클라이언트 버블 확정
 //   4xx { error }                         차단/종료/검증 실패 → retry 마커 (재시도 무의미한 경우 명시)
 //   5xx { error }                         일시 장애 → 클라이언트 retry
-import { captureServerEvent } from '../_shared/analytics.ts';
-import { getAuthenticatedUser } from '../_shared/auth.ts';
-import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
+import { captureServerEvent } from "../_shared/analytics.ts";
+import { getAuthenticatedUser } from "../_shared/auth.ts";
+import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import {
+  chatPushRoute,
+  createNotificationAndPush,
+  getProfileDisplayName,
+} from "../_shared/push.ts";
 
 type SendMessageBody = {
   body?: string;
   conversationId?: string;
 };
 
-function resolveConversationId(req: Request, body: SendMessageBody): string | null {
+type ConversationRow = {
+  id: string;
+  status: string;
+  user_a_id: string;
+  user_b_id: string;
+};
+
+function resolveConversationId(
+  req: Request,
+  body: SendMessageBody,
+): string | null {
   const fromBody = body.conversationId?.trim();
   if (fromBody) return fromBody;
 
   // /functions/v1/send-message/<conversationId>
-  const segments = new URL(req.url).pathname.split('/').filter(Boolean);
-  const idx = segments.indexOf('send-message');
+  const segments = new URL(req.url).pathname.split("/").filter(Boolean);
+  const idx = segments.indexOf("send-message");
   if (idx >= 0 && segments[idx + 1]) {
     return decodeURIComponent(segments[idx + 1]);
   }
@@ -35,64 +50,69 @@ function resolveConversationId(req: Request, body: SendMessageBody): string | nu
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
-  if (req.method !== 'POST') {
-    return errorResponse('method not allowed', 405);
+  if (req.method !== "POST") {
+    return errorResponse("method not allowed", 405);
   }
 
   try {
     // send_message RPC 는 SECURITY DEFINER + auth.uid() 의존 → 호출 사용자
     // JWT 클라이언트로 불러야 한다 (service-role 이면 auth.uid() NULL).
-    const { supabaseAsUser: supabase, user } = await getAuthenticatedUser(req);
+    const { supabase, supabaseAsUser, user } = await getAuthenticatedUser(req);
 
     let body: SendMessageBody;
     try {
       body = (await req.json()) as SendMessageBody;
     } catch {
-      return errorResponse('invalid json body', 400);
+      return errorResponse("invalid json body", 400);
     }
 
     const conversationId = resolveConversationId(req, body);
     if (!conversationId) {
-      return errorResponse('conversationId is required', 400);
+      return errorResponse("conversationId is required", 400);
     }
 
     const text = body.body;
-    if (typeof text !== 'string' || text.length < 1 || text.length > 500) {
+    if (typeof text !== "string" || text.length < 1 || text.length > 500) {
       // 클라이언트 입력 검증 실패 — 재시도해도 동일. retryable=false.
-      return errorResponse('message body must be 1..500 chars', 422, {
+      return errorResponse("message body must be 1..500 chars", 422, {
         retryable: false,
       });
     }
 
     // 서버측 재검증 + insert 는 send_message RPC 에서 단일 트랜잭션으로 수행.
     // (race 방지: 입장 후 상대가 차단/나가기 한 경우를 전송 직전 잡는다 — B-CH2)
-    const { data, error } = await supabase.rpc('send_message', {
+    const { data, error } = await supabaseAsUser.rpc("send_message", {
       p_conversation_id: conversationId,
       p_body: text,
     });
 
     if (error) {
-      const msg = error.message ?? 'failed to send message';
+      const msg = error.message ?? "failed to send message";
 
       // 명시적 비즈니스 거절 → 4xx, 재시도 무의미.
       if (/blocked/i.test(msg)) {
-        return errorResponse('blocked', 403, { reason: 'BLOCKED', retryable: false });
+        return errorResponse("blocked", 403, {
+          reason: "BLOCKED",
+          retryable: false,
+        });
       }
       if (/not active/i.test(msg)) {
-        return errorResponse('conversation ended', 409, {
-          reason: 'ENDED',
+        return errorResponse("conversation ended", 409, {
+          reason: "ENDED",
           retryable: false,
         });
       }
       if (/not a participant/i.test(msg)) {
-        return errorResponse('forbidden', 403, { retryable: false });
+        return errorResponse("forbidden", 403, { retryable: false });
       }
       if (/conversation not found/i.test(msg)) {
-        return errorResponse('conversation not found', 404, { retryable: false });
+        return errorResponse("conversation not found", 404, {
+          retryable: false,
+        });
       }
       if (/1\.\.500/i.test(msg)) {
         return errorResponse(msg, 422, { retryable: false });
@@ -109,16 +129,69 @@ Deno.serve(async (req) => {
     // 내부적으로 throw 하지 않으므로 계측 실패가 전송 성공 응답을 막지 않는다.
     await captureServerEvent({
       distinctId: user.id,
-      event: 'message_sent',
+      event: "message_sent",
       properties: {
         conversation_id: conversationId,
         message_id: message?.id,
       },
     });
 
-    return jsonResponse({ message }, { status: 200 });
+    const conversationResult = await supabase
+      .from("conversations")
+      .select("id, user_a_id, user_b_id, status")
+      .eq("id", conversationId)
+      .maybeSingle();
+
+    if (conversationResult.error) {
+      throw conversationResult.error;
+    }
+
+    const conversation = conversationResult.data as ConversationRow | null;
+    const recipientUserId = conversation?.user_a_id === user.id
+      ? conversation.user_b_id
+      : conversation?.user_b_id === user.id
+      ? conversation.user_a_id
+      : null;
+    let push = null;
+
+    if (conversation?.status === "ACTIVE" && recipientUserId) {
+      try {
+        const senderName = await getProfileDisplayName(supabase, user.id);
+        push = await createNotificationAndPush(supabase, {
+          body: text,
+          data: {
+            conversationId,
+            fromUserId: user.id,
+            messageId: message.id,
+            source: "send-message",
+            type: "chat",
+          },
+          dedupeKey: `message:${message.id}`,
+          metadata: {
+            conversationId,
+            fromUserId: user.id,
+            messageId: message.id,
+          },
+          route: chatPushRoute(conversationId),
+          title: `${senderName}님이 메시지를 보냈어요`,
+          type: "dm_received",
+          userId: recipientUserId,
+        });
+      } catch (pushError) {
+        push = {
+          error: pushError instanceof Error
+            ? pushError.message
+            : "failed to send push",
+          ok: false,
+        };
+      }
+    }
+
+    return jsonResponse({ message, push }, { status: 200 });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'failed to send message';
+    const msg = error instanceof Error
+      ? error.message
+      : "failed to send message";
     if (/authentication required/i.test(msg)) {
       return errorResponse(msg, 401, { retryable: false });
     }

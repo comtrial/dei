@@ -1,32 +1,39 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { analytics } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 import { useLikeResolution } from '../useLikeResolution';
 
+const mockInvoke = jest.fn();
 const mockRpc = jest.fn();
 
 jest.mock('@/lib/supabase', () => ({
   supabase: {
+    functions: {
+      invoke: (...args: unknown[]) => mockInvoke(...args),
+    },
     rpc: (...args: unknown[]) => mockRpc(...args),
   },
 }));
 
 let captureSpy: jest.SpyInstance;
+let loggerSpy: jest.SpyInstance;
 
 beforeEach(() => {
   jest.clearAllMocks();
   captureSpy = jest.spyOn(analytics, 'capture').mockImplementation(() => undefined);
+  loggerSpy = jest.spyOn(logger, 'captureException').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
   captureSpy.mockRestore();
+  loggerSpy.mockRestore();
 });
 
 describe('useLikeResolution analytics', () => {
-  it('captures like_accepted and match_created_in_db after accept_like RPC returns 200', async () => {
-    mockRpc.mockResolvedValueOnce({
-      data: { match_id: 'match-1', counterpart_id: 'peer-1' },
+  it('captures like_accepted and match_created_in_db after accept-like Edge Function returns 200', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      data: { conversationId: 'conv-1', matchId: 'match-1', counterpartId: 'peer-1' },
       error: null,
     });
 
@@ -37,7 +44,13 @@ describe('useLikeResolution analytics', () => {
       res = await result.current.accept();
     });
 
-    expect(res).toEqual({ kind: 'accepted', matchId: 'match-1', counterpartId: 'peer-1' });
+    expect(res).toEqual({
+      kind: 'accepted',
+      conversationId: 'conv-1',
+      matchId: 'match-1',
+      counterpartId: 'peer-1',
+    });
+    expect(mockRpc).not.toHaveBeenCalled();
 
     expect(captureSpy).toHaveBeenCalledWith('like_accepted', {
       peer_user_id: 'peer-1',
@@ -53,7 +66,8 @@ describe('useLikeResolution analytics', () => {
     });
   });
 
-  it('captures neither event when accept_like RPC returns an error', async () => {
+  it('captures neither event when both Edge Function and accept_like RPC return an error', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: null, error: { message: 'edge unavailable' } });
     mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'like_expired' } });
 
     const { result } = renderHook(() => useLikeResolution('like-2'));
@@ -70,8 +84,8 @@ describe('useLikeResolution analytics', () => {
   });
 
   it('omits since_received_sec when likedAt is not provided', async () => {
-    mockRpc.mockResolvedValueOnce({
-      data: { match_id: 'match-3', counterpart_id: 'peer-3' },
+    mockInvoke.mockResolvedValueOnce({
+      data: { conversationId: null, matchId: 'match-3', counterpartId: 'peer-3' },
       error: null,
     });
 

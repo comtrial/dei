@@ -1,31 +1,38 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { analytics } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 import { useSendLike } from '../useSendLike';
 
+const mockInvoke = jest.fn();
 const mockRpc = jest.fn();
 
 jest.mock('@/lib/supabase', () => ({
   supabase: {
+    functions: {
+      invoke: (...args: unknown[]) => mockInvoke(...args),
+    },
     rpc: (...args: unknown[]) => mockRpc(...args),
   },
 }));
 
 let captureSpy: jest.SpyInstance;
+let loggerSpy: jest.SpyInstance;
 
 beforeEach(() => {
   jest.clearAllMocks();
   captureSpy = jest.spyOn(analytics, 'capture').mockImplementation(() => undefined);
+  loggerSpy = jest.spyOn(logger, 'captureException').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
   captureSpy.mockRestore();
+  loggerSpy.mockRestore();
 });
 
 describe('useSendLike analytics', () => {
-  it('captures like_send_persisted right after send_like RPC returns 200 (no error)', async () => {
-    mockRpc.mockResolvedValueOnce({ error: null });
+  it('captures like_send_persisted right after send-like Edge Function returns 200 (no error)', async () => {
+    mockInvoke.mockResolvedValueOnce({ error: null });
 
     const { result } = renderHook(() => useSendLike());
     let res;
@@ -38,6 +45,13 @@ describe('useSendLike analytics', () => {
     });
 
     expect(res).toEqual({ kind: 'ok' });
+    expect(mockInvoke).toHaveBeenCalledWith('send-like', {
+      body: {
+        attachedLogId: 'log-9',
+        toUserId: 'peer-1',
+      },
+    });
+    expect(mockRpc).not.toHaveBeenCalled();
 
     // like_sent fires at submit with attached log + grant flag.
     expect(captureSpy).toHaveBeenCalledWith('like_sent', {
@@ -46,7 +60,7 @@ describe('useSendLike analytics', () => {
       used_grant: true,
     });
 
-    // like_send_persisted fires only after the RPC resolves without error.
+    // like_send_persisted fires only after the server call resolves without error.
     expect(captureSpy).toHaveBeenCalledWith('like_send_persisted', {
       peer_user_id: 'peer-1',
     });
@@ -56,7 +70,8 @@ describe('useSendLike analytics', () => {
     expect(order.indexOf('like_send_persisted')).toBeGreaterThan(order.indexOf('like_sent'));
   });
 
-  it('does NOT capture like_send_persisted when the RPC returns an error', async () => {
+  it('falls back to RPC and does NOT capture like_send_persisted when both paths fail', async () => {
+    mockInvoke.mockResolvedValueOnce({ error: { message: 'edge unavailable' } });
     mockRpc.mockResolvedValueOnce({ error: { message: 'daily_quota_exceeded' } });
 
     const { result } = renderHook(() => useSendLike());
@@ -66,6 +81,10 @@ describe('useSendLike analytics', () => {
     });
 
     expect(res).toEqual({ kind: 'error', reason: 'daily_quota_exceeded' });
+    expect(mockRpc).toHaveBeenCalledWith('send_like', {
+      p_attached_log_id: undefined,
+      p_to_user_id: 'peer-2',
+    });
 
     const events = captureSpy.mock.calls.map((c) => c[0]);
     expect(events).toContain('like_sent');
