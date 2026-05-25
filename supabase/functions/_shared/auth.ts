@@ -83,11 +83,11 @@ export async function getAuthenticatedUser(req: Request) {
   }
 
   // `supabaseAsUser` 는 *호출 사용자의 JWT* 를 단 클라이언트 — RLS +
-  // auth.uid() 가 그 사용자로 평가된다. send_message / leave_conversation
-  // 같이 `authenticated` 에 grant 되고 내부에서 auth.uid() 를 쓰는
-  // SECURITY DEFINER RPC 는 *반드시* 이 클라이언트로 호출해야 한다
-  // (service-role 로 부르면 auth.uid() 가 NULL → 'authentication required'
-  // 거절. 이게 실제 채팅 전송실패 결함이었다).
+  // auth.uid() 가 그 사용자로 평가된다. send_chat_message / leave_room /
+  // create_group 등 `authenticated` 에 grant 되고 내부에서 auth.uid() 를
+  // 쓰는 SECURITY DEFINER RPC 는 *반드시* 이 클라이언트로 호출해야 한다
+  // (service-role 로 부르면 auth.uid() 가 NULL → 'unauthenticated' 거절.
+  // 옛 1:1 채팅에서 실제로 발생했던 결함 — Phase 2C P1 에서 동일 패턴 유지).
   const supabaseAsUser = createClient(supabaseUrl, anonKey ?? serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
     global: { headers: { Authorization: `Bearer ${token}` } },

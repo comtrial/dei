@@ -40,6 +40,19 @@ export function getHeartProductId() {
   return process.env.EXPO_PUBLIC_REVENUECAT_HEART_PRODUCT_ID?.trim() || 'dei_heart_1';
 }
 
+// 새 도메인 (rooms-pivot) 부스터 product — D11 즉시 재매칭 부스터.
+// RevenueCat 콘솔에서 product id 변경 가능하도록 환경변수로 분리.
+export function getBoosterOfferingId() {
+  return process.env.EXPO_PUBLIC_REVENUECAT_BOOSTER_OFFERING_ID?.trim() || 'booster';
+}
+
+export function getBoosterProductId() {
+  return (
+    process.env.EXPO_PUBLIC_REVENUECAT_BOOSTER_PRODUCT_ID?.trim()
+    || 'booster_instant_rematch_v1'
+  );
+}
+
 export function isRevenueCatAvailable() {
   return Boolean(getRevenueCatApiKey()) && Platform.OS !== 'web';
 }
