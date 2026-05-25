@@ -1,7 +1,9 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { analytics } from '@dei/shared';
 
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
@@ -34,10 +36,13 @@ export default function WelcomeScreen() {
   const isLastPage = pageIndex === ONBOARDING_SCREENS.length - 1;
 
   const buttonLabel = useMemo(() => (isLastPage ? '시작하기' : '다음'), [isLastPage]);
+  // 온보딩 화면이 보이기 시작한 시점 — 마지막 「시작하기」 까지 머문 시간 측정용.
+  const onboardingStartedAt = useRef<number | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsBooting(false);
+      onboardingStartedAt.current = Date.now();
     }, 900);
 
     return () => clearTimeout(timer);
@@ -45,6 +50,11 @@ export default function WelcomeScreen() {
 
   const handleNext = () => {
     if (isLastPage) {
+      const startedAt = onboardingStartedAt.current;
+      analytics.capture(
+        'onboarding_completed',
+        startedAt ? { time_spent_sec: Math.round((Date.now() - startedAt) / 1000) } : {},
+      );
       router.push(ROUTES.terms as never);
       return;
     }

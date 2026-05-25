@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 import { supabase } from '@/lib/supabase';
 
@@ -9,7 +9,7 @@ export type ResolveResult =
   | { kind: 'rejected' }
   | { kind: 'error'; reason: 'expired' | 'not_pending' | 'unknown' };
 
-export function useLikeResolution(likeId: string) {
+export function useLikeResolution(likeId: string, likedAt?: string) {
   const [pending, setPending] = useState(false);
 
   async function accept(): Promise<ResolveResult> {
@@ -25,7 +25,24 @@ export function useLikeResolution(likeId: string) {
         return { kind: 'error', reason };
       }
       const row = Array.isArray(data) ? data[0] : data;
-      return { kind: 'accepted', matchId: row.match_id, counterpartId: row.counterpart_id };
+      const counterpartId = row.counterpart_id;
+
+      // LK5 받은 좋아요 수락 성공.
+      analytics.capture('like_accepted', {
+        peer_user_id: counterpartId,
+        since_received_sec: likedAt
+          ? Math.max(0, Math.round((Date.now() - new Date(likedAt).getTime()) / 1000))
+          : undefined,
+      });
+
+      // accept_like RPC 200 응답 직후 — 매칭 생성을 client 가 확인한 시점.
+      // RPC(SQL)는 HTTP 를 못 쏘므로 호출자 측에서 created 를 capture 한다.
+      analytics.capture('match_created_in_db', {
+        peer_user_id: counterpartId,
+        source: 'accept',
+      });
+
+      return { kind: 'accepted', matchId: row.match_id, counterpartId };
     } finally {
       setPending(false);
     }

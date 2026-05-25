@@ -37,7 +37,7 @@ import {
   purchaseRefreshItem,
 } from '@/lib/refresh-purchase';
 import { useAuth } from '@/providers/auth-provider';
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -115,7 +115,12 @@ export default function HomeScreen() {
   }, [isPaidRefreshOpen, paidRefreshPurpose, user?.id]);
 
   const handleLike = async (toUserId: string) => {
+    // OP4 「좋아요 보내기」 탭 — 자격검증(영상/쿼터/하트) 이전 시점.
+    analytics.capture('like_send_attempted', { peer_user_id: toUserId });
+
     if (!hasAnyVideo) {
+      // 영상 미보유 = 프로필 미완성으로 좋아요 자격 미달 → LK13 성격의 게이트.
+      analytics.capture('like_paywall_shown', { reason: 'incomplete' });
       Alert.alert('', '영상을 먼저 1개 이상 올려주세요.');
       return;
     }
@@ -134,6 +139,8 @@ export default function HomeScreen() {
     }
 
     if (result === 'daily-limit' || result === 'heart-required') {
+      // LK13: 무료 일일 좋아요 소진 → 하트 충전(추가권) 바텀시트 유도.
+      analytics.capture('like_paywall_shown', { reason: 'daily_limit' });
       Alert.alert('하트가 부족해요', '오늘의 무료 좋아요를 이미 사용했어요. 하트를 충전해 더 보낼 수 있어요.', [
         { style: 'cancel', text: '취소' },
         {
@@ -294,6 +301,12 @@ export default function HomeScreen() {
       setIsPaidRefreshOpen(false);
       setIsPaymentFailureOpen(true);
       return;
+    }
+
+    // LK13 구매 탭 — 하트 충전(추가권) 결제 시도. 후보 추가(load-more) 결제는
+    // 좋아요 paywall 이 아니므로 제외하고 charge-only 일 때만 집계.
+    if (paidRefreshPurpose === 'charge-only') {
+      analytics.capture('like_paywall_purchase_attempted', { reason: 'daily_limit' });
     }
 
     setIsPurchasingRefresh(true);

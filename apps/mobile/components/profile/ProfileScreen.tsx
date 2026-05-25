@@ -12,6 +12,8 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Ban, Flag, MoreVertical } from 'lucide-react-native';
 import { useState } from 'react';
 
+import { analytics } from '@dei/shared';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
@@ -126,6 +128,14 @@ export function ProfileScreen({ mode, profileUserId }: ProfileScreenProps) {
     });
 
     if (ok) {
+      if (profileUserId) {
+        // OP8 신고 제출 성공 — Safety 계측.
+        analytics.capture('report_submitted', {
+          reason: selectedReason.category,
+          target_user_id: profileUserId,
+          source_context: 'profile',
+        });
+      }
       setReportOpen(false);
       setReportDescription('');
     }
@@ -142,6 +152,10 @@ export function ProfileScreen({ mode, profileUserId }: ProfileScreenProps) {
         style: 'destructive',
         onPress: async () => {
           const ok = await blockProfile();
+          if (ok && profileUserId) {
+            // OP10 차단 확정 (RPC 성공) — Safety 계측.
+            analytics.capture('block_confirmed', { target_user_id: profileUserId });
+          }
           Alert.alert('', ok ? '차단했어요.' : '차단할 수 없어요.');
         },
       },

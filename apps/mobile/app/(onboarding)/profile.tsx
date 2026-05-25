@@ -1,7 +1,7 @@
 import { Camera, Check, ChevronDown, ChevronLeft, ImagePlus } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 import {
   ActivityIndicator,
   BackHandler,
@@ -492,6 +492,13 @@ export default function ProfileScreen() {
         regionSido,
         regionSigungu,
       });
+
+      // P3 관심사 선택 후 서버 가입 완료.
+      analytics.capture('signup_completed', {
+        total_interest_count: selectedTags.length,
+        selected_categories: selectedCategories,
+      });
+
       router.replace(ROUTES.logIntro as never);
     } catch (submitError) {
       logger.captureException(submitError, {

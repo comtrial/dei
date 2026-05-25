@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -8,7 +8,7 @@ import { Text } from '@/components/ui/text';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 type Profile = {
   nickname: string | null;
@@ -22,6 +22,8 @@ export default function MatchedScreen() {
   const router = useRouter();
   const [counterpart, setCounterpart] = useState<Profile | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  // LK8/matched 화면 표시를 매칭당 1회만 집계하기 위한 가드.
+  const matchCompletedCapturedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!matchId || !user?.id) return;
@@ -33,6 +35,16 @@ export default function MatchedScreen() {
         .single();
       if (!match) return;
       const cpId = match.user_a_id === user.id ? match.user_b_id : match.user_a_id;
+
+      // 매칭 완료 화면 표시 — counterpart 확정 시점에 1회 capture.
+      if (matchCompletedCapturedRef.current !== matchId) {
+        matchCompletedCapturedRef.current = matchId;
+        analytics.capture('match_completed', {
+          peer_user_id: cpId,
+          source: 'accept',
+        });
+      }
+
       const { data: profile } = await supabase
         .from('profiles')
         .select('nickname, birth_date, region_sido')

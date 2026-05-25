@@ -6,11 +6,13 @@ import { cn } from '@/lib/utils';
 
 interface Props {
   likeId: string;
+  /** 받은 좋아요 시각 — like_accepted 의 since_received_sec 계산용(선택). */
+  likedAt?: string;
   onResolved: (result: ResolveResult) => void;
 }
 
-export function ReceivedLikeFooter({ likeId, onResolved }: Props) {
-  const { accept, reject, pending } = useLikeResolution(likeId);
+export function ReceivedLikeFooter({ likeId, likedAt, onResolved }: Props) {
+  const { accept, reject, pending } = useLikeResolution(likeId, likedAt);
 
   async function handleAccept() {
     const result = await accept();

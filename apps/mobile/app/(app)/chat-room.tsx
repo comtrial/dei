@@ -37,7 +37,7 @@ import { fetchOtherProfile, leaveConversation } from '@/lib/chat/chat-service';
 import { enterOpponentProfile } from '@/lib/chat/opponent-profile';
 import { ROUTES } from '@/lib/routes';
 import { useAuth } from '@/providers/auth-provider';
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 export default function ChatRoomScreen() {
   const router = useRouter();
@@ -46,6 +46,7 @@ export default function ChatRoomScreen() {
     conversationId?: string;
     otherUserId?: string;
     otherNickname?: string;
+    source?: string;
   }>();
   const conversationId = params.conversationId ?? null;
   const myId = user?.id ?? null;
@@ -73,6 +74,21 @@ export default function ChatRoomScreen() {
 
   const { messages, loading, ended, sendFailure, clearSendFailure, send, retry, reload } =
     useChatRoom(conversationId, myId);
+
+  // NSM Conversation funnel: 채팅방(CH2) 진입 1건. 첫 로드가 끝나 message_count
+  // 가 확정된 시점에 conversation 당 1회만 발화. 탭 인스턴스 재사용으로 같은
+  // 방에 재진입해도 중복 발화하지 않도록 conversationId 기준 ref 로 가드한다.
+  const openedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!conversationId || loading) return;
+    if (openedRef.current === conversationId) return;
+    openedRef.current = conversationId;
+    analytics.capture('chat_room_opened', {
+      conversation_id: conversationId,
+      message_count: messages.length,
+      entry_point: params.source ?? undefined,
+    });
+  }, [conversationId, loading, messages.length, params.source]);
 
   // 탭 네비게이터에서 이 화면 인스턴스가 유지돼, 동일 conversationId 로 재진입
   // 시 useChatRoom 의 useEffect 가 재실행되지 않아 무한 로딩이 났다 → focus
@@ -277,7 +293,7 @@ export default function ChatRoomScreen() {
           </Pressable>
         ) : null}
 
-        <ChatComposer disabled={ended} onSend={send} />
+        <ChatComposer conversationId={conversationId} disabled={ended} onSend={send} />
       </KeyboardAvoidingView>
 
       <ChatMoreSheet

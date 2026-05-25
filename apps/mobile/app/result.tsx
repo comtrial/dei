@@ -6,7 +6,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 import { Text } from '@/components/ui/text';
 import { useSaveLog } from '@/hooks/useSaveLog';
@@ -97,6 +97,14 @@ export default function ResultScreen() {
       Alert.alert('저장 실패', result.message || '저장에 실패했어요. 다시 시도해주세요.');
       return;
     }
+
+    // 촬영 결과 저장 성공.
+    analytics.capture('log_recorded', {
+      ...(result.logId ? { log_id: result.logId } : {}),
+      duration_sec: Math.round(recordedMs / 1000),
+      is_first_log: wasOnboarding,
+      entry_point: wasOnboarding ? 'onboarding' : 'record',
+    });
 
     // 첫 로그 업로드로 서버에서 온보딩이 완료되므로, 게이트가 홈을 허용하도록 eligibility 를 갱신한다.
     if (wasOnboarding) {

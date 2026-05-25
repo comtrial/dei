@@ -35,7 +35,7 @@ export function useSaveLog() {
   }: {
     tempVideoUri: string;
     recordedMs: number;
-  }): Promise<{ success: true } | { success: false; message: string }> => {
+  }): Promise<{ success: true; logId: string | null } | { success: false; message: string }> => {
     setLoading(true);
     try {
       const {
@@ -124,6 +124,9 @@ export function useSaveLog() {
         recordedMs,
       });
 
+      // PostHog log_recorded 의 log_id 용. Edge 응답이 우선, 폴백 시 insert 결과로 채운다.
+      let logId: string | null = edgeFinalize.ok ? edgeFinalize.logId : null;
+
       if (!edgeFinalize.ok) {
         // 폴백: 기존 클라 로직. Edge 가 죽거나 인증 timing race 인 경우에도 사용자 흐름은
         // 막지 않는다. (이 분기는 Edge 안정화되면 제거 예정 — TODO 주석 참조)
@@ -132,7 +135,7 @@ export function useSaveLog() {
           extra: { reason: edgeFinalize.reason },
         });
 
-        await fallbackFinalizeOnClient({
+        logId = await fallbackFinalizeOnClient({
           userId,
           videoPath: uploadData.path,
           thumbnailPath,
@@ -151,7 +154,7 @@ export function useSaveLog() {
         });
       }
 
-      return { success: true };
+      return { success: true, logId };
     } catch (e) {
       logger.captureException(e, {
         tags: { feature: 'save-log' },
@@ -176,7 +179,7 @@ export function useSaveLog() {
 // remove → delete → insert → RPC) 을 그대로 실행한다. Edge 가 안정화되면 폴백을 제거.
 
 type FinalizeLogInvoke =
-  | { ok: true }
+  | { ok: true; logId: string }
   | { ok: false; reason: 'invoke-failed' | 'edge-error'; error: unknown };
 
 async function invokeFinalizeLog(args: {
@@ -204,7 +207,7 @@ async function invokeFinalizeLog(args: {
     if (data?.error || !data?.logId) {
       return { ok: false, reason: 'edge-error', error: data?.error ?? 'no logId' };
     }
-    return { ok: true };
+    return { ok: true, logId: data.logId };
   } catch (e) {
     return { ok: false, reason: 'invoke-failed', error: e };
   }
@@ -217,7 +220,7 @@ async function fallbackFinalizeOnClient(args: {
   hourSlot: number;
   today: string;
   recordedMs: number;
-}): Promise<void> {
+}): Promise<string | null> {
   const { userId, videoPath, thumbnailPath, hourSlot, today, recordedMs } = args;
 
   // 같은 슬롯의 기존 row + storage 정리. 폴백 경로에서는 부분 실패 위험을 감수 (메인은 Edge).
@@ -241,18 +244,24 @@ async function fallbackFinalizeOnClient(args: {
     await supabase.from('logs').delete().eq('id', existing.id);
   }
 
-  const { error: insertError } = await supabase.from('logs').insert({
-    user_id: userId,
-    video_url: videoPath,
-    thumbnail_path: thumbnailPath,
-    hour_slot: hourSlot,
-    duration_sec: Math.max(1, Math.round(recordedMs / 1000)),
-    검수_YN: 'N',
-    검수_상태: 'PENDING',
-    recorded_at: new Date().toISOString(),
-  });
+  const { data: insertedLog, error: insertError } = await supabase
+    .from('logs')
+    .insert({
+      user_id: userId,
+      video_url: videoPath,
+      thumbnail_path: thumbnailPath,
+      hour_slot: hourSlot,
+      duration_sec: Math.max(1, Math.round(recordedMs / 1000)),
+      검수_YN: 'N',
+      검수_상태: 'PENDING',
+      recorded_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
 
   if (insertError) throw insertError;
 
   await supabase.rpc('recalculate_daily_log', { p_user_id: userId });
+
+  return insertedLog?.id ?? null;
 }

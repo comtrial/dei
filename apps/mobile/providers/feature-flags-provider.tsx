@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 import { getFlag, type FlagKey, type FlagMap, type FlagValue } from '@/lib/feature-flags';
 import { supabase } from '@/lib/supabase';
@@ -25,6 +25,32 @@ export function FeatureFlagsProvider({ children }: { children: React.ReactNode }
   const [flags, setFlags] = useState<FlagMap | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 마지막으로 $feature_flag_called 를 발송한 flag 값. 매 refresh 마다 같은 값을
+  // 중복 발송하지 않고 "변경된 flag" 에 대해서만 1회 노출 이벤트를 보낸다.
+  const lastExposed = useRef<FlagMap>({});
+
+  /**
+   * 평가된 variant 를 PostHog 로 전달한다.
+   *   1) 모든 flag key/value 를 super property 로 register → 이후 모든 event
+   *      (log_recorded, message_sent 등) 에 variant 가 자동 첨부돼 breakdown 가능.
+   *   2) PostHog experiment 노출 관례인 `$feature_flag_called` 를 flag 값이
+   *      바뀐 경우에만 1회 발송 (중복 노출 마킹 방지).
+   */
+  const reportFlags = useCallback((data: FlagMap) => {
+    // (1) super properties: flag map 전체를 그대로 register.
+    analytics.register(data);
+
+    // (2) 노출 마킹: 직전 발송값과 다른 flag 만 골라 $feature_flag_called 발송.
+    for (const [key, value] of Object.entries(data)) {
+      if (lastExposed.current[key] === value) continue;
+      analytics.capture('$feature_flag_called', {
+        $feature_flag: key,
+        $feature_flag_response: value,
+      });
+      lastExposed.current[key] = value;
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     if (!user) {
       setFlags(null);
@@ -47,7 +73,9 @@ export function FeatureFlagsProvider({ children }: { children: React.ReactNode }
     }
     setFlags(data ?? null);
     setIsLoading(false);
-  }, [user]);
+    // flags 가 있을 때만 variant 전달/노출 마킹. null(로그아웃/실패)이면 건너뜀.
+    if (data) reportFlags(data);
+  }, [user, reportFlags]);
 
   // 로그인/로그아웃 시 로드.
   useEffect(() => {

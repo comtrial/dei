@@ -1,3 +1,6 @@
+import { Alert } from 'react-native';
+
+import { analytics } from '@dei/shared';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { ProfileScreen } from '@/components/profile/ProfileScreen';
@@ -28,6 +31,7 @@ jest.mock('@/hooks/useDeleteLog', () => ({
 }));
 
 const mockUseProfileFeed = useProfileFeed as jest.Mock;
+const captureSpy = jest.spyOn(analytics, 'capture').mockImplementation(() => undefined);
 
 function mockProfileFeedState(overrides = {}) {
   mockUseProfileFeed.mockReturnValue({
@@ -101,6 +105,58 @@ describe('ProfileScreen', () => {
         description: null,
         reason: '괴롭힘 또는 혐오 표현',
         reasonCategory: 'ABUSE',
+      });
+    });
+
+    await waitFor(() => {
+      expect(captureSpy).toHaveBeenCalledWith('report_submitted', {
+        reason: 'ABUSE',
+        target_user_id: 'profile-user-id',
+        source_context: 'profile',
+      });
+    });
+  });
+
+  it('captures block_confirmed after a successful block', async () => {
+    const blockProfile = jest.fn().mockResolvedValue(true);
+    mockProfileFeedState({
+      profile: {
+        createdAt: '2026-05-12T00:00:00.000Z',
+        gender: 'F',
+        interestCategories: [],
+        interestTags: [],
+        intro: '안녕하세요',
+        mbti: 'ENTP',
+        nickname: '상대',
+        photoUrl: null,
+        regionSido: '서울',
+        regionSigungu: '강남구',
+        userId: 'profile-user-id',
+      },
+      blockProfile,
+    });
+
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    const { getByTestId } = render(
+      <ProfileScreen mode="public" profileUserId="profile-user-id" />
+    );
+
+    fireEvent.press(getByTestId('profile-more-menu'));
+    fireEvent.press(getByTestId('profile-block-menu-item'));
+
+    // handleBlock 가 띄운 확인 Alert 의 "차단" 버튼(onPress) 을 직접 호출.
+    const confirmCall = alertSpy.mock.calls.find(([title]) => title === '차단');
+    const buttons = confirmCall?.[2] as
+      | { text?: string; onPress?: () => void | Promise<void> }[]
+      | undefined;
+    const confirmButton = buttons?.find((b) => b.text === '차단');
+    await confirmButton?.onPress?.();
+
+    expect(blockProfile).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(captureSpy).toHaveBeenCalledWith('block_confirmed', {
+        target_user_id: 'profile-user-id',
       });
     });
   });

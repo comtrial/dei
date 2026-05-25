@@ -91,7 +91,9 @@ export function useLike(userId: string | undefined) {
     if (!userId) return 'failed';
     if (likedUserIds.has(toUserId)) return 'already-liked';
 
-    const result = await send({ toUserId, attachedLogId: null });
+    // 무료 일일 쿼터를 다 쓴 상태에서 보내면 하트(추가권)를 사용하는 것.
+    const usedGrant = remainingLikes <= 0;
+    const result = await send({ toUserId, attachedLogId: null, usedGrant });
     if (result.kind === 'ok') {
       setLikedUserIds((prev) => new Set(prev).add(toUserId));
       setRemainingLikes((prev) => Math.max(0, prev - 1));
