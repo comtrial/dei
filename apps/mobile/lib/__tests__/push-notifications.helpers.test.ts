@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildRegisterPushTokenArgs,
+  getPushConversationIdFromData,
   getExpoProjectIdFromConstants,
   getPushRouteFromData,
   normalizePushPlatform,
@@ -47,8 +48,21 @@ describe('push notification helpers', () => {
 
   it('accepts only app routes from notification data', () => {
     expect(getPushRouteFromData({ route: '/home' })).toBe('/home');
+    expect(getPushRouteFromData({ route: '/profiles/user-1' })).toBe('/profiles/user-1');
     expect(getPushRouteFromData({ route: 'https://example.test' })).toBeNull();
+    expect(getPushRouteFromData({ route: '//example.test' })).toBeNull();
     expect(getPushRouteFromData({ route: '' })).toBeNull();
     expect(getPushRouteFromData(null)).toBeNull();
+  });
+
+  it('maps chat push payloads to the CH0 route gate', () => {
+    expect(getPushConversationIdFromData({ conversationId: 'conv-1' })).toBe('conv-1');
+    expect(getPushConversationIdFromData({ route: 'dei://chat/conv-2' })).toBe('conv-2');
+    expect(getPushRouteFromData({ conversationId: 'conv 3' })).toBe(
+      '/chat?conversationId=conv%203&source=push',
+    );
+    expect(getPushRouteFromData({ route: 'dei://chat/conv-4' })).toBe(
+      '/chat?conversationId=conv-4&source=push',
+    );
   });
 });

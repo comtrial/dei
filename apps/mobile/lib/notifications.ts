@@ -1,9 +1,13 @@
 export type NotificationType =
+  | 'curation_ready'
+  | 'log_reminder'
   | 'like_received'
+  | 'match_created'
   | 'dm_received'
   | 'payment_succeeded'
   | 'payment_failed'
   | 'payment_refunded'
+  | 'profile_viewed'
   | 'daily_log'
   | 'report_status'
   | 'block_status'

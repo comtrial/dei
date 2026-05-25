@@ -8,10 +8,12 @@ import { logger } from '@dei/shared';
 import type { RegisterPushTokenInput } from '@/lib/notifications';
 import {
   buildRegisterPushTokenArgs,
+  getPushConversationIdFromData,
   getExpoProjectIdFromConstants,
   getPushRouteFromData,
   normalizePushPlatform,
 } from '@/lib/push-notifications.helpers';
+import { getActiveChatPushConversation } from '@/lib/push-notifications-state';
 import { supabase } from '@/lib/supabase';
 
 const INSTALLATION_ID_STORAGE_KEY = 'dei.push.installationId.v1';
@@ -75,12 +77,24 @@ export async function configureForegroundPushNotifications() {
   didConfigureForegroundNotifications = true;
 
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: false,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async (notification) => {
+      const conversationId = getPushConversationIdFromData(
+        notification.request.content.data,
+      );
+      const activeChatConversationId = getActiveChatPushConversation();
+      const shouldSuppressChatPush = Boolean(
+        activeChatConversationId
+        && conversationId
+        && activeChatConversationId === conversationId,
+      );
+
+      return {
+        shouldPlaySound: false,
+        shouldSetBadge: !shouldSuppressChatPush,
+        shouldShowBanner: !shouldSuppressChatPush,
+        shouldShowList: !shouldSuppressChatPush,
+      };
+    },
   });
 
   if (Platform.OS !== 'android') {
@@ -184,6 +198,10 @@ export function addPushResponseListener(
 
 export function getLastPushResponse() {
   return Notifications.getLastNotificationResponse();
+}
+
+export function clearLastPushResponse() {
+  Notifications.clearLastNotificationResponse();
 }
 
 export function getPushRouteFromResponse(response: Notifications.NotificationResponse) {

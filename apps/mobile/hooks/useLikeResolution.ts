@@ -2,10 +2,11 @@ import { useState } from 'react';
 
 import { logger } from '@dei/shared';
 
+import { getFunctionErrorMessage } from '@/lib/function-errors';
 import { supabase } from '@/lib/supabase';
 
 export type ResolveResult =
-  | { kind: 'accepted'; matchId: string; counterpartId: string }
+  | { kind: 'accepted'; matchId: string; counterpartId: string; conversationId?: string | null }
   | { kind: 'rejected' }
   | { kind: 'error'; reason: 'expired' | 'not_pending' | 'unknown' };
 
@@ -15,10 +16,33 @@ export function useLikeResolution(likeId: string) {
   async function accept(): Promise<ResolveResult> {
     setPending(true);
     try {
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke<{
+        conversationId?: string | null;
+        counterpartId?: string;
+        error?: string;
+        matchId?: string;
+      }>('accept-like', { body: { likeId } });
+
+      if (!edgeError && edgeData?.matchId && edgeData.counterpartId) {
+        return {
+          kind: 'accepted',
+          conversationId: edgeData.conversationId ?? null,
+          matchId: edgeData.matchId,
+          counterpartId: edgeData.counterpartId,
+        };
+      }
+
+      if (edgeError) {
+        logger.captureException(edgeError, {
+          tags: { feature: 'like-accept', layer: 'edge', likeId },
+        });
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase.rpc as any)('accept_like', { p_like_id: likeId });
       if (error) {
-        const reason = parseReason(error.message);
+        const message = edgeError ? await getFunctionErrorMessage(edgeError, error.message) : error.message;
+        const reason = parseReason(error.message || message);
         if (reason === 'unknown') {
           logger.captureException(error, { tags: { feature: 'like-accept', likeId } });
         }

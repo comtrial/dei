@@ -1,11 +1,11 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 function env() {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Supabase service environment is not configured');
+    throw new Error("Supabase service environment is not configured");
   }
   return { supabaseUrl, serviceRoleKey, anonKey };
 }
@@ -17,12 +17,22 @@ export function createAdminClient() {
   });
 }
 
+function getBearerToken(req: Request) {
+  return req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "").trim() ??
+    null;
+}
+
+export function isServiceRoleRequest(req: Request) {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  return Boolean(serviceRoleKey && getBearerToken(req) === serviceRoleKey);
+}
+
 export async function getAuthenticatedUser(req: Request) {
-  const authorization = req.headers.get('Authorization');
-  const token = authorization?.replace('Bearer ', '').trim();
+  const authorization = req.headers.get("Authorization");
+  const token = authorization?.replace("Bearer ", "").trim();
 
   if (!token) {
-    throw new Error('authentication required');
+    throw new Error("authentication required");
   }
 
   const { supabaseUrl, serviceRoleKey, anonKey } = env();
@@ -39,7 +49,7 @@ export async function getAuthenticatedUser(req: Request) {
   });
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) {
-    throw new Error('authentication required');
+    throw new Error("authentication required");
   }
 
   // `supabaseAsUser` 는 *호출 사용자의 JWT* 를 단 클라이언트 — RLS +

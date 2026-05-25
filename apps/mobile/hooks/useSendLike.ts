@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { logger } from '@dei/shared';
 
+import { getFunctionErrorMessage } from '@/lib/function-errors';
 import { supabase } from '@/lib/supabase';
 
 export type SendLikeError =
@@ -30,17 +31,31 @@ export function useSendLike() {
   }): Promise<SendResult> {
     setPending(true);
     try {
-      const { error } = await supabase.rpc('send_like', {
-        p_to_user_id: toUserId,
-        p_attached_log_id: attachedLogId ?? undefined,
+      const { error } = await supabase.functions.invoke('send-like', {
+        body: {
+          attachedLogId,
+          toUserId,
+        },
       });
 
       if (error) {
-        const reason = parseReason(error.message);
-        if (reason === 'unknown') {
-          logger.captureException(error, { tags: { feature: 'send-like', toUserId } });
+        logger.captureException(error, {
+          tags: { feature: 'send-like', layer: 'edge', toUserId },
+        });
+
+        const { error: rpcError } = await supabase.rpc('send_like', {
+          p_to_user_id: toUserId,
+          p_attached_log_id: attachedLogId ?? undefined,
+        });
+
+        if (rpcError) {
+          const message = await getFunctionErrorMessage(error, rpcError.message);
+          const reason = parseReason(rpcError.message || message);
+          if (reason === 'unknown') {
+            logger.captureException(rpcError, { tags: { feature: 'send-like', toUserId } });
+          }
+          return { kind: 'error', reason };
         }
-        return { kind: 'error', reason };
       }
 
       return { kind: 'ok' };

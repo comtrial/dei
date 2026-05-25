@@ -66,13 +66,67 @@ export function buildRegisterPushTokenArgs(
   };
 }
 
+export function getPushConversationIdFromData(data: Record<string, unknown> | null | undefined) {
+  const conversationId = data?.conversationId;
+
+  if (typeof conversationId === 'string' && conversationId.trim()) {
+    return conversationId.trim();
+  }
+
+  return getConversationIdFromRoute(typeof data?.route === 'string' ? data.route : null);
+}
+
+function getConversationIdFromRoute(route: string | null | undefined) {
+  const trimmedRoute = route?.trim();
+
+  if (!trimmedRoute) {
+    return null;
+  }
+
+  if (trimmedRoute.startsWith('/chat?')) {
+    const params = new URLSearchParams(trimmedRoute.slice(trimmedRoute.indexOf('?') + 1));
+    const conversationId = params.get('conversationId')?.trim();
+    return conversationId || null;
+  }
+
+  if (!trimmedRoute.startsWith('dei://')) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmedRoute);
+
+    if (url.hostname !== 'chat') {
+      return null;
+    }
+
+    const conversationId = decodeURIComponent(url.pathname.replace(/^\//, '')).trim();
+    return conversationId || null;
+  } catch {
+    return null;
+  }
+}
+
+function chatRouteFromConversationId(conversationId: string) {
+  return `/chat?conversationId=${encodeURIComponent(conversationId)}&source=push`;
+}
+
 export function getPushRouteFromData(data: Record<string, unknown> | null | undefined) {
   const route = data?.route;
+  const conversationId = getPushConversationIdFromData(data);
+
+  if (conversationId) {
+    return chatRouteFromConversationId(conversationId);
+  }
 
   if (typeof route !== 'string') {
     return null;
   }
 
   const trimmedRoute = route.trim();
-  return trimmedRoute.startsWith('/') ? trimmedRoute : null;
+  if (!trimmedRoute.startsWith('/') || trimmedRoute.startsWith('//')) {
+    return null;
+  }
+
+  return trimmedRoute;
 }

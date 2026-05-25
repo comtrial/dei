@@ -35,6 +35,7 @@ import { Text } from '@/components/ui/text';
 import { useChatRoom } from '@/hooks/useChatRoom';
 import { fetchOtherProfile, leaveConversation } from '@/lib/chat/chat-service';
 import { enterOpponentProfile } from '@/lib/chat/opponent-profile';
+import { setActiveChatPushConversation } from '@/lib/push-notifications-state';
 import { ROUTES } from '@/lib/routes';
 import { useAuth } from '@/providers/auth-provider';
 import { logger } from '@dei/shared';
@@ -79,8 +80,10 @@ export default function ChatRoomScreen() {
   // 마다 재로드해 복구. (CH0 게이트도 동일 이유로 useFocusEffect 로 전환됨.)
   useFocusEffect(
     useCallback(() => {
+      setActiveChatPushConversation(conversationId);
       reload();
-    }, [reload]),
+      return () => setActiveChatPushConversation(null);
+    }, [conversationId, reload]),
   );
   const [moreOpen, setMoreOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
