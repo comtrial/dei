@@ -11,7 +11,7 @@ import {
   isRevenueCatAvailable,
 } from '@/lib/revenuecat';
 
-import type { PurchasesPackage } from 'react-native-purchases';
+import type { PurchasesOfferings, PurchasesPackage } from 'react-native-purchases';
 
 export type RefreshOfferingInfo = {
   isConfigured: boolean;
@@ -28,7 +28,7 @@ type SyncRefreshPurchaseResponse = {
   refreshGrantId: string;
 };
 
-type ConsumablePurchaseConfig = {
+export type ConsumablePurchaseConfig = {
   offeringId: string;
   productId: string;
 };
@@ -38,6 +38,19 @@ export function findPackageByProductId(
   productId: string,
 ): PurchasesPackage | null {
   return packages.find((item) => item.product.identifier === productId) ?? null;
+}
+
+export function findConsumablePackageInOfferings(
+  offerings: PurchasesOfferings,
+  config: ConsumablePurchaseConfig,
+): PurchasesPackage | null {
+  const offering = offerings.all[config.offeringId] ?? offerings.current;
+
+  if (!offering) {
+    return null;
+  }
+
+  return findPackageByProductId(offering.availablePackages, config.productId);
 }
 
 async function getConsumablePackage(
@@ -52,13 +65,7 @@ async function getConsumablePackage(
 
   const PurchasesClient = await getRevenueCatPurchases();
   const offerings = await PurchasesClient.getOfferings();
-  const offering = offerings.all[config.offeringId];
-
-  if (!offering) {
-    return null;
-  }
-
-  return findPackageByProductId(offering.availablePackages, config.productId);
+  return findConsumablePackageInOfferings(offerings, config);
 }
 
 export async function getRefreshOfferingInfo(userId: string): Promise<RefreshOfferingInfo> {
