@@ -3,17 +3,12 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { BottomTabBar } from '../bottom-tab-bar';
 
+/**
+ * Phase 1 정리 후 — likes/messages 탭 제거 + useLikesUnreadCount 의존 제거.
+ * Phase 3 에서 새 도메인 탭 (방/묶음 등) 추가 시 이 테스트도 함께 확장.
+ */
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
-}));
-
-jest.mock('@/providers/auth-provider', () => ({
-  useAuth: () => ({ user: { id: 'u1' } }),
-}));
-
-const mockUnread = jest.fn(() => 0);
-jest.mock('@/hooks/useLikesUnreadCount', () => ({
-  useLikesUnreadCount: () => mockUnread(),
 }));
 
 jest.mock('expo-haptics', () => ({
@@ -21,7 +16,7 @@ jest.mock('expo-haptics', () => ({
   ImpactFeedbackStyle: { Light: 'light' },
 }));
 
-const ROUTE_NAMES = ['home', 'likes', 'messages', 'record'];
+const ROUTE_NAMES = ['home', 'record'];
 
 function makeProps(focusedName = 'home') {
   const routes = ROUTE_NAMES.map((name, i) => ({ key: `${name}-${i}`, name }));
@@ -38,30 +33,14 @@ function makeProps(focusedName = 'home') {
   return { props, navigation };
 }
 
-beforeEach(() => {
-  mockUnread.mockReturnValue(0);
-});
-
 describe('BottomTabBar', () => {
-  it('홈·좋아요·DM·My dei 4개 항목을 렌더한다 (REC → My dei)', () => {
+  it('Phase 1 단순화: 홈 + My dei 만 렌더한다', () => {
     render(<BottomTabBar {...makeProps('home').props} />);
     expect(screen.getByText('홈')).toBeTruthy();
-    expect(screen.getByText('좋아요')).toBeTruthy();
-    expect(screen.getByText('DM')).toBeTruthy();
     expect(screen.getByText('My dei')).toBeTruthy();
-    expect(screen.queryByText('REC')).toBeNull();
-  });
-
-  it('좋아요 미확인이 있으면 빨강 배지를 보여준다', () => {
-    mockUnread.mockReturnValue(3);
-    render(<BottomTabBar {...makeProps('home').props} />);
-    expect(screen.getByTestId('tab-likes-badge')).toBeTruthy();
-  });
-
-  it('좋아요 미확인이 없으면 배지를 숨긴다', () => {
-    mockUnread.mockReturnValue(0);
-    render(<BottomTabBar {...makeProps('home').props} />);
-    expect(screen.queryByTestId('tab-likes-badge')).toBeNull();
+    // 옛 좋아요·DM 탭은 사라진 상태
+    expect(screen.queryByText('좋아요')).toBeNull();
+    expect(screen.queryByText('DM')).toBeNull();
   });
 
   it('녹화(record) 화면에서는 탭바 전체를 숨긴다', () => {
@@ -70,12 +49,9 @@ describe('BottomTabBar', () => {
     expect(screen.queryByText('My dei')).toBeNull();
   });
 
-  it('포커스되지 않은 탭을 누르면 해당 라우트로 이동한다', () => {
-    const { props, navigation } = makeProps('home');
-    render(<BottomTabBar {...props} />);
-    fireEvent.press(screen.getByTestId('tab-likes'));
-    expect(navigation.navigate).toHaveBeenCalledWith('likes');
-  });
+  // 포커스되지 않은 일반 탭 → 다른 일반 탭 이동 케이스는 Phase 3 에서 새
+  // 도메인 탭(방/묶음 등)이 추가되면 그때 다시 작성. 현재는 일반 탭이 home
+  // 하나뿐 + record 포커스 시 탭바 자체가 hidden 이라 무의미한 케이스.
 
   it('My dei(녹화) 버튼을 누르면 record 라우트로 이동한다', () => {
     const { props, navigation } = makeProps('home');

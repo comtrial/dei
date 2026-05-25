@@ -225,87 +225,122 @@ export type Database = {
         }
         Relationships: []
       }
-      conversations: {
+      booster_grants: {
         Row: {
-          created_at: string
+          consumed_at: string | null
+          consumed_for_room_id: string | null
+          granted_at: string
           id: string
-          last_message_at: string | null
-          last_message_preview: string | null
-          match_id: string
-          status: string
-          updated_at: string
-          user_a_id: string
-          user_b_id: string
+          product_id: string
+          profile_id: string
+          revenuecat_transaction_id: string | null
+          source: string
         }
         Insert: {
-          created_at?: string
+          consumed_at?: string | null
+          consumed_for_room_id?: string | null
+          granted_at?: string
           id?: string
-          last_message_at?: string | null
-          last_message_preview?: string | null
-          match_id: string
-          status?: string
-          updated_at?: string
-          user_a_id: string
-          user_b_id: string
+          product_id: string
+          profile_id: string
+          revenuecat_transaction_id?: string | null
+          source: string
         }
         Update: {
-          created_at?: string
+          consumed_at?: string | null
+          consumed_for_room_id?: string | null
+          granted_at?: string
           id?: string
-          last_message_at?: string | null
-          last_message_preview?: string | null
-          match_id?: string
-          status?: string
-          updated_at?: string
-          user_a_id?: string
-          user_b_id?: string
+          product_id?: string
+          profile_id?: string
+          revenuecat_transaction_id?: string | null
+          source?: string
         }
         Relationships: [
           {
-            foreignKeyName: "conversations_match_id_fkey"
-            columns: ["match_id"]
-            isOneToOne: true
-            referencedRelation: "matches"
+            foreignKeyName: "booster_grants_consumed_for_room_id_fkey"
+            columns: ["consumed_for_room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booster_grants_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      chat_mentions: {
+        Row: {
+          mentioned_profile_id: string
+          message_id: string
+        }
+        Insert: {
+          mentioned_profile_id: string
+          message_id: string
+        }
+        Update: {
+          mentioned_profile_id?: string
+          message_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_mentions_mentioned_profile_id_fkey"
+            columns: ["mentioned_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "chat_mentions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
             referencedColumns: ["id"]
           },
         ]
       }
-      curation_pool: {
+      chat_messages: {
         Row: {
+          author_id: string
+          body: string
           created_at: string
+          deleted_at: string | null
           id: string
-          log_id: string
-          pool_date: string
-          user_id: string
-          video_path: string | null
-          검수_YN: string
-          차단_YN: string
+          room_id: string
         }
         Insert: {
+          author_id: string
+          body: string
           created_at?: string
+          deleted_at?: string | null
           id?: string
-          log_id: string
-          pool_date: string
-          user_id: string
-          video_path?: string | null
-          검수_YN?: string
-          차단_YN?: string
+          room_id: string
         }
         Update: {
+          author_id?: string
+          body?: string
           created_at?: string
+          deleted_at?: string | null
           id?: string
-          log_id?: string
-          pool_date?: string
-          user_id?: string
-          video_path?: string | null
-          검수_YN?: string
-          차단_YN?: string
+          room_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "curation_pool_log_id_fkey"
-            columns: ["log_id"]
-            isOneToOne: true
-            referencedRelation: "logs"
+            foreignKeyName: "chat_messages_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "chat_messages_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
         ]
@@ -408,6 +443,144 @@ export type Database = {
         }
         Relationships: []
       }
+      group_members: {
+        Row: {
+          group_id: string
+          invited_at: string
+          profile_id: string
+          role: string
+        }
+        Insert: {
+          group_id: string
+          invited_at?: string
+          profile_id: string
+          role?: string
+        }
+        Update: {
+          group_id?: string
+          invited_at?: string
+          profile_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          created_at: string
+          disbanded_at: string | null
+          id: string
+          leader_id: string
+          matched_room_id: string | null
+          size: number
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          disbanded_at?: string | null
+          id?: string
+          leader_id: string
+          matched_room_id?: string | null
+          size: number
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          disbanded_at?: string | null
+          id?: string
+          leader_id?: string
+          matched_room_id?: string | null
+          size?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "groups_leader_id_fkey"
+            columns: ["leader_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "groups_matched_room_id_fkey"
+            columns: ["matched_room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hourly_uploads: {
+        Row: {
+          archived_at: string | null
+          duration_ms: number
+          expires_at: string
+          hour_slot: number
+          id: string
+          profile_id: string
+          room_id: string
+          slot_date: string
+          storage_path: string
+          thumbnail_path: string | null
+          uploaded_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          duration_ms: number
+          expires_at?: string
+          hour_slot: number
+          id?: string
+          profile_id: string
+          room_id: string
+          slot_date: string
+          storage_path: string
+          thumbnail_path?: string | null
+          uploaded_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          duration_ms?: number
+          expires_at?: string
+          hour_slot?: number
+          id?: string
+          profile_id?: string
+          room_id?: string
+          slot_date?: string
+          storage_path?: string
+          thumbnail_path?: string | null
+          uploaded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hourly_uploads_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "hourly_uploads_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       identity_verifications: {
         Row: {
           adult_verified: boolean | null
@@ -477,67 +650,6 @@ export type Database = {
         }
         Relationships: []
       }
-      likes: {
-        Row: {
-          attached_log_id: string | null
-          created_at: string
-          expires_at: string
-          from_user_id: string
-          id: string
-          liked_at: string
-          read_at: string | null
-          responded_at: string | null
-          status: string
-          to_user_id: string
-        }
-        Insert: {
-          attached_log_id?: string | null
-          created_at?: string
-          expires_at?: string
-          from_user_id: string
-          id?: string
-          liked_at: string
-          read_at?: string | null
-          responded_at?: string | null
-          status?: string
-          to_user_id: string
-        }
-        Update: {
-          attached_log_id?: string | null
-          created_at?: string
-          expires_at?: string
-          from_user_id?: string
-          id?: string
-          liked_at?: string
-          read_at?: string | null
-          responded_at?: string | null
-          status?: string
-          to_user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "likes_attached_log_id_fkey"
-            columns: ["attached_log_id"]
-            isOneToOne: false
-            referencedRelation: "logs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "likes_from_profile_fkey"
-            columns: ["from_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "likes_to_profile_fkey"
-            columns: ["to_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-        ]
-      }
       logs: {
         Row: {
           comment: string | null
@@ -583,81 +695,43 @@ export type Database = {
         }
         Relationships: []
       }
-      matches: {
+      match_queue: {
         Row: {
-          created_at: string
+          age_range_max: number | null
+          age_range_min: number | null
+          consumed_at: string | null
+          desired_opponent_gender: string
+          enqueued_at: string
+          group_id: string
           id: string
-          matched_at: string
-          source_like_id: string | null
-          status: string
-          updated_at: string
-          user_a_id: string
-          user_b_id: string
+          submitter_gender: string
         }
         Insert: {
-          created_at?: string
+          age_range_max?: number | null
+          age_range_min?: number | null
+          consumed_at?: string | null
+          desired_opponent_gender: string
+          enqueued_at?: string
+          group_id: string
           id?: string
-          matched_at?: string
-          source_like_id?: string | null
-          status?: string
-          updated_at?: string
-          user_a_id: string
-          user_b_id: string
+          submitter_gender: string
         }
         Update: {
-          created_at?: string
+          age_range_max?: number | null
+          age_range_min?: number | null
+          consumed_at?: string | null
+          desired_opponent_gender?: string
+          enqueued_at?: string
+          group_id?: string
           id?: string
-          matched_at?: string
-          source_like_id?: string | null
-          status?: string
-          updated_at?: string
-          user_a_id?: string
-          user_b_id?: string
+          submitter_gender?: string
         }
         Relationships: [
           {
-            foreignKeyName: "matches_source_like_id_fkey"
-            columns: ["source_like_id"]
-            isOneToOne: false
-            referencedRelation: "likes"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      messages: {
-        Row: {
-          body: string
-          conversation_id: string
-          created_at: string
-          deleted_at: string | null
-          id: string
-          sender_user_id: string
-          status: string
-        }
-        Insert: {
-          body: string
-          conversation_id: string
-          created_at?: string
-          deleted_at?: string | null
-          id?: string
-          sender_user_id: string
-          status?: string
-        }
-        Update: {
-          body?: string
-          conversation_id?: string
-          created_at?: string
-          deleted_at?: string | null
-          id?: string
-          sender_user_id?: string
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "messages_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
-            referencedRelation: "conversations"
+            foreignKeyName: "match_queue_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: true
+            referencedRelation: "groups"
             referencedColumns: ["id"]
           },
         ]
@@ -926,10 +1000,15 @@ export type Database = {
           interest_categories: string[]
           interest_tags: string[]
           intro: string | null
+          is_in_active_room: boolean
+          last_room_leave_at: string | null
           mbti: string | null
           nickname: string | null
+          nickname_lower: string | null
           phone: string | null
           photo_url: string | null
+          quiet_hours_end: number
+          quiet_hours_start: number
           region_sido: string | null
           region_sigungu: string | null
           suspend_reason: string | null
@@ -947,10 +1026,15 @@ export type Database = {
           interest_categories?: string[]
           interest_tags?: string[]
           intro?: string | null
+          is_in_active_room?: boolean
+          last_room_leave_at?: string | null
           mbti?: string | null
           nickname?: string | null
+          nickname_lower?: string | null
           phone?: string | null
           photo_url?: string | null
+          quiet_hours_end?: number
+          quiet_hours_start?: number
           region_sido?: string | null
           region_sigungu?: string | null
           suspend_reason?: string | null
@@ -968,10 +1052,15 @@ export type Database = {
           interest_categories?: string[]
           interest_tags?: string[]
           intro?: string | null
+          is_in_active_room?: boolean
+          last_room_leave_at?: string | null
           mbti?: string | null
           nickname?: string | null
+          nickname_lower?: string | null
           phone?: string | null
           photo_url?: string | null
+          quiet_hours_end?: number
+          quiet_hours_start?: number
           region_sido?: string | null
           region_sigungu?: string | null
           suspend_reason?: string | null
@@ -1088,62 +1177,71 @@ export type Database = {
       }
       reports: {
         Row: {
-          action_taken: string | null
-          block_days: number | null
           created_at: string
-          description: string | null
           id: string
-          log_id: string | null
-          operator_comment: string | null
-          operator_email: string | null
-          operator_id: string | null
-          reason: string
-          reason_category: string
+          reason_code: string
+          reason_detail: string | null
           reported_id: string
           reporter_id: string
-          resolved_at: string | null
-          처리상태: string
+          resolution_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          room_id: string | null
+          status: string
         }
         Insert: {
-          action_taken?: string | null
-          block_days?: number | null
           created_at?: string
-          description?: string | null
           id?: string
-          log_id?: string | null
-          operator_comment?: string | null
-          operator_email?: string | null
-          operator_id?: string | null
-          reason: string
-          reason_category: string
+          reason_code: string
+          reason_detail?: string | null
           reported_id: string
           reporter_id: string
-          resolved_at?: string | null
-          처리상태?: string
+          resolution_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          room_id?: string | null
+          status?: string
         }
         Update: {
-          action_taken?: string | null
-          block_days?: number | null
           created_at?: string
-          description?: string | null
           id?: string
-          log_id?: string | null
-          operator_comment?: string | null
-          operator_email?: string | null
-          operator_id?: string | null
-          reason?: string
-          reason_category?: string
+          reason_code?: string
+          reason_detail?: string | null
           reported_id?: string
           reporter_id?: string
-          resolved_at?: string | null
-          처리상태?: string
+          resolution_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          room_id?: string | null
+          status?: string
         }
         Relationships: [
           {
-            foreignKeyName: "reports_log_id_fkey"
-            columns: ["log_id"]
+            foreignKeyName: "reports_reported_id_fkey"
+            columns: ["reported_id"]
             isOneToOne: false
-            referencedRelation: "logs"
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "reports_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "reports_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "reports_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
         ]
@@ -1233,6 +1331,166 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      room_auto_kicks: {
+        Row: {
+          blocks_count: number
+          id: string
+          kicked_profile_id: string
+          room_id: string
+          total_members: number
+          triggered_at: string
+        }
+        Insert: {
+          blocks_count: number
+          id?: string
+          kicked_profile_id: string
+          room_id: string
+          total_members: number
+          triggered_at?: string
+        }
+        Update: {
+          blocks_count?: number
+          id?: string
+          kicked_profile_id?: string
+          room_id?: string
+          total_members?: number
+          triggered_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_auto_kicks_kicked_profile_id_fkey"
+            columns: ["kicked_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "room_auto_kicks_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_leave_cooldowns: {
+        Row: {
+          cooldown_until: string
+          created_at: string
+          profile_id: string
+          source_room_id: string | null
+        }
+        Insert: {
+          cooldown_until: string
+          created_at?: string
+          profile_id: string
+          source_room_id?: string | null
+        }
+        Update: {
+          cooldown_until?: string
+          created_at?: string
+          profile_id?: string
+          source_room_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_leave_cooldowns_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "room_leave_cooldowns_source_room_id_fkey"
+            columns: ["source_room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_members: {
+        Row: {
+          group_id: string | null
+          joined_at: string
+          left_at: string | null
+          profile_id: string
+          room_id: string
+          status: string
+        }
+        Insert: {
+          group_id?: string | null
+          joined_at?: string
+          left_at?: string | null
+          profile_id: string
+          room_id: string
+          status?: string
+        }
+        Update: {
+          group_id?: string | null
+          joined_at?: string
+          left_at?: string | null
+          profile_id?: string
+          room_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "room_members_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rooms: {
+        Row: {
+          active_member_count: number
+          created_at: string
+          ended_at: string | null
+          ended_reason: string | null
+          expires_at: string
+          id: string
+          member_count: number
+          status: string
+        }
+        Insert: {
+          active_member_count?: number
+          created_at?: string
+          ended_at?: string | null
+          ended_reason?: string | null
+          expires_at?: string
+          id?: string
+          member_count?: number
+          status?: string
+        }
+        Update: {
+          active_member_count?: number
+          created_at?: string
+          ended_at?: string | null
+          ended_reason?: string | null
+          expires_at?: string
+          id?: string
+          member_count?: number
+          status?: string
+        }
+        Relationships: []
       }
       sms_log: {
         Row: {
@@ -1350,7 +1608,13 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_block_pairs: {
+        Row: {
+          a: string | null
+          b: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       _flag_attr_value: {
@@ -1369,13 +1633,6 @@ export type Database = {
         Returns: boolean
       }
       _video_review_notify_config: { Args: never; Returns: Json }
-      accept_like: {
-        Args: { p_like_id: string }
-        Returns: {
-          counterpart_id: string
-          match_id: string
-        }[]
-      }
       accept_required_consents: {
         Args: {
           p_age_policy_version: string
@@ -1409,16 +1666,21 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_create_room: { Args: { p_group_ids: string[] }; Returns: string }
       block_profile_user: {
         Args: { p_blocked_user_id: string; p_reason?: string }
         Returns: string
       }
+      block_user: {
+        Args: {
+          p_blocked_id: string
+          p_reason?: string
+          p_source_room_id?: string
+        }
+        Returns: undefined
+      }
       can_enter_discovery: {
         Args: { target_user_id?: string }
-        Returns: boolean
-      }
-      chat_is_blocked_between: {
-        Args: { p_user_a: string; p_user_b: string }
         Returns: boolean
       }
       complete_local_dev_consumable_purchase: {
@@ -1534,6 +1796,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      consume_booster_grant: { Args: never; Returns: string }
       consume_refresh_item: {
         Args: { p_seen_user_ids?: string[] }
         Returns: {
@@ -1548,6 +1811,7 @@ export type Database = {
           video_url: string
         }[]
       }
+      create_group: { Args: { p_nicknames: string[] }; Returns: string }
       create_notification: {
         Args: {
           p_body?: string
@@ -1578,12 +1842,9 @@ export type Database = {
           status: string
         }[]
       }
-      ensure_conversation_for_match: {
-        Args: { p_user_x: string; p_user_y: string }
-        Returns: string
-      }
+      disband_group: { Args: { p_group_id: string }; Returns: undefined }
+      enqueue_group_for_match: { Args: { p_group_id: string }; Returns: string }
       evaluate_my_flags: { Args: never; Returns: Json }
-      expire_overdue_likes: { Args: { p_user_id: string }; Returns: number }
       get_available_heart_count: {
         Args: { p_user_id?: string }
         Returns: number
@@ -1640,6 +1901,7 @@ export type Database = {
           video_url: string
         }[]
       }
+      grant_free_booster_for_female: { Args: never; Returns: string }
       grant_refresh_item: {
         Args: {
           p_granted_count?: number
@@ -1679,15 +1941,7 @@ export type Database = {
         Args: { p_product_id: string }
         Returns: boolean
       }
-      leave_conversation: {
-        Args: { p_conversation_id: string }
-        Returns: {
-          conversation_id: string
-          match_id: string
-          other_user_id: string
-          status: string
-        }[]
-      }
+      leave_room: { Args: { p_room_id: string }; Returns: undefined }
       recalculate_daily_log: { Args: { p_user_id: string }; Returns: undefined }
       recalculate_daily_log_for_date: {
         Args: { p_log_date: string; p_user_id: string }
@@ -1764,7 +2018,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      reject_like: { Args: { p_like_id: string }; Returns: undefined }
+      report_user: {
+        Args: {
+          p_reason_code: string
+          p_reason_detail?: string
+          p_reported_id: string
+          p_room_id?: string
+        }
+        Returns: string
+      }
       revoke_refresh_item_grant_for_payment: {
         Args: { p_payment_id: string; p_revoke_reason?: string }
         Returns: {
@@ -1789,37 +2051,9 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      send_like: {
-        Args: { p_attached_log_id?: string; p_to_user_id: string }
-        Returns: {
-          attached_log_id: string | null
-          created_at: string
-          expires_at: string
-          from_user_id: string
-          id: string
-          liked_at: string
-          read_at: string | null
-          responded_at: string | null
-          status: string
-          to_user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "likes"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      send_message: {
-        Args: { p_body: string; p_conversation_id: string }
-        Returns: {
-          body: string
-          conversation_id: string
-          created_at: string
-          id: string
-          sender_user_id: string
-          status: string
-        }[]
+      send_chat_message: {
+        Args: { p_body: string; p_room_id: string }
+        Returns: string
       }
       transfer_existing_member_account: {
         Args: { p_from_user_id: string; p_to_user_id: string }
@@ -1846,6 +2080,17 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      upload_hourly_video: {
+        Args: {
+          p_duration_ms: number
+          p_hour_slot: number
+          p_room_id: string
+          p_slot_date: string
+          p_storage_path: string
+          p_thumbnail_path: string
+        }
+        Returns: string
       }
     }
     Enums: {

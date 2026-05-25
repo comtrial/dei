@@ -28,5 +28,21 @@ export type AccountState = Enums<'account_state'>;
 export type OnboardingState = Enums<'onboarding_state'>;
 export type VerificationStatus = Enums<'verification_status'>;
 export type ModerationStatus = Enums<'moderation_status'>;
-export type ReportReason = Report['reason'];
-export type ReportStatus = Report['처리상태'];
+
+// 새 도메인 reports schema (`reason_code` + `status` 컬럼).
+// 옛 admin-console 한글 컬럼(`reason`, `처리상태`) 은 Phase 2 에서 폐기됨.
+export type ReportReason = Report['reason_code'];
+export type ReportStatus = Report['status'];
+
+// 새 도메인 핵심 테이블 type alias — Phase 3 hooks/lib 가 사용.
+export type RoomRow = Tables<'rooms'>;
+export type RoomMember = Tables<'room_members'>;
+export type GroupRow = Tables<'groups'>;
+export type GroupMember = Tables<'group_members'>;
+export type MatchQueueRow = Tables<'match_queue'>;
+export type HourlyUpload = Tables<'hourly_uploads'>;
+export type ChatMessage = Tables<'chat_messages'>;
+export type ChatMention = Tables<'chat_mentions'>;
+export type RoomAutoKick = Tables<'room_auto_kicks'>;
+export type RoomLeaveCooldown = Tables<'room_leave_cooldowns'>;
+export type BoosterGrant = Tables<'booster_grants'>;
