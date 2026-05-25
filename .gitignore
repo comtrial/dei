@@ -14,6 +14,7 @@ dist/
 .playwright-mcp/
 opencode.json
 asset/
+.local/
 
 # Local screenshots, exports, and reference dumps (root only)
 /*.png
