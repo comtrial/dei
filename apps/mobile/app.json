@@ -20,6 +20,7 @@
       "permissions": [
         "com.android.vending.BILLING",
         "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECORD_AUDIO"
       ],
       "adaptiveIcon": {
@@ -56,6 +57,13 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#111827",
+          "defaultChannel": "default"
         }
       ],
       "expo-video",

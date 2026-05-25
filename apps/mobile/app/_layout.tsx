@@ -10,10 +10,12 @@ import { AccountGateProvider } from '@/providers/account-gate-provider';
 import { AuthProvider } from '@/providers/auth-provider';
 import { FeatureFlagsProvider } from '@/providers/feature-flags-provider';
 import { RootGate } from '@/providers/root-gate';
+import { configureForegroundPushNotifications } from '@/lib/push-notifications';
 import { NAV_THEME } from '@/lib/theme';
 import { Sentry, initSentry } from '@/lib/sentry';
 
 initSentry();
+void configureForegroundPushNotifications();
 
 export const unstable_settings = {
   anchor: '(auth)',
