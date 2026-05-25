@@ -1,30 +1,50 @@
 name: Push Notification Schedules
 
+# Rooms-pivot 갱신:
+#   - 옛 'send-curation-ready' (09:00 KST) 폐기 → rooms 매칭/알림으로 의미 이동.
+#   - 새 cron 5개 추가: hourly-upload, blur-gate-remind, blur-gate-reapply,
+#     rematch-available, expire-rooms, purge-expired-uploads.
+#   - 모든 cron 함수는 `dryRun`, `limit`, `now` 옵션 지원 (`workflow_dispatch`).
+#   - 기존 send-log-reminders (개인 일상 로그) 는 그대로 KEEP.
+#
+# Cron timing (UTC → KST=+9h):
+#   '0 3,7,11,15,19,23 * * *'  ▶ send-log-reminders    (4h마다, KST 00·04·08·12·16·20)
+#   '0 * * * *'                ▶ notify-hourly-upload  (매시간 정각)
+#   '0 * * * *'                ▶ expire-rooms          (매시간 정각, 같이 처리)
+#   '*/15 * * * *'             ▶ notify-blur-gate-remind  (15분마다)
+#   '*/15 * * * *'             ▶ notify-blur-gate-reapply (15분마다, 같이 처리)
+#   '*/15 * * * *'             ▶ notify-rematch-available (15분마다, 같이 처리)
+#   '0 19 * * *'               ▶ purge-expired-uploads  (KST 04:00)
+
 on:
   schedule:
-    # Log reminder policy: every 4 hours, expressed in UTC for KST slots
-    # 00:00, 04:00, 08:00, 12:00, 16:00, 20:00.
     - cron: '0 3,7,11,15,19,23 * * *'
-    # Curation-ready notification: 09:00 KST.
-    - cron: '0 0 * * *'
+    - cron: '0 * * * *'
+    - cron: '*/15 * * * *'
+    - cron: '0 19 * * *'
   workflow_dispatch:
     inputs:
       target:
         description: 'Which notification batch to run'
         options:
-          - both
+          - all
           - log-reminders
-          - curation-ready
+          - hourly-upload
+          - expire-rooms
+          - blur-gate-remind
+          - blur-gate-reapply
+          - rematch-available
+          - purge-expired-uploads
         required: true
         type: choice
-        default: both
+        default: all
       dry_run:
         description: 'Run without sending push notifications'
         required: true
         type: boolean
         default: true
       limit:
-        description: 'Maximum users to scan'
+        description: 'Maximum users/rows to scan'
         required: true
         type: number
         default: 200
@@ -50,26 +70,50 @@ jobs:
           limit="${{ github.event.inputs.limit || '500' }}"
 
           run_logs=false
-          run_curation=false
+          run_hourly=false
+          run_expire=false
+          run_blur_remind=false
+          run_blur_reapply=false
+          run_rematch_avail=false
+          run_purge=false
 
           if [ "${{ github.event_name }}" = "schedule" ]; then
             case "${{ github.event.schedule }}" in
-              "0 3,7,11,15,19,23 * * *") run_logs=true ;;
-              "0 0 * * *") run_curation=true ;;
+              "0 3,7,11,15,19,23 * * *")
+                run_logs=true ;;
+              "0 * * * *")
+                run_hourly=true; run_expire=true ;;
+              "*/15 * * * *")
+                run_blur_remind=true; run_blur_reapply=true; run_rematch_avail=true ;;
+              "0 19 * * *")
+                run_purge=true ;;
               *) echo "::error::Unknown schedule: ${{ github.event.schedule }}"; exit 1 ;;
             esac
           else
             case "$target" in
-              both) run_logs=true; run_curation=true ;;
-              log-reminders) run_logs=true ;;
-              curation-ready) run_curation=true ;;
+              all)
+                run_logs=true; run_hourly=true; run_expire=true
+                run_blur_remind=true; run_blur_reapply=true
+                run_rematch_avail=true; run_purge=true ;;
+              log-reminders)        run_logs=true ;;
+              hourly-upload)        run_hourly=true ;;
+              expire-rooms)         run_expire=true ;;
+              blur-gate-remind)     run_blur_remind=true ;;
+              blur-gate-reapply)    run_blur_reapply=true ;;
+              rematch-available)    run_rematch_avail=true ;;
+              purge-expired-uploads) run_purge=true ;;
               *) echo "::error::Unknown target: $target"; exit 1 ;;
             esac
           fi
 
           {
             echo "run_logs=$run_logs"
-            echo "run_curation=$run_curation"
+            echo "run_hourly=$run_hourly"
+            echo "run_expire=$run_expire"
+            echo "run_blur_remind=$run_blur_remind"
+            echo "run_blur_reapply=$run_blur_reapply"
+            echo "run_rematch_avail=$run_rematch_avail"
+            echo "run_purge=$run_purge"
             echo "dry_run=$dry_run"
             echo "limit=$limit"
           } >> "$GITHUB_OUTPUT"
@@ -90,8 +134,13 @@ jobs:
         env:
           DRY_RUN: ${{ steps.select.outputs.dry_run }}
           LIMIT: ${{ steps.select.outputs.limit }}
-          RUN_CURATION: ${{ steps.select.outputs.run_curation }}
           RUN_LOGS: ${{ steps.select.outputs.run_logs }}
+          RUN_HOURLY: ${{ steps.select.outputs.run_hourly }}
+          RUN_EXPIRE: ${{ steps.select.outputs.run_expire }}
+          RUN_BLUR_REMIND: ${{ steps.select.outputs.run_blur_remind }}
+          RUN_BLUR_REAPPLY: ${{ steps.select.outputs.run_blur_reapply }}
+          RUN_REMATCH_AVAIL: ${{ steps.select.outputs.run_rematch_avail }}
+          RUN_PURGE: ${{ steps.select.outputs.run_purge }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -euo pipefail
@@ -114,10 +163,12 @@ jobs:
             echo
           }
 
-          if [ "$RUN_LOGS" = "true" ]; then
-            call_function "send-log-reminders"
-          fi
+          [ "$RUN_LOGS" = "true" ]          && call_function "send-log-reminders"
+          [ "$RUN_HOURLY" = "true" ]        && call_function "notify-hourly-upload"
+          [ "$RUN_EXPIRE" = "true" ]        && call_function "expire-rooms"
+          [ "$RUN_BLUR_REMIND" = "true" ]   && call_function "notify-blur-gate-remind"
+          [ "$RUN_BLUR_REAPPLY" = "true" ]  && call_function "notify-blur-gate-reapply"
+          [ "$RUN_REMATCH_AVAIL" = "true" ] && call_function "notify-rematch-available"
+          [ "$RUN_PURGE" = "true" ]         && call_function "purge-expired-uploads"
 
-          if [ "$RUN_CURATION" = "true" ]; then
-            call_function "send-curation-ready"
-          fi
+          exit 0

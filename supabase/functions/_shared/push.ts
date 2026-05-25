@@ -263,6 +263,27 @@ export async function getProfileDisplayName(supabase: any, userId: string) {
   return nickname || "새로운 사람";
 }
 
-// Phase 1 정리: 옛 1:1 채팅 deeplink 헬퍼(chatPushRoute) 제거.
-// 새 도메인 라우트 헬퍼는 Phase 2 에서 `roomPushRoute()` 형태로 추가 예정.
-// 매핑 표: docs/rooms-spec/screens.md 의 "라우팅 deeplink" 섹션 참고.
+// ============================================================================
+// Rooms-pivot 라우트 헬퍼
+// ============================================================================
+// docs/rooms-spec/screens.md 의 "라우팅 deeplink" 매핑과 일치.
+// 클라의 `getPushRouteFromData` 가 `data.route` 를 그대로 in-app 경로로 사용
+// 하므로 여기서 만든 경로는 항상 `/...` slash 로 시작하는 in-app pathname.
+
+export function roomRoute(roomId: string) {
+  return `/room/${encodeURIComponent(roomId)}`;
+}
+
+export function roomChatRoute(roomId: string, messageId?: string | null) {
+  const base = `/room/${encodeURIComponent(roomId)}/chat`;
+  if (!messageId) return base;
+  return `${base}?focusMessage=${encodeURIComponent(messageId)}`;
+}
+
+export function roomUploadRoute(roomId: string) {
+  return `/room/${encodeURIComponent(roomId)}/upload`;
+}
+
+export function boosterRoute() {
+  return '/booster';
+}
