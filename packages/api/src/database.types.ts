@@ -540,6 +540,7 @@ export type Database = {
       }
       logs: {
         Row: {
+          comment: string | null
           created_at: string
           duration_sec: number
           hour_slot: number
@@ -553,6 +554,7 @@ export type Database = {
           검수_상태: string
         }
         Insert: {
+          comment?: string | null
           created_at?: string
           duration_sec: number
           hour_slot: number
@@ -566,6 +568,7 @@ export type Database = {
           검수_상태?: string
         }
         Update: {
+          comment?: string | null
           created_at?: string
           duration_sec?: number
           hour_slot?: number
@@ -2056,3 +2059,4 @@ export const Constants = {
     },
   },
 } as const
+

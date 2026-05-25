@@ -38,6 +38,7 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/with-orientation-turbo",
       "@portone/react-native-sdk/plugin",
       [
         "expo-camera",
