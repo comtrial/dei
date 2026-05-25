@@ -60,6 +60,10 @@ export function initPostHog(): void {
     setPersonProperties(props) {
       posthog.setPersonProperties(toEventProps(props));
     },
+    register(props) {
+      // super properties: 이후 모든 capture 이벤트에 자동 첨부 (PostHog 표준 API).
+      void posthog.register(toEventProps(props) ?? {});
+    },
     reset() {
       posthog.reset();
     },

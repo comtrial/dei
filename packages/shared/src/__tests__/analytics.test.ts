@@ -26,6 +26,7 @@ function createSpyTransport() {
   const identifies: CapturedIdentify[] = [];
   const screens: CapturedScreen[] = [];
   const personProps: Record<string, unknown>[] = [];
+  const registers: Record<string, unknown>[] = [];
   let resets = 0;
 
   const transport: AnalyticsTransport = {
@@ -41,6 +42,9 @@ function createSpyTransport() {
     setPersonProperties(props) {
       personProps.push(props);
     },
+    register(props) {
+      registers.push(props);
+    },
     reset() {
       resets += 1;
     },
@@ -52,6 +56,7 @@ function createSpyTransport() {
     identifies,
     screens,
     personProps,
+    registers,
     getResets: () => resets,
   };
 }
@@ -63,6 +68,7 @@ afterEach(() => {
     identify: () => {},
     screen: () => {},
     setPersonProperties: () => {},
+    register: () => {},
     reset: () => {},
   });
 });
@@ -108,6 +114,15 @@ describe('analytics', () => {
     expect(spy.personProps).toEqual([{ verified: true }]);
   });
 
+  it('routes register (super properties) through the registered transport', () => {
+    const spy = createSpyTransport();
+    registerAnalyticsTransport(spy.transport);
+
+    analytics.register({ home_top_layout: 'B', curation_layout: 'single' });
+
+    expect(spy.registers).toEqual([{ home_top_layout: 'B', curation_layout: 'single' }]);
+  });
+
   it('routes reset through the registered transport', () => {
     const spy = createSpyTransport();
     registerAnalyticsTransport(spy.transport);
@@ -129,6 +144,7 @@ describe('analytics', () => {
       fresh.analytics.identify('id-to-console');
       fresh.analytics.screen('screen-to-console');
       fresh.analytics.setPersonProperties({ k: 'v' });
+      fresh.analytics.register({ home_top_layout: 'A' });
       fresh.analytics.reset();
     }).not.toThrow();
 
