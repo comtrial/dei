@@ -27,6 +27,12 @@ export function CurationCard({
 }: Props) {
   const [muted, setMuted] = useState(true);
   const [videoIndex, setVideoIndex] = useState(0);
+  // ping-pong 두 player 중 어느 쪽이 현재 화면에 보이는지. cycling 마다 토글된다.
+  //   active   : VideoView 에 표시되는 player. 지금 재생 중.
+  //   inactive : 화면에 안 보이는 백그라운드 player. **다음 영상을 미리 load 해서
+  //              readyToPlay 상태로 대기** — playToEnd 순간에 즉시 표시 가능 (디코더
+  //              warm). replaceAsync 후 readyToPlay 까지의 100~300ms gap 이 사라진다.
+  const [activeKey, setActiveKey] = useState<'a' | 'b'>('a');
 
   const currentVideo = item.videos[videoIndex] ?? null;
 
@@ -76,22 +82,35 @@ export function CurationCard({
   // replaceAsync 호출 시점으로 미룬다. (cached swap 으로 player 가 재생성되면 cycling
   // listener 가 끊기고 첫 영상이 중간에 reset 되는 부작용 발생)
   const firstVideoUrl = item.videos[0]?.videoUrl ?? null;
-  const player = useVideoPlayer(firstVideoUrl, (p) => {
+  // playerA: 진입 시 첫 영상을 자동 재생. 처음에는 이게 active.
+  const playerA = useVideoPlayer(firstVideoUrl, (p) => {
     p.loop = item.videos.length <= 1;
     p.muted = true;
     p.play();
   });
+  // playerB: 워밍업 전용 (보이지 않음). source=null 로 시작해서 useEffect 가 다음 영상을
+  // replaceAsync 로 채운다. setup 에서 play 호출 안 함 — swap 시점에만 play 한다.
+  const playerB = useVideoPlayer(null, (p) => {
+    p.loop = false;
+    p.muted = true;
+  });
+
+  const activePlayer = activeKey === 'a' ? playerA : playerB;
+  const inactivePlayer = activeKey === 'a' ? playerB : playerA;
 
   // iOS 의 player.replace 는 main thread sync 라서 UI freeze (특히 "두 번째 영상이 멈춰서
   // 보이는" 증상의 직접 원인) → 가능하면 replaceAsync 사용.
-  const replaceSource = (url: string): Promise<void> => {
-    const playerAny = player as unknown as {
+  const replaceSourceOn = (
+    p: typeof playerA,
+    url: string,
+  ): Promise<void> => {
+    const playerAny = p as unknown as {
       replaceAsync?: (source: string) => Promise<void>;
     };
     if (typeof playerAny.replaceAsync === 'function') {
       return playerAny.replaceAsync(url);
     }
-    player.replace(url);
+    p.replace(url);
     return Promise.resolve();
   };
 
@@ -99,7 +118,7 @@ export function CurationCard({
   // 있다. 그 상태에서 play() 를 호출하면 잠깐 isPlaying=true 가 됐다가 디코더 미준비로
   // 즉시 paused 로 떨어지고, 이후 'readyToPlay' 가 와도 자동 재생되지 않아 stuck 된다.
   // → status 가 'readyToPlay' 인 시점을 보장한 후 play() 호출한다.
-  const playWhenReady = (): void => {
+  const playWhenReady = (player: typeof playerA): void => {
     const p = player as unknown as {
       status?: string;
       play: () => void;
@@ -134,60 +153,71 @@ export function CurationCard({
     }, 5000);
   };
 
-  // 유저가 바뀌면 인덱스만 리셋. useVideoPlayer 가 firstVideoUrl 변경을 자동으로 swap
-  // 하므로 명시적 replace 는 불필요. (이전 구현은 명시적 replace + resolvedUrls dep 로
-  // 인해 cache lookup 완료 시점에 한 번 더 0번째로 reset → 사용자가 본 "2번째 멈춤" 의
-  // 원인이었음)
+  // 유저가 바뀌면 (다른 큐레이션 카드로 스크롤) 인덱스와 active 를 모두 리셋.
+  // playerA 는 useVideoPlayer 가 firstVideoUrl 변경을 자동으로 swap 해주므로 그대로 'a'.
   useEffect(() => {
     setVideoIndex(0);
+    setActiveKey('a');
   }, [item.userId]);
 
-  // 영상 1개: native loop / 영상 2개 이상: 종료 시점에 다음 영상으로 cycling.
-  // 마지막(4번)에서 % 연산으로 0번째로 돌아간다 → 1→2→3→4→1 루프.
+  // **inactive player 워밍업**: 현재 표시되는 영상이 재생되는 동안 inactive 에 다음 영상을
+  // 미리 load 시켜 readyToPlay 까지 진행한다. 그러면 playToEnd 시점에 swap 만 하면
+  // 디코더 ready 상태이므로 멈춤 없이 즉시 재생된다.
+  useEffect(() => {
+    if (item.videos.length <= 1) return;
+    const nextIndex = (videoIndex + 1) % item.videos.length;
+    const nextUrl = resolvedUrls[nextIndex] ?? item.videos[nextIndex]?.videoUrl;
+    if (!nextUrl) return;
+
+    void replaceSourceOn(inactivePlayer, nextUrl).catch(() => {
+      // 워밍업 실패해도 swap 시점에 다시 시도되므로 silent ignore.
+    });
+    // play 호출은 X — 화면에 안 보이는 player 가 소리/재생을 시작하면 안 됨.
+    // expo-video 는 replaceAsync 만으로 디코더를 readyToPlay 까지 prepare 한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoIndex, activeKey, resolvedUrls, item.videos.length]);
+
+  // 영상 1개: native loop / 영상 2개 이상: 종료 시점에 ping-pong swap.
+  // active 의 playToEnd → inactive 를 play (이미 ready 상태) → activeKey 토글 →
+  // 위 useEffect 가 새 inactive 에 그 다음 영상 워밍업 시작.
   useEffect(() => {
     if (item.videos.length <= 1) {
-      player.loop = true;
+      activePlayer.loop = true;
       return;
     }
-    player.loop = false;
+    activePlayer.loop = false;
 
-    const sub = player.addListener('playToEnd', () => {
-      setVideoIndex((prev) => {
-        const next = (prev + 1) % item.videos.length;
-        const url = resolvedUrls[next] ?? item.videos[next]?.videoUrl;
-        if (!url) return next;
+    const sub = activePlayer.addListener('playToEnd', () => {
+      // 새로 보일 player (현재 inactive). 워밍업 useEffect 가 이미 다음 영상을 load
+      // 시켜놨을 것 — readyToPlay 면 즉시 play, 아니면 listener 로 보장.
+      inactivePlayer.loop = false;
+      inactivePlayer.muted = muted;
+      playWhenReady(inactivePlayer);
 
-        void replaceSource(url).then(
-          () => {
-            // replaceAsync 가 source 를 swap 한 후 loop 가 reset 되는 케이스 방어 —
-            // 다음에도 playToEnd 가 fire 하려면 loop=false 여야 한다.
-            player.loop = false;
-            player.muted = muted;
-            // 디코더 readyToPlay 가 보장된 시점에 play (race-condition-free)
-            playWhenReady();
-          },
-          () => {
-            // fallback: sync replace (deprecation warning 감수)
-            player.replace(url);
-            player.loop = false;
-            player.muted = muted;
-            playWhenReady();
-          },
-        );
-        return next;
-      });
+      // 기존 active 는 다음 사이클을 위해 잠시 쉰다. (다음 useEffect 가 새 inactive 가
+      // 된 이 player 에 또 그 다음 영상을 워밍업 load 시킬 것)
+      try {
+        activePlayer.pause();
+      } catch {
+        // ignore
+      }
+
+      // 화면 swap + index 진행을 같은 commit 에서 처리.
+      setActiveKey((k) => (k === 'a' ? 'b' : 'a'));
+      setVideoIndex((prev) => (prev + 1) % item.videos.length);
     });
 
     return () => sub.remove();
-    // replaceSource/playWhenReady 는 매 렌더마다 새 함수지만 closure 가 최신
-    // muted/resolvedUrls/player 를 참조하도록 dep 에 포함. listener churn 비용은 작다.
+    // muted/inactivePlayer/activePlayer 변경 시 listener 재등록. churn 비용 작음.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [player, item.videos.length, resolvedUrls, muted]);
+  }, [activePlayer, inactivePlayer, item.videos.length, muted]);
 
   const toggleMute = () => {
     const next = !muted;
     setMuted(next);
-    player.muted = next;
+    activePlayer.muted = next;
+    // inactive 는 어차피 재생 안 하지만 swap 직후 muted 상태가 따라오도록 같이 동기화.
+    inactivePlayer.muted = next;
   };
 
   const infoLine1 = [item.displayName, item.age != null ? `${item.age}세` : null]
@@ -207,7 +237,7 @@ export function CurationCard({
       onPress={() => onPress(item)}
     >
       <VideoWithPoster
-        player={player}
+        player={activePlayer}
         posterUrl={currentVideo?.thumbnailUrl ?? null}
         videoUrl={currentVideo?.videoUrl ?? null}
         posterCacheKey={currentVideo?.logId ?? null}
