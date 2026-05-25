@@ -99,7 +99,90 @@ async function fetchBlockedPeerUserIds(userId: string): Promise<Set<string>> {
   return blockedPeerUserIds;
 }
 
+// Edge Function 'get-curation-feed' 응답 row 타입. consume_refresh_item 의 row 와 키
+// 셋이 호환되며 age/region 두 컬럼을 추가로 가진다 (무료 fetch 에서도 클라가 일관된
+// CurationItem 으로 조립할 수 있도록).
+type CurationFeedRow = {
+  display_name: string | null;
+  gender: string | null;
+  age: number | null;
+  region: string | null;
+  log_id: string;
+  pool_id: string;
+  user_id: string;
+  video_path: string | null;
+  thumbnail_path: string | null;
+};
+
+function groupFeedRowsToCurationItems(rows: CurationFeedRow[]): CurationItem[] {
+  const userMap = new Map<string, CurationItem>();
+  for (const row of rows) {
+    const rawPath = row.video_path ?? '';
+    const videoUrl = rawPath
+      ? supabase.storage.from('logs').getPublicUrl(rawPath).data.publicUrl
+      : '';
+    const thumbnailUrl = resolveThumbnailUrl(row.thumbnail_path);
+    const video: CurationVideo = {
+      poolId: row.pool_id,
+      logId: row.log_id,
+      videoUrl,
+      thumbnailUrl,
+    };
+
+    const existing = userMap.get(row.user_id);
+    if (existing) {
+      existing.videos.push(video);
+    } else {
+      userMap.set(row.user_id, {
+        userId: row.user_id,
+        displayName: row.display_name ?? '—',
+        gender: row.gender ?? null,
+        age: row.age ?? null,
+        region: row.region ?? null,
+        videos: [video],
+      });
+    }
+  }
+  return Array.from(userMap.values());
+}
+
+/**
+ * 큐레이션 풀 조회.
+ *
+ * **Edge 우선 / 클라 로직 폴백** (AGENTS.md 패턴):
+ *  1) supabase.functions.invoke('get-curation-feed') — 서버에서 알고리즘 실행
+ *  2) 실패 시 fetchCurationPoolOnClient — 기존 4단계 클라 로직으로 폴백
+ *
+ * Edge 가 안정화되면 fallback 분기를 제거 예정. 그 사이 알고리즘 hotfix (A/B,
+ * 가중치, 풀 사이즈, 매칭 룰) 는 Edge Function 만 deploy 하면 즉시 반영된다.
+ */
 async function fetchCurationPool(
+  userId: string,
+  excludeUserIds: string[] = []
+): Promise<CurationItem[]> {
+  try {
+    const { data, error } = await supabase.functions.invoke<{
+      items?: CurationFeedRow[];
+      error?: string;
+    }>('get-curation-feed', {
+      body: { seenUserIds: excludeUserIds },
+    });
+
+    if (!error && data && !data.error && Array.isArray(data.items)) {
+      return groupFeedRowsToCurationItems(data.items);
+    }
+    // edge 가 명시적 에러를 보냈거나 통신 실패 → 폴백.
+  } catch {
+    // 네트워크 자체 실패 → 폴백.
+  }
+  return fetchCurationPoolOnClient(userId, excludeUserIds);
+}
+
+/**
+ * 기존 클라이언트 4단계 알고리즘. Edge 폴백 전용 — 직접 호출하지 않는다.
+ * Edge 안정화 후 이 함수를 함께 제거할 예정.
+ */
+async function fetchCurationPoolOnClient(
   userId: string,
   excludeUserIds: string[] = []
 ): Promise<CurationItem[]> {
