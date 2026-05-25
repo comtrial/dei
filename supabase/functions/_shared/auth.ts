@@ -22,9 +22,39 @@ function getBearerToken(req: Request) {
     null;
 }
 
+function decodeBase64Url(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(
+    base64.length + (4 - base64.length % 4) % 4,
+    "=",
+  );
+  return atob(padded);
+}
+
+function getJwtRole(token: string) {
+  const payload = token.split(".")[1];
+
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    const decoded = JSON.parse(decodeBase64Url(payload)) as { role?: unknown };
+    return typeof decoded.role === "string" ? decoded.role : null;
+  } catch {
+    return null;
+  }
+}
+
 export function isServiceRoleRequest(req: Request) {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  return Boolean(serviceRoleKey && getBearerToken(req) === serviceRoleKey);
+  const token = getBearerToken(req);
+
+  if (!token) {
+    return false;
+  }
+
+  return token === serviceRoleKey || getJwtRole(token) === "service_role";
 }
 
 export async function getAuthenticatedUser(req: Request) {
