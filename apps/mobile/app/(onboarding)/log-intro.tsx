@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { analytics } from '@dei/shared';
+
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { ROUTES } from '@/lib/routes';
@@ -56,6 +58,9 @@ export default function LogIntroScreen() {
       setPageIndex((current) => Math.min(current + 1, logIntroPages.length - 1));
       return;
     }
+
+    // P4 「첫 로그 촬영하기」 탭.
+    analytics.capture('first_log_cta_clicked');
 
     setIsSubmitting(true);
 

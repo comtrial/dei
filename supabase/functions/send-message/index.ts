@@ -12,6 +12,7 @@
 //   200 { message: {...} }                전송 성공 → 클라이언트 버블 확정
 //   4xx { error }                         차단/종료/검증 실패 → retry 마커 (재시도 무의미한 경우 명시)
 //   5xx { error }                         일시 장애 → 클라이언트 retry
+import { captureServerEvent } from "../_shared/analytics.ts";
 import { getAuthenticatedUser } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import {
@@ -122,6 +123,19 @@ Deno.serve(async (req) => {
     }
 
     const message = Array.isArray(data) ? data[0] : data;
+
+    // NSM Conversation funnel 의 분자: 메시지가 실제로 DB 에 남은 직후(서버)에서만
+    // 계측한다. distinctId 는 인증된 호출 사용자(user.id). captureServerEvent 는
+    // 내부적으로 throw 하지 않으므로 계측 실패가 전송 성공 응답을 막지 않는다.
+    await captureServerEvent({
+      distinctId: user.id,
+      event: "message_sent",
+      properties: {
+        conversation_id: conversationId,
+        message_id: message?.id,
+      },
+    });
+
     const conversationResult = await supabase
       .from("conversations")
       .select("id, user_a_id, user_b_id, status")

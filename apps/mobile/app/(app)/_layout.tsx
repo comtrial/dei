@@ -1,8 +1,14 @@
 import { Tabs } from 'expo-router';
 
 import { BottomTabBar } from '@/components/navigation/bottom-tab-bar';
+import { usePushTokenRegistration } from '@/hooks/usePushTokenRegistration';
+import { useAuth } from '@/providers/auth-provider';
 
 export default function AppLayout() {
+  const { user } = useAuth();
+
+  usePushTokenRegistration(user?.id);
+
   return (
     <Tabs
       screenOptions={{ headerShown: false }}

@@ -16,20 +16,30 @@ import {
   evaluateComposer,
 } from '@/lib/chat/message';
 import { cn } from '@/lib/utils';
+import { analytics } from '@dei/shared';
 
 type ChatComposerProps = {
   disabled?: boolean;
+  /** 전송 시도 계측(message_send_attempted)에 실릴 대화방 id. */
+  conversationId?: string | null;
   onSend: (body: string) => void;
 };
 
-export function ChatComposer({ disabled = false, onSend }: ChatComposerProps) {
+export function ChatComposer({ disabled = false, conversationId, onSend }: ChatComposerProps) {
   const [text, setText] = useState('');
   const composer = evaluateComposer(text);
   const showCounter = composer.length > 0;
 
   const handleSend = () => {
     if (disabled || !composer.canSend) return;
-    onSend(text.trim());
+    const trimmed = text.trim();
+    // NSM Conversation funnel: 전송 버튼 탭 직후(실제 전송 시도) 계측.
+    // 계측 실패가 전송을 막지 않도록 analytics.capture 는 내부적으로 throw 안 함.
+    analytics.capture('message_send_attempted', {
+      conversation_id: conversationId ?? undefined,
+      length: trimmed.length,
+    });
+    onSend(trimmed);
     setText('');
   };
 

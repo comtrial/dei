@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 import { getFunctionErrorMessage } from '@/lib/function-errors';
 import { supabase } from '@/lib/supabase';
@@ -25,12 +25,21 @@ export function useSendLike() {
   async function send({
     toUserId,
     attachedLogId,
+    usedGrant,
   }: {
     toUserId: string;
     attachedLogId: string | null;
+    usedGrant?: boolean;
   }): Promise<SendResult> {
     setPending(true);
     try {
+      // LK12 보내기: 좋아요 제출 시점(검증 통과 후 서버 호출 직전).
+      analytics.capture('like_sent', {
+        peer_user_id: toUserId,
+        attached_log_id: attachedLogId ?? undefined,
+        used_grant: usedGrant,
+      });
+
       const { error } = await supabase.functions.invoke('send-like', {
         body: {
           attachedLogId,
@@ -57,6 +66,11 @@ export function useSendLike() {
           return { kind: 'error', reason };
         }
       }
+
+      // 좋아요 발송 성공 응답 직후 — client 가 서버 저장 성공을 확인한 시점.
+      analytics.capture('like_send_persisted', {
+        peer_user_id: toUserId,
+      });
 
       return { kind: 'ok' };
     } finally {

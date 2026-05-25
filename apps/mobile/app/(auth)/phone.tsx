@@ -2,9 +2,11 @@ import { IdentityVerification } from '@portone/react-native-sdk';
 import type { IdentityVerificationRequest } from '@portone/browser-sdk/v2';
 import { AlertTriangle, ShieldCheck } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { analytics } from '@dei/shared';
 
 import { Screen } from '@/components/app/screen';
 import { StatusRow } from '@/components/app/status-row';
@@ -24,6 +26,7 @@ import {
   startIdentityVerification,
 } from '@/lib/identity-verification';
 import { ROUTES, routeForEligibility } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
 import { useAccountGate } from '@/providers/account-gate-provider';
 
 type FailureDialogState = {
@@ -75,6 +78,9 @@ export default function PhoneScreen() {
   const [verificationRequest, setVerificationRequest] =
     useState<IdentityVerificationRequest | null>(null);
   const canUseDevVerification = isLocalDevAuthEnabled();
+  // 본인확인 시작 시도 횟수 + 마지막 시도 시각 (요청→성공 소요시간 측정용).
+  const verificationAttemptsRef = useRef(0);
+  const lastRequestedAtRef = useRef<number | null>(null);
 
   const handleLocalDevVerification = async () => {
     setIsCompletingDevVerification(true);
@@ -97,6 +103,12 @@ export default function PhoneScreen() {
   const handleStartIdentityVerification = async () => {
     setIsStartingVerification(true);
     setMessage(null);
+
+    verificationAttemptsRef.current += 1;
+    lastRequestedAtRef.current = Date.now();
+    analytics.capture('phone_verification_requested', {
+      attempt_count: verificationAttemptsRef.current,
+    });
 
     try {
       const request = await startIdentityVerification();
@@ -136,6 +148,25 @@ export default function PhoneScreen() {
                   response,
                   verificationRequest.identityVerificationId,
                 );
+
+                // 본인확인 성공 = 번호 확정 → user_id 확정. 인증 성공 + 세션 확정 계측.
+                const requestedAt = lastRequestedAtRef.current;
+                analytics.capture('phone_verification_succeeded', {
+                  attempt_count: verificationAttemptsRef.current,
+                  ...(requestedAt
+                    ? { time_to_succeed_sec: Math.round((Date.now() - requestedAt) / 1000) }
+                    : {}),
+                });
+
+                const isNewUser = !result.existingMember;
+                const {
+                  data: { user: confirmedUser },
+                } = await supabase.auth.getUser();
+                if (confirmedUser) {
+                  analytics.identify(confirmedUser.id, { is_new_user: isNewUser });
+                }
+                analytics.capture('signup_or_login_resolved', { is_new_user: isNewUser });
+
                 const nextEligibility = await refresh();
                 setVerificationRequest(null);
                 router.replace(

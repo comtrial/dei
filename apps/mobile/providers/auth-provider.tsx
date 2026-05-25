@@ -1,7 +1,7 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 import { configureRevenueCat, logOutRevenueCat } from '@/lib/revenuecat';
 import { supabase } from '@/lib/supabase';
@@ -120,6 +120,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) {
       throw error;
     }
+
+    // 로그아웃 → analytics 사용자 컨텍스트 초기화 (이후 이벤트가 익명으로 귀속).
+    analytics.reset();
   }, []);
 
   const value = useMemo<AuthContextValue>(
