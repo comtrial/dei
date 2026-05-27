@@ -59,4 +59,41 @@ describe('push notification helpers', () => {
     expect(getPushRouteFromData({ route: '' })).toBeNull();
     expect(getPushRouteFromData(null)).toBeNull();
   });
+
+  describe('Phase 3E — 새 도메인 deeplink 매핑', () => {
+    it('room_matched → /room/<id>', () => {
+      expect(getPushRouteFromData({ type: 'room_matched', roomId: 'r-1' })).toBe('/room/r-1');
+      // roomId 없으면 홈으로
+      expect(getPushRouteFromData({ type: 'room_matched' })).toBe('/home');
+    });
+
+    it('hourly_upload_reminder → /room/<id>/upload', () => {
+      expect(getPushRouteFromData({ type: 'hourly_upload_reminder', roomId: 'r-2' })).toBe('/room/r-2/upload');
+    });
+
+    it('chat_mention → /room/<id>/chat', () => {
+      expect(getPushRouteFromData({ type: 'chat_mention', roomId: 'r-3', messageId: 'm-1' })).toBe('/room/r-3/chat');
+    });
+
+    it('room_auto_kicked → /home', () => {
+      expect(getPushRouteFromData({ type: 'room_auto_kicked', roomId: 'r-4' })).toBe('/home');
+    });
+
+    it('rematch_available → /home', () => {
+      expect(getPushRouteFromData({ type: 'rematch_available' })).toBe('/home');
+    });
+
+    it('booster_offer → /booster', () => {
+      expect(getPushRouteFromData({ type: 'booster_offer' })).toBe('/booster');
+    });
+
+    it('unknown type → null', () => {
+      expect(getPushRouteFromData({ type: 'unknown_event' })).toBeNull();
+    });
+
+    it('explicit route overrides type mapping', () => {
+      // route 가 있으면 type 무시
+      expect(getPushRouteFromData({ route: '/home', type: 'room_matched', roomId: 'r-1' })).toBe('/home');
+    });
+  });
 });

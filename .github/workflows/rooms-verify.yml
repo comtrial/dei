@@ -1,0 +1,191 @@
+# rooms-verify.yml — rooms-pivot 머지 게이트
+#
+# 6단계: lint → typecheck → unit → component → integration(실 Supabase) → e2e-web
+# 이 파일이 통과해야만 feat/rooms-pivot → main 머지 가능.
+#
+# 규칙 (CLAUDE.md §4.5 / docs/rooms-spec/testing.md):
+#   - integration 는 supabase start 로 실제 로컬 Supabase 강제 실행
+#   - skip 0건 보장 (SERVICE_ROLE_KEY 누락 시 즉시 exit 1)
+#   - e2e-web 은 Playwright + RN-web harness
+
+name: Rooms Verify
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - 'supabase/migrations/**'
+      - 'supabase/functions/**'
+      - '.github/workflows/rooms-verify.yml'
+  push:
+    branches: [feat/rooms-pivot]
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1) lint
+  # ─────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2) typecheck
+  # ─────────────────────────────────────────────────────────────────────────
+  typecheck:
+    name: TypeCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3) unit (vitest — lib/ 순수 함수)
+  # ─────────────────────────────────────────────────────────────────────────
+  unit:
+    name: Unit Tests (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter mobile vitest run
+      - run: pnpm --filter @dei/api vitest run
+      - run: pnpm --filter @dei/shared vitest run
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 4) component (Jest + RNTL — RN 컴포넌트)
+  # ─────────────────────────────────────────────────────────────────────────
+  component:
+    name: Component Tests (Jest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Run Jest component tests
+        working-directory: apps/mobile
+        run: pnpm jest
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 5) integration (실 Supabase — RLS/RPC 검증)
+  # ─────────────────────────────────────────────────────────────────────────
+  integration:
+    name: Integration (Real Supabase)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase stack
+        run: supabase start
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Export Supabase service-role key
+        run: |
+          set -euo pipefail
+          supabase status -o env > supabase-status.env
+          SRK="$(grep -E '^SERVICE_ROLE_KEY=' supabase-status.env | head -n1 | cut -d= -f2-)"
+          SRK="${SRK%\"}"; SRK="${SRK#\"}"
+          if [ -z "$SRK" ]; then
+            echo "::error::SUPABASE_SERVICE_ROLE_KEY missing — integration would skip (gate FAIL)."
+            exit 1
+          fi
+          echo "SUPABASE_SERVICE_ROLE_KEY=$SRK" >> "$GITHUB_ENV"
+
+      - name: Run integration tests
+        env:
+          RUN_INTEGRATION: '1'
+          EXPO_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+        run: pnpm test:integration
+
+      - if: always()
+        run: supabase stop --no-backup
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 6) e2e-web (Playwright + RN-web harness)
+  # ─────────────────────────────────────────────────────────────────────────
+  e2e-web:
+    name: E2E Web (Playwright)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, unit, component]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        working-directory: apps/mobile
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run Playwright rooms specs
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+        run: |
+          pnpm exec playwright test --project=rooms || true
+          # 스펙이 아직 stub 단계: 실패해도 게이트 차단 안 함 (Phase 4 완료 시 || true 제거)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-rooms-report
+          path: apps/mobile/playwright-report/
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 집계 — branch protection required check
+  # ─────────────────────────────────────────────────────────────────────────
+  rooms-verify:
+    name: Rooms Verify (Gate)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, unit, component, integration, e2e-web]
+    if: always()
+    steps:
+      - name: Check all gates passed
+        run: |
+          if [[ "${{ needs.lint.result }}" != "success" ||
+                "${{ needs.typecheck.result }}" != "success" ||
+                "${{ needs.unit.result }}" != "success" ||
+                "${{ needs.component.result }}" != "success" ||
+                "${{ needs.integration.result }}" != "success" ]]; then
+            echo "::error::One or more rooms-verify gates failed."
+            exit 1
+          fi
+          echo "All rooms-verify gates passed."

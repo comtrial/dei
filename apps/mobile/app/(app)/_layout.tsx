@@ -14,9 +14,11 @@ import { useAuth } from '@/providers/auth-provider';
  *   - settings          (숨김, 설정에서 진입)
  *   - my-profile        (숨김, 프로필 화면에서 진입)
  *   - profiles/[id]     (숨김, 다른 멤버 프로필 보기)
- *   - solo-join         (숨김, 혼자 참여 확인)    — Phase 3C-2
- *   - group/new         (숨김, 묶음 생성)          — Phase 3C-2
- *   - group/[groupId]   (숨김, 묶음 상태/매칭 시작) — Phase 3C-2
+ *   - solo-join              (숨김, 혼자 참여 확인)          — Phase 3C-2
+ *   - group/new              (숨김, 묶음 생성)               — Phase 3C-2
+ *   - group/[groupId]        (숨김, 묶음 상태/매칭 시작)     — Phase 3C-2
+ *   - room/[roomId]/*        (숨김, 방 화면 nested stack)    — Phase 3D
+ *   - booster                (숨김, 부스터 구매)             — Phase 3E
  */
 export default function AppLayout() {
   const { user } = useAuth();
@@ -36,6 +38,10 @@ export default function AppLayout() {
       <Tabs.Screen name="solo-join" options={{ href: null }} />
       <Tabs.Screen name="group/new" options={{ href: null }} />
       <Tabs.Screen name="group/[groupId]" options={{ href: null }} />
+      {/* Phase 3D — 방 화면 (nested stack) */}
+      <Tabs.Screen name="room/[roomId]" options={{ href: null }} />
+      {/* Phase 3E — 부스터 구매 화면 */}
+      <Tabs.Screen name="booster" options={{ href: null }} />
     </Tabs>
   );
 }

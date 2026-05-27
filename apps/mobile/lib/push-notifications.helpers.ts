@@ -78,24 +78,61 @@ export function buildRegisterPushTokenArgs(
 }
 
 /**
- * Push payload 의 `data.route` 를 expo-router 가 받을 수 있는 in-app pathname 으로
- * 정규화한다. 외부 URL 또는 dei:// 같은 deeplink 는 거부하고 in-app 경로만 통과.
+ * Push payload 의 `data` 를 expo-router 가 받을 수 있는 in-app pathname 으로
+ * 변환한다.
  *
- * Phase 1 정리 후 의도적으로 매우 단순함 — 옛 chat conversation deeplink 파싱
- * 로직 제거. 새 도메인 deeplink 매핑은 Phase 3 에서 이 함수에 case 를 추가하는
- * 형태로 확장 (예: `dei://room/<id>/upload` → `/room/<id>/upload`).
+ * 우선순위:
+ *   1) `data.route` 가 `/` 로 시작하는 in-app 경로면 그대로 사용
+ *   2) `data.type` 기반 새 도메인 deeplink 매핑 (rooms-pivot Phase 3E)
+ *      | push type                | data fields         | in-app path                          |
+ *      |--------------------------|---------------------|--------------------------------------|
+ *      | room_matched             | roomId              | /room/<roomId>                       |
+ *      | hourly_upload_reminder   | roomId              | /room/<roomId>/upload                |
+ *      | chat_mention             | roomId, messageId   | /room/<roomId>/chat                  |
+ *      | room_auto_kicked         | roomId              | /home                                |
+ *      | rematch_available        | —                   | /home                                |
+ *      | booster_offer            | —                   | /booster                             |
+ *
+ * 외부 URL (`http://` 등) 또는 `dei://` 스키마는 모두 거부.
  */
-export function getPushRouteFromData(data: Record<string, unknown> | null | undefined) {
-  const route = data?.route;
+export function getPushRouteFromData(data: Record<string, unknown> | null | undefined): string | null {
+  if (!data) return null;
 
-  if (typeof route !== 'string') {
-    return null;
+  // 1) 명시적 in-app route (서버가 `/room/...` 등 직접 지정한 경우)
+  const route = data.route;
+  if (typeof route === 'string') {
+    const trimmedRoute = route.trim();
+    if (trimmedRoute.startsWith('/') && !trimmedRoute.startsWith('//')) {
+      return trimmedRoute;
+    }
   }
 
-  const trimmedRoute = route.trim();
-  if (!trimmedRoute.startsWith('/') || trimmedRoute.startsWith('//')) {
-    return null;
-  }
+  // 2) type 기반 새 도메인 deeplink 매핑
+  const type = data.type;
+  if (typeof type !== 'string') return null;
 
-  return trimmedRoute;
+  const roomId = typeof data.roomId === 'string' ? data.roomId.trim() : null;
+
+  switch (type) {
+    case 'room_matched':
+      return roomId ? `/room/${roomId}` : '/home';
+
+    case 'hourly_upload_reminder':
+      return roomId ? `/room/${roomId}/upload` : '/home';
+
+    case 'chat_mention':
+      return roomId ? `/room/${roomId}/chat` : '/home';
+
+    case 'room_auto_kicked':
+      return '/home';
+
+    case 'rematch_available':
+      return '/home';
+
+    case 'booster_offer':
+      return '/booster';
+
+    default:
+      return null;
+  }
 }
