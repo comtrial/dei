@@ -29,6 +29,10 @@ export const color = {
   info: '#2A6BD9',
   'info-soft': '#E4EEFC',
   success: '#1F8A4F',
+
+  // glass — FullscreenVideo / 영상 오버레이 공통 (매트릭스 §3A 승격분, HTML 값 그대로)
+  'glass-dark': 'rgba(0,0,0,.4)', // 어두운 영상 위 오버레이 버튼 배경 (S11/S11b .top-bar .x/.flip)
+  'glass-light': 'rgba(255,255,255,.15)', // 밝은 glass CTA 배경 (S11b .bottom-ctas .secondary)
 } as const;
 
 export type ColorToken = keyof typeof color;

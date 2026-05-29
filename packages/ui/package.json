@@ -12,13 +12,16 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && jest",
+    "test:unit": "vitest run",
+    "test:component": "jest",
     "test:watch": "vitest"
   },
   "peerDependencies": {
     "react": "*",
     "react-native": "*",
-    "nativewind": "*"
+    "nativewind": "*",
+    "lucide-react-native": "*"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.0"
