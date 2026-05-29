@@ -1,5 +1,14 @@
 # 채팅 검증 인프라 (e2e)
 
+> ⚠️ **[release/dei-ver2 핸드오프 주의]** 이 하네스는 main 의 *옛 1:1 채팅
+> 도메인*(`@/lib/chat/*`, `@/app/(app)/{chat,chat-room,messages}`)을 마운트하는
+> **참고용 레퍼런스**다. dei-ver2 는 zero-base 재구성이라 그 도메인 모듈이
+> 삭제됐으므로 **현재 이 하네스는 컴파일·실행되지 않는다.** 의도적으로 verify
+> 게이트(`rooms-verify.yml`)와 메인 `typecheck` 에서 제외돼 있다
+> (별도 `pnpm -F mobile typecheck:e2e` 로만 시도 — 현재 실패가 정상).
+> 영상·방 담당(C)이 새 방/채팅 화면으로 RN-web 하네스를 다시 구성할 때의
+> *패턴 참고용* 으로만 남겨둔다. testID 규칙·하네스 경계 모킹 방식은 재사용 가능.
+
 이 디렉터리는 **"개발자가 폰으로 직접 안 눌러봐도 된다"** 는 확신을 만드는
 자동 검증 레이어다. 채팅 9개 스펙 flow(`docs/chat-spec/DEV-SPEC.md`)가
 계층별 자동 테스트로 빠짐없이 덮인다.
