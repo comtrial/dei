@@ -376,10 +376,9 @@ inspector_port = 8083
 deno_version = 2
 
 [edge_runtime.secrets]
-PORTONE_API_SECRET = "env(PORTONE_API_SECRET)"
-PORTONE_IDENTITY_CHANNEL_KEY = "env(PORTONE_IDENTITY_CHANNEL_KEY)"
-PORTONE_STORE_ID = "env(PORTONE_STORE_ID)"
-PHONE_HASH_SALT = "env(PHONE_HASH_SALT)"
+# 도메인 Edge secrets 는 각 담당이 기능 구현 시 추가한다 (zero-base 핸드오프).
+# 예) PortOne 본인인증(B 영역): PORTONE_API_SECRET / PORTONE_IDENTITY_CHANNEL_KEY /
+#     PORTONE_STORE_ID / PHONE_HASH_SALT — env() 치환으로만, 평문 금지.
 
 [analytics]
 enabled = true
