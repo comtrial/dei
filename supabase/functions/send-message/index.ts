@@ -6,6 +6,30 @@ function codePointLength(s: string): number {
   return [...s].length;
 }
 
+async function dispatchWhisperPush(admin: any, message: { whisper_to_user_id: string; user_id: string; room_id: string }) {
+  const target = message.whisper_to_user_id;
+  // 조건: chat_mention + push_enabled
+  const { data: setting } = await admin.from('notification_setting').select('chat_mention, push_enabled').eq('user_id', target).maybeSingle();
+  if (setting && (setting.chat_mention === false || setting.push_enabled === false)) return;
+  // 대상 active 멤버 재확인
+  const { data: rm } = await admin.from('room_member').select('status').eq('room_id', message.room_id).eq('user_id', target).maybeSingle();
+  if (!rm || rm.status !== 'active') return;
+  // 발신자 닉네임
+  const { data: sender } = await admin.from('profile').select('nickname').eq('user_id', message.user_id).maybeSingle();
+  // 대상 토큰
+  const { data: tokens } = await admin.from('push_token').select('token').eq('user_id', target);
+  if (!tokens?.length) return;
+  // quiet-hours(0~7 KST)는 whisper_mention exempt → 시간 무시하고 발송
+  await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tokens.map((t: { token: string }) => ({
+      to: t.token, title: sender?.nickname ?? '귓속말', body: '귓속말이 도착했어요',
+      data: { roomId: message.room_id, type: 'whisper_mention' },
+    }))),
+  });
+}
+function data_is_dedup_echo(deduped: boolean) { return deduped; }
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return errorResponse('method_not_allowed', 405);
@@ -67,7 +91,10 @@ Deno.serve(async (req) => {
     created_at: data.created_at,
   };
 
-  // 멘션 푸시 디스패치 (Task 14에서 추가). 지금은 no-op.
+  // 멘션 푸시 (귓속말만, best-effort — 실패가 send 실패를 만들지 않음)
+  if (message.whisper_to_user_id && !data_is_dedup_echo(deduped)) {
+    void dispatchWhisperPush(auth.supabase, message).catch(() => {});
+  }
 
   return jsonResponse({ ok: true, deduped, message }, { status: 200 });
 });
