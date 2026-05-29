@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { FlatList, View } from 'react-native';
 
 import {
@@ -44,6 +44,8 @@ export interface RoomChatViewProps {
   onClose: () => void;
   newCount: number;
   onJump: () => void;
+  /** 스트림 스크롤 위치 변화(inverted: offsetY≈0 이 하단). route 가 nearBottom 판정에 사용. */
+  onScroll?: (offsetY: number) => void;
   visible: boolean;
   blockedIds?: Set<string>;
   roomEnded?: boolean;
@@ -51,6 +53,13 @@ export interface RoomChatViewProps {
 
 export function RoomChatView(props: RoomChatViewProps) {
   const { input, members, selfId, blockedIds, whisperTarget } = props;
+  const listRef = useRef<FlatList<ChatMessage>>(null);
+
+  // 점프: inverted 스트림에서 하단(offset 0)으로 이동 후 route 의 newCount 리셋 위임.
+  const handleJump = useCallback(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    props.onJump();
+  }, [props]);
 
   // 멘션 후보: @쿼리가 활성이고 귓속말 대상이 아직 없을 때만 노출. self/blocked/left 제외.
   const candidates: MentionCandidate[] = useMemo(() => {
@@ -82,10 +91,13 @@ export function RoomChatView(props: RoomChatViewProps) {
         <StateView kind="empty" icon="💬" title="아직 메시지가 없어요" />
       ) : (
         <FlatList
+          ref={listRef}
           testID="chat-stream"
           className="flex-1"
           data={[...props.messages].reverse()}
           inverted
+          scrollEventThrottle={16}
+          onScroll={(e) => props.onScroll?.(e.nativeEvent.contentOffset.y)}
           keyExtractor={(m) => m.id}
           renderItem={({ item }) => {
             const mine = item.userId === selfId;
@@ -112,7 +124,7 @@ export function RoomChatView(props: RoomChatViewProps) {
       )}
 
       <View>
-        <NewMessageJumpButton count={props.newCount} onPress={props.onJump} />
+        <NewMessageJumpButton count={props.newCount} onPress={handleJump} />
         <MentionAutocomplete
           candidates={candidates}
           visible={candidates.length > 0}

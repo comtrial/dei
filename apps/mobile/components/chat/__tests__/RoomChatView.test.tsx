@@ -52,4 +52,22 @@ describe('RoomChatView', () => {
     fireEvent.press(screen.getByTestId('new-message-jump'));
     expect(props.onJump).toHaveBeenCalled();
   });
+
+  it('onScroll forwards contentOffset.y from the stream', () => {
+    const onScroll = jest.fn();
+    setup({ onScroll });
+    fireEvent.scroll(screen.getByTestId('chat-stream'), {
+      nativeEvent: { contentOffset: { y: 300 }, contentSize: { height: 800, width: 100 }, layoutMeasurement: { height: 400, width: 100 } },
+    });
+    expect(onScroll).toHaveBeenCalledWith(300);
+  });
+
+  it('jump press fires onJump even with stream scrolled (badge reset path)', () => {
+    const props = setup({ newCount: 5, onScroll: jest.fn() });
+    fireEvent.scroll(screen.getByTestId('chat-stream'), {
+      nativeEvent: { contentOffset: { y: 300 }, contentSize: { height: 800, width: 100 }, layoutMeasurement: { height: 400, width: 100 } },
+    });
+    fireEvent.press(screen.getByTestId('new-message-jump'));
+    expect(props.onJump).toHaveBeenCalledTimes(1);
+  });
 });

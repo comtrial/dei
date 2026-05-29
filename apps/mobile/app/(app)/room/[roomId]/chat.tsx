@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { analytics } from '@dei/shared';
 
@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useRoomChat } from '@/hooks/useRoomChat';
 import { RoomChatView } from '@/components/chat/RoomChatView';
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { isNearBottom } from '@/lib/chat/scroll';
 import type { RoomMemberLite } from '@/lib/chat/mention';
 
 /**
@@ -18,7 +19,10 @@ import type { RoomMemberLite } from '@/lib/chat/mention';
  * analytics(room_chat_opened / whisper_mention_sent)를 배선해 순수 view
  * `RoomChatView`에 props 로 주입한다. 시각 요소는 전부 @dei/ui DS — raw 스타일 0.
  *
- * realtime 자동스크롤/새 메시지 badge(newCount/onJump) 배선은 Task 17에서 채운다.
+ * realtime 자동스크롤/새 메시지 badge: 스트림이 하단 근처(isNearBottom)면 새
+ * 메시지가 와도 inverted FlatList 가 자동으로 최신을 보여주므로 badge 0. 위로
+ * 스크롤된 상태에서 메시지가 늘면 newCount 를 증가시켜 '↓ N개 새 메시지' pill 노출,
+ * 점프 시 0 으로 리셋(view 가 하단으로 스크롤).
  */
 export default function RoomChatScreen() {
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
@@ -31,6 +35,31 @@ export default function RoomChatScreen() {
     useState<{ userId: string; name: string; avatarInitial?: string } | null>(null);
 
   const { messages, send, retry } = useRoomChat({ roomId: roomId ?? '', selfId });
+
+  // 자동스크롤 vs 새 메시지 badge: 하단 근처면 newCount 0(자동 추종), 위로 올라가
+  // 있으면 늘어난 메시지 수만큼 newCount 증가. nearBottom 은 onScroll 로 갱신.
+  const [newCount, setNewCount] = useState(0);
+  const nearBottomRef = useRef(true);
+  const prevCountRef = useRef(0);
+
+  useEffect(() => {
+    const grew = messages.length - prevCountRef.current;
+    prevCountRef.current = messages.length;
+    if (grew > 0 && !nearBottomRef.current) {
+      setNewCount((n) => n + grew);
+    }
+  }, [messages.length]);
+
+  const onScroll = useCallback((offsetY: number) => {
+    const near = isNearBottom(offsetY);
+    nearBottomRef.current = near;
+    if (near) setNewCount(0);
+  }, []);
+
+  const onJump = useCallback(() => {
+    nearBottomRef.current = true;
+    setNewCount(0);
+  }, []);
 
   useEffect(() => {
     if (!roomId) return;
@@ -113,8 +142,9 @@ export default function RoomChatScreen() {
       onClearWhisper={() => setWhisperTarget(null)}
       onAvatarPress={(userId) => router.push(`/room/${roomId}/members?focus=${userId}`)}
       onClose={() => router.back()}
-      newCount={0}
-      onJump={() => {}}
+      newCount={newCount}
+      onJump={onJump}
+      onScroll={onScroll}
       visible
     />
   );
