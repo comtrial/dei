@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* v4 디자인 시스템 — 색 토큰 SSOT 는 @dei/ui (tailwind preset 으로 주입).
+   여기서는 NativeWind 레이어와 앱 전역 기본값만 둔다.
+   다크 모드는 1차 셋팅 범위 밖(HTML 와이어프레임이 light 단일) — 후속에서
+   @dei/ui 토큰에 dark 변형 추가 시 여기 :root[data-theme] 로 확장한다. */
+@layer base {
+  :root {
+    --font-sans: 'Pretendard JP Variable';
+  }
+}
