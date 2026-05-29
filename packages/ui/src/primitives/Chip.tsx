@@ -51,6 +51,8 @@ export interface ChipProps extends Omit<ViewProps, 'children'> {
   removable?: boolean;
   /** 제거 버튼 탭 콜백. */
   onRemove?: (e: GestureResponderEvent) => void;
+  /** × 제거 버튼 testID(테스트 타겟용). */
+  removeTestID?: string;
   /** 라벨 Text 에 머지할 className. */
   textClassName?: string;
 }
@@ -94,6 +96,7 @@ export const Chip = React.forwardRef<View, ChipProps>(function Chip(
     badge,
     removable = false,
     onRemove,
+    removeTestID,
     textClassName,
     className,
     accessibilityRole,
@@ -133,6 +136,7 @@ export const Chip = React.forwardRef<View, ChipProps>(function Chip(
           accessibilityLabel="제거"
           hitSlop={8}
           className="ml-[2px]"
+          testID={removeTestID}
         >
           <Text className="text-[11px] text-ink-4">×</Text>
         </Pressable>

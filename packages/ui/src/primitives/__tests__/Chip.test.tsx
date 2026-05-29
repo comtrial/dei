@@ -60,6 +60,22 @@ describe('Chip (P8)', () => {
     expect(onRemove).toHaveBeenCalledTimes(1);
   });
 
+  it('forwards removeTestID to the × remove Pressable', () => {
+    const onRemove = jest.fn();
+    render(
+      <Chip
+        testID="chip"
+        variant="default"
+        label="민준"
+        removable
+        onRemove={onRemove}
+        removeTestID="chip-remove"
+      />,
+    );
+    fireEvent.press(screen.getByTestId('chip-remove'));
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
   it('renders the avatar slot for non-add variants', () => {
     render(
       <Chip
