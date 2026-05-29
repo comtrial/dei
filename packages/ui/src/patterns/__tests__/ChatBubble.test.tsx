@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { ChatBubble } from '../ChatBubble';
 
@@ -67,5 +67,35 @@ describe('ChatBubble (X8)', () => {
     );
     expect(screen.getByText('@수아')).toBeTruthy();
     expect(screen.getByText('민준')).toBeTruthy();
+  });
+
+  it('me + failed: renders tappable retry "!" firing onRetry', () => {
+    const onRetry = jest.fn();
+    render(
+      <ChatBubble testID="cb" variant="me" sendState="failed" onRetry={onRetry}>
+        실패한 메시지
+      </ChatBubble>,
+    );
+    fireEvent.press(screen.getByTestId('chat-bubble-retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('me + sending: bubble row carries reduced opacity', () => {
+    render(
+      <ChatBubble testID="cb" variant="me" sendState="sending">
+        전송 중 메시지
+      </ChatBubble>,
+    );
+    const row = screen.getByTestId('cb').props.className as string;
+    expect(row).toContain('opacity-60');
+  });
+
+  it('them is unaffected by sendState (no retry control)', () => {
+    render(
+      <ChatBubble testID="cb" variant="them" name="수아" avatarInitial="수" sendState="failed">
+        상대 메시지
+      </ChatBubble>,
+    );
+    expect(screen.queryByTestId('chat-bubble-retry')).toBeNull();
   });
 });

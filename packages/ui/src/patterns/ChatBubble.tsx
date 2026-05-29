@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { View, type ViewProps } from 'react-native';
+import { Pressable, View, type ViewProps } from 'react-native';
+import { AlertCircle } from 'lucide-react-native';
 
 import { Avatar, Text } from '../primitives';
 import { cn } from '../lib/cn';
@@ -85,6 +86,12 @@ export interface ChatBubbleProps extends ViewProps {
   /** 버블 본문. 문자열이면 자동으로 Text 래핑, 노드면 그대로 렌더(인라인 mention 혼용). */
   children?: React.ReactNode;
   className?: string;
+  /** me 변형 한정 송신 상태(클라 낙관). 기본 'sent'. */
+  sendState?: 'sending' | 'sent' | 'failed';
+  /** failed일 때 '!' 탭 재시도. */
+  onRetry?: () => void;
+  /** 재시도 접근성 라벨. 기본 '전송 재시도'. */
+  retryAccessibilityLabel?: string;
 }
 
 type RNTextRef = React.ComponentRef<typeof Text>;
@@ -124,6 +131,9 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
     avatarBg,
     children,
     className,
+    sendState = 'sent',
+    onRetry,
+    retryAccessibilityLabel = '전송 재시도',
     accessibilityRole,
     ...rest
   },
@@ -153,7 +163,12 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
     <View
       ref={ref}
       accessibilityRole={accessibilityRole}
-      className={cn(ROW_CLASS[variant], className)}
+      className={cn(
+        ROW_CLASS[variant],
+        // me 낙관 송신: 'sending' 동안 행 전체 흐림(스피너 불가 — Spinner 36|80만). D-04.
+        sendState === 'sending' && 'opacity-60',
+        className,
+      )}
       {...rest}
     >
       {showAvatar ? <Avatar initial={avatarInitial} size={28} bg={avatarBg} /> : null}
@@ -174,6 +189,20 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
 
         {/* .bub */}
         <View className={BUBBLE_CLASS[variant]}>{body}</View>
+
+        {/* me 송신 실패: 버블 아래 우측에 탭 재시도 컨트롤(danger). 글리프는 색 prop(토큰 hex). */}
+        {variant === 'me' && sendState === 'failed' ? (
+          <Pressable
+            testID="chat-bubble-retry"
+            accessibilityRole="button"
+            accessibilityLabel={retryAccessibilityLabel}
+            onPress={onRetry}
+            className="mt-[2px] flex-row items-center gap-[3px] self-end"
+          >
+            <AlertCircle size={13} color="#D62D2D" />
+            <Text className="text-[10.5px] font-semibold text-danger">재시도</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
