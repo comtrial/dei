@@ -20,11 +20,16 @@ name: Verify
 on:
   pull_request:
     branches: [main, 'release/**']
+  # push 는 main 직접 반영(머지 후) 보호용으로만. release/feature 브랜치 검증은
+  # pull_request 트리거가 담당한다 — push+pull_request 를 둘 다 release 에 걸면
+  # 같은 커밋에 run 2개가 동시에 떠 integration 의 supabase 포트(54322)를
+  # 서로 점유하다 한쪽이 "address already in use" 로 깨진다(실제 발생).
   push:
-    branches: [main, 'release/**']
+    branches: [main]
 
 concurrency:
-  group: verify-${{ github.ref }}
+  # event 까지 group 에 포함해, 혹시 중복 트리거돼도 같은 그룹이면 이전 run 을 취소.
+  group: verify-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
