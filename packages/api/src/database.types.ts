@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -34,1319 +39,750 @@ export type Database = {
   }
   public: {
     Tables: {
-      account_status: {
+      audit: {
         Row: {
-          account_state: Database["public"]["Enums"]["account_state"]
-          age_eligible: boolean
-          age_verified_at: string | null
-          banned_at: string | null
-          created_at: string
-          deleted_at: string | null
-          discovery_enabled_at: string | null
-          first_video_approved_at: string | null
-          first_video_uploaded_at: string | null
-          identity_verified_at: string | null
-          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
-          profile_completed_at: string | null
-          suspended_at: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_state?: Database["public"]["Enums"]["account_state"]
-          age_eligible?: boolean
-          age_verified_at?: string | null
-          banned_at?: string | null
-          created_at?: string
-          deleted_at?: string | null
-          discovery_enabled_at?: string | null
-          first_video_approved_at?: string | null
-          first_video_uploaded_at?: string | null
-          identity_verified_at?: string | null
-          onboarding_state?: Database["public"]["Enums"]["onboarding_state"]
-          profile_completed_at?: string | null
-          suspended_at?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_state?: Database["public"]["Enums"]["account_state"]
-          age_eligible?: boolean
-          age_verified_at?: string | null
-          banned_at?: string | null
-          created_at?: string
-          deleted_at?: string | null
-          discovery_enabled_at?: string | null
-          first_video_approved_at?: string | null
-          first_video_uploaded_at?: string | null
-          identity_verified_at?: string | null
-          onboarding_state?: Database["public"]["Enums"]["onboarding_state"]
-          profile_completed_at?: string | null
-          suspended_at?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      admin_actions: {
-        Row: {
-          action_type: string
+          action: string
           actor_user_id: string | null
           created_at: string
+          detail: Json | null
           id: string
-          metadata: Json
-          object_id: string | null
-          object_type: string | null
-          target_user_id: string | null
-        }
-        Insert: {
-          action_type: string
-          actor_user_id?: string | null
-          created_at?: string
-          id?: string
-          metadata?: Json
-          object_id?: string | null
-          object_type?: string | null
-          target_user_id?: string | null
-        }
-        Update: {
-          action_type?: string
-          actor_user_id?: string | null
-          created_at?: string
-          id?: string
-          metadata?: Json
-          object_id?: string | null
-          object_type?: string | null
-          target_user_id?: string | null
-        }
-        Relationships: []
-      }
-      admins: {
-        Row: {
-          auth_user_id: string | null
-          created_at: string
-          email: string
-          id: string
-          is_active: boolean
-          last_login_at: string | null
-          name: string | null
-          role: string
-        }
-        Insert: {
-          auth_user_id?: string | null
-          created_at?: string
-          email: string
-          id?: string
-          is_active?: boolean
-          last_login_at?: string | null
-          name?: string | null
-          role?: string
-        }
-        Update: {
-          auth_user_id?: string | null
-          created_at?: string
-          email?: string
-          id?: string
-          is_active?: boolean
-          last_login_at?: string | null
-          name?: string | null
-          role?: string
-        }
-        Relationships: []
-      }
-      audit_log: {
-        Row: {
-          action: string
-          created_at: string
-          id: string
-          meta: Json | null
-          operator_email: string | null
-          operator_id: string | null
-          target_id: string | null
-          target_type: string | null
+          target: string | null
         }
         Insert: {
           action: string
+          actor_user_id?: string | null
           created_at?: string
+          detail?: Json | null
           id?: string
-          meta?: Json | null
-          operator_email?: string | null
-          operator_id?: string | null
-          target_id?: string | null
-          target_type?: string | null
+          target?: string | null
         }
         Update: {
           action?: string
+          actor_user_id?: string | null
           created_at?: string
+          detail?: Json | null
           id?: string
-          meta?: Json | null
-          operator_email?: string | null
-          operator_id?: string | null
-          target_id?: string | null
-          target_type?: string | null
+          target?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "audit_log_operator_id_fkey"
-            columns: ["operator_id"]
-            isOneToOne: false
-            referencedRelation: "admins"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
-      blocks: {
+      auth_verification: {
+        Row: {
+          ci_hash: string | null
+          created_at: string
+          di_hash: string | null
+          id: string
+          provider: string
+          status: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          ci_hash?: string | null
+          created_at?: string
+          di_hash?: string | null
+          id?: string
+          provider?: string
+          status?: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          ci_hash?: string | null
+          created_at?: string
+          di_hash?: string | null
+          id?: string
+          provider?: string
+          status?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
+      block: {
         Row: {
           blocked_user_id: string
           blocker_user_id: string
           created_at: string
           id: string
-          reason: string | null
+          room_id: string | null
           unblocked_at: string | null
-          updated_at: string
         }
         Insert: {
           blocked_user_id: string
           blocker_user_id: string
           created_at?: string
           id?: string
-          reason?: string | null
+          room_id?: string | null
           unblocked_at?: string | null
-          updated_at?: string
         }
         Update: {
           blocked_user_id?: string
           blocker_user_id?: string
           created_at?: string
           id?: string
-          reason?: string | null
+          room_id?: string | null
           unblocked_at?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      conversations: {
-        Row: {
-          created_at: string
-          id: string
-          last_message_at: string | null
-          last_message_preview: string | null
-          match_id: string
-          status: string
-          updated_at: string
-          user_a_id: string
-          user_b_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          last_message_at?: string | null
-          last_message_preview?: string | null
-          match_id: string
-          status?: string
-          updated_at?: string
-          user_a_id: string
-          user_b_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          last_message_at?: string | null
-          last_message_preview?: string | null
-          match_id?: string
-          status?: string
-          updated_at?: string
-          user_a_id?: string
-          user_b_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "conversations_match_id_fkey"
-            columns: ["match_id"]
-            isOneToOne: true
-            referencedRelation: "matches"
+            foreignKeyName: "block_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "room"
             referencedColumns: ["id"]
           },
         ]
       }
-      curation_pool: {
+      group_match: {
         Row: {
-          created_at: string
-          id: string
-          log_id: string
-          pool_date: string
-          user_id: string
-          video_path: string | null
-          검수_YN: string
-          차단_YN: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          log_id: string
-          pool_date: string
-          user_id: string
-          video_path?: string | null
-          검수_YN?: string
-          차단_YN?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          log_id?: string
-          pool_date?: string
-          user_id?: string
-          video_path?: string | null
-          검수_YN?: string
-          차단_YN?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "curation_pool_log_id_fkey"
-            columns: ["log_id"]
-            isOneToOne: true
-            referencedRelation: "logs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      daily_logs: {
-        Row: {
-          created_at: string
-          id: string
-          log_date: string
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          log_date: string
-          status?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          log_date?: string
-          status?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      feature_flag_rules: {
-        Row: {
-          conditions: Json
-          created_at: string
-          enabled: boolean
-          flag_key: string
-          id: string
-          priority: number
-          result_value: Json
-        }
-        Insert: {
-          conditions?: Json
-          created_at?: string
-          enabled?: boolean
-          flag_key: string
-          id?: string
-          priority?: number
-          result_value: Json
-        }
-        Update: {
-          conditions?: Json
-          created_at?: string
-          enabled?: boolean
-          flag_key?: string
-          id?: string
-          priority?: number
-          result_value?: Json
-        }
-        Relationships: [
-          {
-            foreignKeyName: "feature_flag_rules_flag_key_fkey"
-            columns: ["flag_key"]
-            isOneToOne: false
-            referencedRelation: "feature_flags"
-            referencedColumns: ["key"]
-          },
-        ]
-      }
-      feature_flags: {
-        Row: {
-          created_at: string
-          default_value: Json
-          description: string | null
-          enabled: boolean
-          key: string
-          rollout_percentage: number
-          rollout_variants: Json | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          default_value?: Json
-          description?: string | null
-          enabled?: boolean
-          key: string
-          rollout_percentage?: number
-          rollout_variants?: Json | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          default_value?: Json
-          description?: string | null
-          enabled?: boolean
-          key?: string
-          rollout_percentage?: number
-          rollout_variants?: Json | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      identity_verifications: {
-        Row: {
-          adult_verified: boolean | null
-          birth_year: number | null
-          ci_hash: string | null
-          created_at: string
-          di_hash: string | null
-          expires_at: string | null
-          failed_at: string | null
-          failure_code: string | null
-          failure_message: string | null
-          id: string
-          phone_country_code: string | null
-          phone_hash: string | null
-          provider: Database["public"]["Enums"]["identity_provider"]
-          provider_metadata: Json
-          provider_verification_id: string | null
-          requested_at: string
-          status: Database["public"]["Enums"]["verification_status"]
-          updated_at: string
-          user_id: string
-          verified_at: string | null
-        }
-        Insert: {
-          adult_verified?: boolean | null
-          birth_year?: number | null
-          ci_hash?: string | null
-          created_at?: string
-          di_hash?: string | null
-          expires_at?: string | null
-          failed_at?: string | null
-          failure_code?: string | null
-          failure_message?: string | null
-          id?: string
-          phone_country_code?: string | null
-          phone_hash?: string | null
-          provider?: Database["public"]["Enums"]["identity_provider"]
-          provider_metadata?: Json
-          provider_verification_id?: string | null
-          requested_at?: string
-          status?: Database["public"]["Enums"]["verification_status"]
-          updated_at?: string
-          user_id: string
-          verified_at?: string | null
-        }
-        Update: {
-          adult_verified?: boolean | null
-          birth_year?: number | null
-          ci_hash?: string | null
-          created_at?: string
-          di_hash?: string | null
-          expires_at?: string | null
-          failed_at?: string | null
-          failure_code?: string | null
-          failure_message?: string | null
-          id?: string
-          phone_country_code?: string | null
-          phone_hash?: string | null
-          provider?: Database["public"]["Enums"]["identity_provider"]
-          provider_metadata?: Json
-          provider_verification_id?: string | null
-          requested_at?: string
-          status?: Database["public"]["Enums"]["verification_status"]
-          updated_at?: string
-          user_id?: string
-          verified_at?: string | null
-        }
-        Relationships: []
-      }
-      likes: {
-        Row: {
-          attached_log_id: string | null
-          created_at: string
-          expires_at: string
-          from_user_id: string
-          id: string
-          liked_at: string
-          read_at: string | null
-          responded_at: string | null
-          status: string
-          to_user_id: string
-        }
-        Insert: {
-          attached_log_id?: string | null
-          created_at?: string
-          expires_at?: string
-          from_user_id: string
-          id?: string
-          liked_at: string
-          read_at?: string | null
-          responded_at?: string | null
-          status?: string
-          to_user_id: string
-        }
-        Update: {
-          attached_log_id?: string | null
-          created_at?: string
-          expires_at?: string
-          from_user_id?: string
-          id?: string
-          liked_at?: string
-          read_at?: string | null
-          responded_at?: string | null
-          status?: string
-          to_user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "likes_attached_log_id_fkey"
-            columns: ["attached_log_id"]
-            isOneToOne: false
-            referencedRelation: "logs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "likes_from_profile_fkey"
-            columns: ["from_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "likes_to_profile_fkey"
-            columns: ["to_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-        ]
-      }
-      logs: {
-        Row: {
-          comment: string | null
-          created_at: string
-          duration_sec: number
-          hour_slot: number
-          id: string
-          recorded_at: string
-          thumbnail_path: string | null
-          thumbnail_urls: string[]
-          user_id: string
-          video_url: string
-          검수_YN: string
-          검수_상태: string
-        }
-        Insert: {
-          comment?: string | null
-          created_at?: string
-          duration_sec: number
-          hour_slot: number
-          id?: string
-          recorded_at: string
-          thumbnail_path?: string | null
-          thumbnail_urls?: string[]
-          user_id: string
-          video_url: string
-          검수_YN?: string
-          검수_상태?: string
-        }
-        Update: {
-          comment?: string | null
-          created_at?: string
-          duration_sec?: number
-          hour_slot?: number
-          id?: string
-          recorded_at?: string
-          thumbnail_path?: string | null
-          thumbnail_urls?: string[]
-          user_id?: string
-          video_url?: string
-          검수_YN?: string
-          검수_상태?: string
-        }
-        Relationships: []
-      }
-      matches: {
-        Row: {
-          created_at: string
           id: string
           matched_at: string
-          source_like_id: string | null
+          room_id: string | null
           status: string
-          updated_at: string
-          user_a_id: string
-          user_b_id: string
+          team_a_id: string
+          team_b_id: string
         }
         Insert: {
-          created_at?: string
           id?: string
           matched_at?: string
-          source_like_id?: string | null
+          room_id?: string | null
           status?: string
-          updated_at?: string
-          user_a_id: string
-          user_b_id: string
+          team_a_id: string
+          team_b_id: string
         }
         Update: {
-          created_at?: string
           id?: string
           matched_at?: string
-          source_like_id?: string | null
+          room_id?: string | null
           status?: string
-          updated_at?: string
-          user_a_id?: string
-          user_b_id?: string
+          team_a_id?: string
+          team_b_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "matches_source_like_id_fkey"
-            columns: ["source_like_id"]
+            foreignKeyName: "group_match_room_id_fkey"
+            columns: ["room_id"]
             isOneToOne: false
-            referencedRelation: "likes"
+            referencedRelation: "room"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_match_team_a_id_fkey"
+            columns: ["team_a_id"]
+            isOneToOne: false
+            referencedRelation: "team"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_match_team_b_id_fkey"
+            columns: ["team_b_id"]
+            isOneToOne: false
+            referencedRelation: "team"
             referencedColumns: ["id"]
           },
         ]
       }
-      messages: {
+      match_member: {
+        Row: {
+          match_id: string
+          side: string
+          user_id: string
+        }
+        Insert: {
+          match_id: string
+          side: string
+          user_id: string
+        }
+        Update: {
+          match_id?: string
+          side?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_member_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "group_match"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      match_queue: {
+        Row: {
+          desired_size: number
+          enqueued_at: string
+          expires_at: string | null
+          gender: string | null
+          id: string
+          matched_at: string | null
+          region: string | null
+          status: string
+          team_id: string
+        }
+        Insert: {
+          desired_size?: number
+          enqueued_at?: string
+          expires_at?: string | null
+          gender?: string | null
+          id?: string
+          matched_at?: string | null
+          region?: string | null
+          status?: string
+          team_id: string
+        }
+        Update: {
+          desired_size?: number
+          enqueued_at?: string
+          expires_at?: string | null
+          gender?: string | null
+          id?: string
+          matched_at?: string | null
+          region?: string | null
+          status?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_queue_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "team"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message: {
         Row: {
           body: string
-          conversation_id: string
           created_at: string
-          deleted_at: string | null
           id: string
-          sender_user_id: string
+          room_id: string
           status: string
+          user_id: string
+          whisper_to_user_id: string | null
         }
         Insert: {
           body: string
-          conversation_id: string
           created_at?: string
-          deleted_at?: string | null
           id?: string
-          sender_user_id: string
+          room_id: string
           status?: string
+          user_id: string
+          whisper_to_user_id?: string | null
         }
         Update: {
           body?: string
-          conversation_id?: string
           created_at?: string
-          deleted_at?: string | null
           id?: string
-          sender_user_id?: string
+          room_id?: string
           status?: string
+          user_id?: string
+          whisper_to_user_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "messages_conversation_id_fkey"
-            columns: ["conversation_id"]
+            foreignKeyName: "message_room_id_fkey"
+            columns: ["room_id"]
             isOneToOne: false
-            referencedRelation: "conversations"
+            referencedRelation: "room"
             referencedColumns: ["id"]
           },
         ]
       }
-      moderation_cases: {
+      message_mention: {
         Row: {
-          assigned_admin_id: string | null
-          closed_at: string | null
-          created_at: string
-          id: string
-          priority: number
-          resolution: string | null
-          source_id: string | null
-          source_type: Database["public"]["Enums"]["moderation_source_type"]
-          status: Database["public"]["Enums"]["moderation_case_status"]
-          subject_user_id: string | null
-          updated_at: string
+          message_id: string
+          user_id: string
         }
         Insert: {
-          assigned_admin_id?: string | null
-          closed_at?: string | null
-          created_at?: string
-          id?: string
-          priority?: number
-          resolution?: string | null
-          source_id?: string | null
-          source_type: Database["public"]["Enums"]["moderation_source_type"]
-          status?: Database["public"]["Enums"]["moderation_case_status"]
-          subject_user_id?: string | null
-          updated_at?: string
+          message_id: string
+          user_id: string
         }
         Update: {
-          assigned_admin_id?: string | null
-          closed_at?: string | null
-          created_at?: string
-          id?: string
-          priority?: number
-          resolution?: string | null
-          source_id?: string | null
-          source_type?: Database["public"]["Enums"]["moderation_source_type"]
-          status?: Database["public"]["Enums"]["moderation_case_status"]
-          subject_user_id?: string | null
-          updated_at?: string
+          message_id?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "message_mention_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "message"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      notifications: {
+      notification_setting: {
         Row: {
-          body: string | null
-          created_at: string
-          dedupe_key: string | null
-          id: string
-          metadata: Json
-          read_at: string | null
-          route: string | null
-          title: string
-          type: string
+          chat_mention: boolean
+          match_alert: boolean
+          push_enabled: boolean
           updated_at: string
+          upload_reminder: boolean
           user_id: string
         }
         Insert: {
-          body?: string | null
-          created_at?: string
-          dedupe_key?: string | null
-          id?: string
-          metadata?: Json
-          read_at?: string | null
-          route?: string | null
-          title: string
-          type: string
+          chat_mention?: boolean
+          match_alert?: boolean
+          push_enabled?: boolean
           updated_at?: string
+          upload_reminder?: boolean
           user_id: string
         }
         Update: {
-          body?: string | null
-          created_at?: string
-          dedupe_key?: string | null
-          id?: string
-          metadata?: Json
-          read_at?: string | null
-          route?: string | null
-          title?: string
-          type?: string
+          chat_mention?: boolean
+          match_alert?: boolean
+          push_enabled?: boolean
           updated_at?: string
+          upload_reminder?: boolean
           user_id?: string
         }
         Relationships: []
       }
-      payments: {
+      pass: {
         Row: {
-          amount: number
           created_at: string
-          currency: string
-          environment: string | null
-          external_tx_id: string | null
-          failed_at: string | null
+          granted: number
           id: string
-          offering_id: string | null
-          package_id: string | null
-          payment_method: string | null
+          kind: string
+          remaining: number
+          source: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          granted?: number
+          id?: string
+          kind?: string
+          remaining?: number
+          source?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          granted?: number
+          id?: string
+          kind?: string
+          remaining?: number
+          source?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payment: {
+        Row: {
+          amount: number | null
+          created_at: string
+          id: string
           product_id: string | null
-          product_type: string
           provider: string
-          purchased_at: string | null
-          raw_payload: Json
-          refunded_at: string | null
-          revenuecat_app_user_id: string | null
-          revenuecat_event_id: string | null
-          revenuecat_original_app_user_id: string | null
-          revenuecat_transaction_id: string | null
-          store: string | null
-          updated_at: string
+          status: string
           user_id: string
-          결제상태: string
         }
         Insert: {
-          amount: number
+          amount?: number | null
           created_at?: string
-          currency?: string
-          environment?: string | null
-          external_tx_id?: string | null
-          failed_at?: string | null
           id?: string
-          offering_id?: string | null
-          package_id?: string | null
-          payment_method?: string | null
           product_id?: string | null
-          product_type?: string
           provider?: string
-          purchased_at?: string | null
-          raw_payload?: Json
-          refunded_at?: string | null
-          revenuecat_app_user_id?: string | null
-          revenuecat_event_id?: string | null
-          revenuecat_original_app_user_id?: string | null
-          revenuecat_transaction_id?: string | null
-          store?: string | null
-          updated_at?: string
+          status?: string
           user_id: string
-          결제상태?: string
         }
         Update: {
-          amount?: number
+          amount?: number | null
           created_at?: string
-          currency?: string
-          environment?: string | null
-          external_tx_id?: string | null
-          failed_at?: string | null
           id?: string
-          offering_id?: string | null
-          package_id?: string | null
-          payment_method?: string | null
           product_id?: string | null
-          product_type?: string
           provider?: string
-          purchased_at?: string | null
-          raw_payload?: Json
-          refunded_at?: string | null
-          revenuecat_app_user_id?: string | null
-          revenuecat_event_id?: string | null
-          revenuecat_original_app_user_id?: string | null
-          revenuecat_transaction_id?: string | null
-          store?: string | null
-          updated_at?: string
-          user_id?: string
-          결제상태?: string
-        }
-        Relationships: []
-      }
-      private_profiles: {
-        Row: {
-          birth_date: string | null
-          ci_hash: string | null
-          created_at: string
-          di_hash: string | null
-          phone_country_code: string | null
-          phone_hash: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          birth_date?: string | null
-          ci_hash?: string | null
-          created_at?: string
-          di_hash?: string | null
-          phone_country_code?: string | null
-          phone_hash?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          birth_date?: string | null
-          ci_hash?: string | null
-          created_at?: string
-          di_hash?: string | null
-          phone_country_code?: string | null
-          phone_hash?: string | null
-          updated_at?: string
+          status?: string
           user_id?: string
         }
         Relationships: []
       }
-      profile_videos: {
+      profile: {
         Row: {
-          approved_at: string | null
-          created_at: string
-          duration_ms: number
-          file_size_bytes: number | null
-          id: string
-          is_primary: boolean
-          mime_type: string
-          moderation_status: Database["public"]["Enums"]["moderation_status"]
-          rejected_at: string | null
-          rejection_reason: string | null
-          removed_at: string | null
-          storage_bucket: string
-          storage_path: string
-          thumbnail_path: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          approved_at?: string | null
-          created_at?: string
-          duration_ms: number
-          file_size_bytes?: number | null
-          id?: string
-          is_primary?: boolean
-          mime_type?: string
-          moderation_status?: Database["public"]["Enums"]["moderation_status"]
-          rejected_at?: string | null
-          rejection_reason?: string | null
-          removed_at?: string | null
-          storage_bucket?: string
-          storage_path: string
-          thumbnail_path?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          approved_at?: string | null
-          created_at?: string
-          duration_ms?: number
-          file_size_bytes?: number | null
-          id?: string
-          is_primary?: boolean
-          mime_type?: string
-          moderation_status?: Database["public"]["Enums"]["moderation_status"]
-          rejected_at?: string | null
-          rejection_reason?: string | null
-          removed_at?: string | null
-          storage_bucket?: string
-          storage_path?: string
-          thumbnail_path?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      profiles: {
-        Row: {
-          birth_date: string | null
-          blocked_until: string | null
+          bio: string | null
+          birth_year: number | null
           created_at: string
           gender: string | null
-          interest_categories: string[]
-          interest_tags: string[]
-          intro: string | null
-          mbti: string | null
+          is_adult: boolean
+          is_in_active_room: boolean
+          last_room_leave_at: string | null
           nickname: string | null
-          phone: string | null
+          nickname_lower: string | null
           photo_url: string | null
-          region_sido: string | null
-          region_sigungu: string | null
-          suspend_reason: string | null
+          quiet_hours_end: number
+          quiet_hours_start: number
+          region: string | null
           updated_at: string
           user_id: string
-          사진_검수_YN: string
-          차단_YN: string
-          회원상태: string
         }
         Insert: {
-          birth_date?: string | null
-          blocked_until?: string | null
+          bio?: string | null
+          birth_year?: number | null
           created_at?: string
           gender?: string | null
-          interest_categories?: string[]
-          interest_tags?: string[]
-          intro?: string | null
-          mbti?: string | null
+          is_adult?: boolean
+          is_in_active_room?: boolean
+          last_room_leave_at?: string | null
           nickname?: string | null
-          phone?: string | null
+          nickname_lower?: string | null
           photo_url?: string | null
-          region_sido?: string | null
-          region_sigungu?: string | null
-          suspend_reason?: string | null
+          quiet_hours_end?: number
+          quiet_hours_start?: number
+          region?: string | null
           updated_at?: string
           user_id: string
-          사진_검수_YN?: string
-          차단_YN?: string
-          회원상태?: string
         }
         Update: {
-          birth_date?: string | null
-          blocked_until?: string | null
+          bio?: string | null
+          birth_year?: number | null
           created_at?: string
           gender?: string | null
-          interest_categories?: string[]
-          interest_tags?: string[]
-          intro?: string | null
-          mbti?: string | null
+          is_adult?: boolean
+          is_in_active_room?: boolean
+          last_room_leave_at?: string | null
           nickname?: string | null
-          phone?: string | null
+          nickname_lower?: string | null
           photo_url?: string | null
-          region_sido?: string | null
-          region_sigungu?: string | null
-          suspend_reason?: string | null
+          quiet_hours_end?: number
+          quiet_hours_start?: number
+          region?: string | null
           updated_at?: string
           user_id?: string
-          사진_검수_YN?: string
-          차단_YN?: string
-          회원상태?: string
         }
         Relationships: []
       }
-      refresh_item_grants: {
+      refund_ticket: {
         Row: {
-          consumed_at: string | null
           created_at: string
-          granted_at: string
-          granted_count: number
           id: string
-          payment_id: string
-          product_id: string
-          remaining_count: number
-          revoke_reason: string | null
-          revoked_at: string | null
+          payment_id: string | null
+          reason: string | null
           status: string
-          updated_at: string
           user_id: string
         }
         Insert: {
-          consumed_at?: string | null
           created_at?: string
-          granted_at?: string
-          granted_count?: number
           id?: string
-          payment_id: string
-          product_id: string
-          remaining_count?: number
-          revoke_reason?: string | null
-          revoked_at?: string | null
+          payment_id?: string | null
+          reason?: string | null
           status?: string
-          updated_at?: string
           user_id: string
         }
         Update: {
-          consumed_at?: string | null
           created_at?: string
-          granted_at?: string
-          granted_count?: number
           id?: string
-          payment_id?: string
-          product_id?: string
-          remaining_count?: number
-          revoke_reason?: string | null
-          revoked_at?: string | null
+          payment_id?: string | null
+          reason?: string | null
           status?: string
-          updated_at?: string
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "refresh_item_grants_payment_id_fkey"
+            foreignKeyName: "refund_ticket_payment_id_fkey"
             columns: ["payment_id"]
             isOneToOne: false
-            referencedRelation: "payments"
+            referencedRelation: "payment"
             referencedColumns: ["id"]
           },
         ]
       }
-      refresh_redemptions: {
+      report: {
         Row: {
-          candidate_user_ids: string[]
+          category: string
           created_at: string
-          failure_reason: string | null
-          grant_id: string | null
+          detail: string | null
           id: string
-          pool_date: string
-          seen_user_ids: string[]
+          reported_user_id: string
+          reporter_user_id: string
+          room_id: string | null
           status: string
-          updated_at: string
-          user_id: string
         }
         Insert: {
-          candidate_user_ids?: string[]
+          category: string
           created_at?: string
-          failure_reason?: string | null
-          grant_id?: string | null
+          detail?: string | null
           id?: string
-          pool_date?: string
-          seen_user_ids?: string[]
+          reported_user_id: string
+          reporter_user_id: string
+          room_id?: string | null
           status?: string
-          updated_at?: string
-          user_id: string
         }
         Update: {
-          candidate_user_ids?: string[]
+          category?: string
           created_at?: string
-          failure_reason?: string | null
-          grant_id?: string | null
+          detail?: string | null
           id?: string
-          pool_date?: string
-          seen_user_ids?: string[]
+          reported_user_id?: string
+          reporter_user_id?: string
+          room_id?: string | null
           status?: string
-          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "room"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room: {
+        Row: {
+          active_member_count: number
+          created_at: string
+          ended_at: string | null
+          ended_reason: string | null
+          expires_at: string
+          id: string
+          member_count: number
+          status: string
+        }
+        Insert: {
+          active_member_count?: number
+          created_at?: string
+          ended_at?: string | null
+          ended_reason?: string | null
+          expires_at?: string
+          id?: string
+          member_count?: number
+          status?: string
+        }
+        Update: {
+          active_member_count?: number
+          created_at?: string
+          ended_at?: string | null
+          ended_reason?: string | null
+          expires_at?: string
+          id?: string
+          member_count?: number
+          status?: string
+        }
+        Relationships: []
+      }
+      room_lifecycle: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          detail: Json | null
+          event: string
+          id: string
+          room_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          detail?: Json | null
+          event: string
+          id?: string
+          room_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          detail?: Json | null
+          event?: string
+          id?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_lifecycle_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "room"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_member: {
+        Row: {
+          joined_at: string
+          left_at: string | null
+          role: string
+          room_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          joined_at?: string
+          left_at?: string | null
+          role?: string
+          room_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          joined_at?: string
+          left_at?: string | null
+          role?: string
+          room_id?: string
+          status?: string
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "refresh_redemptions_grant_id_fkey"
-            columns: ["grant_id"]
+            foreignKeyName: "room_member_room_id_fkey"
+            columns: ["room_id"]
             isOneToOne: false
-            referencedRelation: "refresh_item_grants"
+            referencedRelation: "room"
             referencedColumns: ["id"]
           },
         ]
       }
-      reports: {
-        Row: {
-          action_taken: string | null
-          block_days: number | null
-          created_at: string
-          description: string | null
-          id: string
-          log_id: string | null
-          operator_comment: string | null
-          operator_email: string | null
-          operator_id: string | null
-          reason: string
-          reason_category: string
-          reported_id: string
-          reporter_id: string
-          resolved_at: string | null
-          처리상태: string
-        }
-        Insert: {
-          action_taken?: string | null
-          block_days?: number | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          log_id?: string | null
-          operator_comment?: string | null
-          operator_email?: string | null
-          operator_id?: string | null
-          reason: string
-          reason_category: string
-          reported_id: string
-          reporter_id: string
-          resolved_at?: string | null
-          처리상태?: string
-        }
-        Update: {
-          action_taken?: string | null
-          block_days?: number | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          log_id?: string | null
-          operator_comment?: string | null
-          operator_email?: string | null
-          operator_id?: string | null
-          reason?: string
-          reason_category?: string
-          reported_id?: string
-          reporter_id?: string
-          resolved_at?: string | null
-          처리상태?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "reports_log_id_fkey"
-            columns: ["log_id"]
-            isOneToOne: false
-            referencedRelation: "logs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      revenuecat_webhook_events: {
-        Row: {
-          aliases: string[]
-          app_user_id: string | null
-          created_at: string
-          environment: string | null
-          event_type: string
-          id: string
-          original_app_user_id: string | null
-          payload: Json
-          processed_at: string | null
-          product_id: string | null
-          transaction_id: string | null
-        }
-        Insert: {
-          aliases?: string[]
-          app_user_id?: string | null
-          created_at?: string
-          environment?: string | null
-          event_type: string
-          id: string
-          original_app_user_id?: string | null
-          payload: Json
-          processed_at?: string | null
-          product_id?: string | null
-          transaction_id?: string | null
-        }
-        Update: {
-          aliases?: string[]
-          app_user_id?: string | null
-          created_at?: string
-          environment?: string | null
-          event_type?: string
-          id?: string
-          original_app_user_id?: string | null
-          payload?: Json
-          processed_at?: string | null
-          product_id?: string | null
-          transaction_id?: string | null
-        }
-        Relationships: []
-      }
-      review_history: {
-        Row: {
-          action: string
-          created_at: string
-          id: string
-          log_id: string | null
-          operator_email: string | null
-          operator_id: string | null
-          reason: string | null
-          target_type: string
-          target_user: string | null
-        }
-        Insert: {
-          action: string
-          created_at?: string
-          id?: string
-          log_id?: string | null
-          operator_email?: string | null
-          operator_id?: string | null
-          reason?: string | null
-          target_type: string
-          target_user?: string | null
-        }
-        Update: {
-          action?: string
-          created_at?: string
-          id?: string
-          log_id?: string | null
-          operator_email?: string | null
-          operator_id?: string | null
-          reason?: string | null
-          target_type?: string
-          target_user?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "review_history_log_id_fkey"
-            columns: ["log_id"]
-            isOneToOne: false
-            referencedRelation: "logs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      sms_log: {
+      team: {
         Row: {
           created_at: string
+          disbanded_at: string | null
+          gender: string | null
           id: string
-          ip_address: string | null
-          phone: string
-          result: string
-          send_count: number
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          ip_address?: string | null
-          phone: string
-          result?: string
-          send_count?: number
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          ip_address?: string | null
-          phone?: string
-          result?: string
-          send_count?: number
-          user_id?: string | null
-        }
-        Relationships: []
-      }
-      user_consents: {
-        Row: {
-          accepted_at: string
-          age_policy_version: string
-          community_guidelines_version: string
-          created_at: string
-          id: string
-          marketing_email_opt_in: boolean
-          marketing_push_opt_in: boolean
-          privacy_version: string
-          terms_version: string
-          user_id: string
-        }
-        Insert: {
-          accepted_at?: string
-          age_policy_version: string
-          community_guidelines_version: string
-          created_at?: string
-          id?: string
-          marketing_email_opt_in?: boolean
-          marketing_push_opt_in?: boolean
-          privacy_version: string
-          terms_version: string
-          user_id: string
-        }
-        Update: {
-          accepted_at?: string
-          age_policy_version?: string
-          community_guidelines_version?: string
-          created_at?: string
-          id?: string
-          marketing_email_opt_in?: boolean
-          marketing_push_opt_in?: boolean
-          privacy_version?: string
-          terms_version?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      user_devices: {
-        Row: {
-          app_version: string | null
-          created_at: string
-          device_label: string | null
-          id: string
-          installation_id_hash: string
-          last_seen_at: string
-          platform: Database["public"]["Enums"]["device_platform"]
-          push_provider: Database["public"]["Enums"]["push_provider"] | null
-          push_token: string | null
-          revoked_at: string | null
+          name: string | null
+          owner_user_id: string
+          status: string
+          target_size: number
           updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          disbanded_at?: string | null
+          gender?: string | null
+          id?: string
+          name?: string | null
+          owner_user_id: string
+          status?: string
+          target_size?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          disbanded_at?: string | null
+          gender?: string | null
+          id?: string
+          name?: string | null
+          owner_user_id?: string
+          status?: string
+          target_size?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      team_invite: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          invitee_user_id: string | null
+          inviter_user_id: string
+          status: string
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          invitee_user_id?: string | null
+          inviter_user_id: string
+          status?: string
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          invitee_user_id?: string | null
+          inviter_user_id?: string
+          status?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_invite_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "team"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_member: {
+        Row: {
+          joined_at: string
+          role: string
+          team_id: string
           user_id: string
         }
         Insert: {
-          app_version?: string | null
-          created_at?: string
-          device_label?: string | null
-          id?: string
-          installation_id_hash: string
-          last_seen_at?: string
-          platform: Database["public"]["Enums"]["device_platform"]
-          push_provider?: Database["public"]["Enums"]["push_provider"] | null
-          push_token?: string | null
-          revoked_at?: string | null
-          updated_at?: string
+          joined_at?: string
+          role?: string
+          team_id: string
           user_id: string
         }
         Update: {
-          app_version?: string | null
-          created_at?: string
-          device_label?: string | null
-          id?: string
-          installation_id_hash?: string
-          last_seen_at?: string
-          platform?: Database["public"]["Enums"]["device_platform"]
-          push_provider?: Database["public"]["Enums"]["push_provider"] | null
-          push_token?: string | null
-          revoked_at?: string | null
-          updated_at?: string
+          joined_at?: string
+          role?: string
+          team_id?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "team_member_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "team"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          hour_slot: number | null
+          id: string
+          room_id: string
+          status: string
+          storage_path: string | null
+          thumbnail_path: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          hour_slot?: number | null
+          id?: string
+          room_id: string
+          status?: string
+          storage_path?: string | null
+          thumbnail_path?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          hour_slot?: number | null
+          id?: string
+          room_id?: string
+          status?: string
+          storage_path?: string | null
+          thumbnail_path?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "room"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -1369,46 +805,6 @@ export type Database = {
         Returns: boolean
       }
       _video_review_notify_config: { Args: never; Returns: Json }
-      accept_like: {
-        Args: { p_like_id: string }
-        Returns: {
-          counterpart_id: string
-          match_id: string
-        }[]
-      }
-      accept_required_consents: {
-        Args: {
-          p_age_policy_version: string
-          p_community_guidelines_version: string
-          p_marketing_email_opt_in?: boolean
-          p_marketing_push_opt_in?: boolean
-          p_privacy_version: string
-          p_terms_version: string
-        }
-        Returns: {
-          account_state: Database["public"]["Enums"]["account_state"]
-          age_eligible: boolean
-          age_verified_at: string | null
-          banned_at: string | null
-          created_at: string
-          deleted_at: string | null
-          discovery_enabled_at: string | null
-          first_video_approved_at: string | null
-          first_video_uploaded_at: string | null
-          identity_verified_at: string | null
-          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
-          profile_completed_at: string | null
-          suspended_at: string | null
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "account_status"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       block_profile_user: {
         Args: { p_blocked_user_id: string; p_reason?: string }
         Returns: string
@@ -1416,123 +812,6 @@ export type Database = {
       can_enter_discovery: {
         Args: { target_user_id?: string }
         Returns: boolean
-      }
-      chat_is_blocked_between: {
-        Args: { p_user_a: string; p_user_b: string }
-        Returns: boolean
-      }
-      complete_local_dev_consumable_purchase: {
-        Args: { p_product_id?: string }
-        Returns: {
-          consumed_at: string | null
-          created_at: string
-          granted_at: string
-          granted_count: number
-          id: string
-          payment_id: string
-          product_id: string
-          remaining_count: number
-          revoke_reason: string | null
-          revoked_at: string | null
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "refresh_item_grants"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      complete_local_dev_identity_verification: {
-        Args: never
-        Returns: {
-          account_state: Database["public"]["Enums"]["account_state"]
-          age_eligible: boolean
-          age_verified_at: string | null
-          banned_at: string | null
-          created_at: string
-          deleted_at: string | null
-          discovery_enabled_at: string | null
-          first_video_approved_at: string | null
-          first_video_uploaded_at: string | null
-          identity_verified_at: string | null
-          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
-          profile_completed_at: string | null
-          suspended_at: string | null
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "account_status"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      complete_log_intro: {
-        Args: never
-        Returns: {
-          account_state: Database["public"]["Enums"]["account_state"]
-          age_eligible: boolean
-          age_verified_at: string | null
-          banned_at: string | null
-          created_at: string
-          deleted_at: string | null
-          discovery_enabled_at: string | null
-          first_video_approved_at: string | null
-          first_video_uploaded_at: string | null
-          identity_verified_at: string | null
-          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
-          profile_completed_at: string | null
-          suspended_at: string | null
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "account_status"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      complete_profile: {
-        Args: {
-          p_bio?: string
-          p_birth_date?: string
-          p_display_name: string
-          p_gender?: string
-          p_interest_categories?: string[]
-          p_interest_tags?: string[]
-          p_mbti?: string
-          p_profile_image_path?: string
-          p_region_sido?: string
-          p_region_sigungu?: string
-        }
-        Returns: {
-          account_state: Database["public"]["Enums"]["account_state"]
-          age_eligible: boolean
-          age_verified_at: string | null
-          banned_at: string | null
-          created_at: string
-          deleted_at: string | null
-          discovery_enabled_at: string | null
-          first_video_approved_at: string | null
-          first_video_uploaded_at: string | null
-          identity_verified_at: string | null
-          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
-          profile_completed_at: string | null
-          suspended_at: string | null
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "account_status"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       consume_refresh_item: {
         Args: { p_seen_user_ids?: string[] }
@@ -1542,7 +821,6 @@ export type Database = {
           log_id: string
           pool_id: string
           redemption_id: string
-          thumbnail_path: string
           user_id: string
           video_path: string
           video_url: string
@@ -1578,12 +856,7 @@ export type Database = {
           status: string
         }[]
       }
-      ensure_conversation_for_match: {
-        Args: { p_user_x: string; p_user_y: string }
-        Returns: string
-      }
       evaluate_my_flags: { Args: never; Returns: Json }
-      expire_overdue_likes: { Args: { p_user_id: string }; Returns: number }
       get_available_heart_count: {
         Args: { p_user_id?: string }
         Returns: number
@@ -1640,36 +913,8 @@ export type Database = {
           video_url: string
         }[]
       }
-      grant_refresh_item: {
-        Args: {
-          p_granted_count?: number
-          p_payment_id: string
-          p_product_id: string
-          p_user_id: string
-        }
-        Returns: {
-          consumed_at: string | null
-          created_at: string
-          granted_at: string
-          granted_count: number
-          id: string
-          payment_id: string
-          product_id: string
-          remaining_count: number
-          revoke_reason: string | null
-          revoked_at: string | null
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "refresh_item_grants"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       is_admin: { Args: never; Returns: boolean }
+      is_blocked_between: { Args: { a: string; b: string }; Returns: boolean }
       is_heart_product: { Args: { p_product_id: string }; Returns: boolean }
       is_public_profile_visible: {
         Args: { p_profile_user_id: string; p_viewer_user_id: string }
@@ -1689,126 +934,9 @@ export type Database = {
         }[]
       }
       recalculate_daily_log: { Args: { p_user_id: string }; Returns: undefined }
-      recalculate_daily_log_for_date: {
-        Args: { p_log_date: string; p_user_id: string }
-        Returns: {
-          created_at: string
-          id: string
-          log_date: string
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "daily_logs"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      record_refresh_redemption: {
-        Args: {
-          p_candidate_user_ids?: string[]
-          p_failure_reason?: string
-          p_grant_id?: string
-          p_seen_user_ids?: string[]
-          p_status?: string
-          p_user_id: string
-        }
-        Returns: {
-          candidate_user_ids: string[]
-          created_at: string
-          failure_reason: string | null
-          grant_id: string | null
-          id: string
-          pool_date: string
-          seen_user_ids: string[]
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "refresh_redemptions"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      register_user_push_token: {
-        Args: {
-          p_app_version?: string
-          p_device_label?: string
-          p_installation_id_hash: string
-          p_platform: Database["public"]["Enums"]["device_platform"]
-          p_push_provider?: Database["public"]["Enums"]["push_provider"]
-          p_push_token: string
-        }
-        Returns: {
-          app_version: string | null
-          created_at: string
-          device_label: string | null
-          id: string
-          installation_id_hash: string
-          last_seen_at: string
-          platform: Database["public"]["Enums"]["device_platform"]
-          push_provider: Database["public"]["Enums"]["push_provider"] | null
-          push_token: string | null
-          revoked_at: string | null
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "user_devices"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      reject_like: { Args: { p_like_id: string }; Returns: undefined }
-      revoke_refresh_item_grant_for_payment: {
-        Args: { p_payment_id: string; p_revoke_reason?: string }
-        Returns: {
-          consumed_at: string | null
-          created_at: string
-          granted_at: string
-          granted_count: number
-          id: string
-          payment_id: string
-          product_id: string
-          remaining_count: number
-          revoke_reason: string | null
-          revoked_at: string | null
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "refresh_item_grants"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      send_like: {
-        Args: { p_attached_log_id?: string; p_to_user_id: string }
-        Returns: {
-          attached_log_id: string | null
-          created_at: string
-          expires_at: string
-          from_user_id: string
-          id: string
-          liked_at: string
-          read_at: string | null
-          responded_at: string | null
-          status: string
-          to_user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "likes"
-          isOneToOne: true
-          isSetofReturn: false
-        }
+      room_is_member: {
+        Args: { p_room_id: string; p_user_id: string }
+        Returns: boolean
       }
       send_message: {
         Args: { p_body: string; p_conversation_id: string }
@@ -1820,32 +948,6 @@ export type Database = {
           sender_user_id: string
           status: string
         }[]
-      }
-      transfer_existing_member_account: {
-        Args: { p_from_user_id: string; p_to_user_id: string }
-        Returns: {
-          account_state: Database["public"]["Enums"]["account_state"]
-          age_eligible: boolean
-          age_verified_at: string | null
-          banned_at: string | null
-          created_at: string
-          deleted_at: string | null
-          discovery_enabled_at: string | null
-          first_video_approved_at: string | null
-          first_video_uploaded_at: string | null
-          identity_verified_at: string | null
-          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
-          profile_completed_at: string | null
-          suspended_at: string | null
-          updated_at: string
-          user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "account_status"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
     }
     Enums: {
@@ -2059,4 +1161,3 @@ export const Constants = {
     },
   },
 } as const
-

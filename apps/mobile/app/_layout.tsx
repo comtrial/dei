@@ -1,119 +1,47 @@
 import '../global.css';
-import { ThemeProvider } from '@react-navigation/native';
-import { PortalHost } from '@rn-primitives/portal';
-import Constants from 'expo-constants';
-import { Stack, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef } from 'react';
-import 'react-native-reanimated';
 
-import { analytics } from '@dei/shared';
+import { Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { AccountGateProvider } from '@/providers/account-gate-provider';
-import { AuthProvider, useAuth } from '@/providers/auth-provider';
-import { FeatureFlagsProvider } from '@/providers/feature-flags-provider';
-import { RootGate } from '@/providers/root-gate';
-import {
-  addPushResponseListener,
-  clearLastPushResponse,
-  configureForegroundPushNotifications,
-  getLastPushResponse,
-  getPushRouteFromResponse,
-} from '@/lib/push-notifications';
-import { NAV_THEME } from '@/lib/theme';
-import { Sentry, initSentry } from '@/lib/sentry';
 import { initPostHog } from '@/lib/posthog';
-
-initSentry();
-void configureForegroundPushNotifications();
-initPostHog();
-
-export const unstable_settings = {
-  anchor: '(auth)',
-};
-
-function PushNotificationNavigator() {
-  const router = useRouter();
-
-  useEffect(() => {
-    const routeFromResponse = (response: NonNullable<ReturnType<typeof getLastPushResponse>>) => {
-      const route = getPushRouteFromResponse(response);
-
-      if (route) {
-        router.push(route as never);
-      }
-
-      clearLastPushResponse();
-    };
-
-    const lastResponse = getLastPushResponse();
-
-    if (lastResponse) {
-      routeFromResponse(lastResponse);
-    }
-
-    const subscription = addPushResponseListener(routeFromResponse);
-    return () => subscription.remove();
-  }, [router]);
-
-  return null;
-}
+import { initSentry } from '@/lib/sentry';
+import { AuthProvider } from '@/providers/auth-provider';
+import { RootGate } from '@/providers/root-gate';
 
 /**
- * 앱 진입(cold start)을 1회만 기록한다. 세션 로딩이 끝난 뒤 토큰 보유 여부를
- * 함께 보내기 위해 AuthProvider 내부에서 useAuth 로 session 을 읽는다.
+ * 루트 레이아웃 (spec §3.3 · A-4)
+ * ------------------------------------------------------------------
+ * 앱 진입점. 관측 transport(Sentry·PostHog)를 트리 마운트 전에 1회 등록하고,
+ * 인증/세션 가드/제스처/세이프에어리어 프로바이더를 깐다. 라우트 그룹
+ * ((auth)/(onboarding)/(app))은 각 그룹 _layout 이 담당.
+ *
+ * 데이터페칭 컨벤션(spec §3.3): TanStack Query 를 데이터 계층 SSOT 로 쓰기로
+ * 했으나, 이번 셋팅은 빈 화면 스캐폴딩 단계라 QueryClientProvider 는 의도적으로
+ * 아직 깔지 않는다(미사용 의존 회피). 데이터 연동을 시작하는 화면 담당자가
+ * `@tanstack/react-query` 도입 시 여기에 QueryClientProvider 를 추가한다.
  */
-function AppOpenedTracker() {
-  const { isLoading, session } = useAuth();
-  const hasFired = useRef(false);
-
+export default function RootLayout() {
   useEffect(() => {
-    if (isLoading || hasFired.current) {
-      return;
-    }
-
-    hasFired.current = true;
-    analytics.capture('app_opened', {
-      has_token: Boolean(session),
-      source: 'cold_start',
-      app_version: Constants.expoConfig?.version ?? 'unknown',
-    });
-  }, [isLoading, session]);
-
-  return null;
-}
-
-function RootLayout() {
-  const colorScheme = useColorScheme();
-  const themeName = colorScheme === 'dark' ? 'dark' : 'light';
+    initSentry();
+    initPostHog();
+  }, []);
 
   return (
-    <AuthProvider>
-      <AppOpenedTracker />
-      <AccountGateProvider>
-        <FeatureFlagsProvider>
-          <ThemeProvider value={NAV_THEME[themeName]}>
-            <PushNotificationNavigator />
-            <RootGate>
-              <Stack>
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
-                <Stack.Screen name="(app)" options={{ headerShown: false }} />
-                <Stack.Screen name="result" options={{ headerShown: false }} />
-                <Stack.Screen name="log-detail" options={{ headerShown: false }} />
-                <Stack.Screen name="log-detail/delete-confirm" options={{ headerShown: false, presentation: 'transparentModal' }} />
-                <Stack.Screen name="modal" options={{ presentation: 'modal', title: '신고' }} />
-              </Stack>
-            </RootGate>
-            <StatusBar style="auto" />
-            <PortalHost />
-          </ThemeProvider>
-        </FeatureFlagsProvider>
-      </AccountGateProvider>
-    </AuthProvider>
+    <GestureHandlerRootView className="flex-1">
+      <SafeAreaProvider>
+        <AuthProvider>
+          <RootGate>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(onboarding)" />
+              <Stack.Screen name="(app)" />
+            </Stack>
+          </RootGate>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
-
-export default Sentry.wrap(RootLayout);

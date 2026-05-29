@@ -1,157 +1,43 @@
-import { Check } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button } from '@/components/ui/button';
-import { Text } from '@/components/ui/text';
-import { ROUTES } from '@/lib/routes';
-import { cn } from '@/lib/utils';
-import { useAccountGate } from '@/providers/account-gate-provider';
-import { useAuth } from '@/providers/auth-provider';
+import { Text } from '@dei/ui';
 
-const REQUIRED_TERMS = [
-  { detailType: 'service', label: '[필수] 서비스 이용약관' },
-  { detailType: 'privacy', label: '[필수] 개인정보 처리방침' },
-  { detailType: 'age', label: '[필수] 본인확인 및 연령 정책' },
-  { detailType: 'community', label: '[필수] 커뮤니티 가이드라인' },
-];
-
+/**
+ * S02 — 약관 + 19+ 자가확인
+ * ==================================================================
+ * 담당자: B
+ * 화면 목적: 법적 약관 동의 + 19+ 자가확인을 받아 본인인증(외부 SDK) 진입
+ *           게이트를 통과시킨다. PRD v0.7 §15 '본인 인증·연령 게이트' 충족.
+ * 의존 DS 컴포넌트: Text · TopNav(닫기 < → splash 복귀) · Badge(연령 게이트
+ *   '19세 미만 이용 불가' pill) · Card(CheckAll '모두 동의' 마스터 카드)
+ *   · Checkbox(모두 동의 + 각 약관 항목 체크) · SettingsRow(약관 항목 행 +
+ *   '보기 ›' chevron) · Chip(필수/선택 RequiredTag) · Button(PrimaryCTA
+ *   '동의하고 본인인증 시작', 필수 미충족 시 비활성) · AlertDialog(약관 전문
+ *   로드 실패 시 재시도)  [@dei/ui]
+ * 의존 데이터: 약관 항목 메타·전문(terms/policy versions 테이블 또는 정적
+ *   호스팅 문서) / 사용자별 동의 상태(consents/agreements 테이블: 약관 버전 +
+ *   동의 시각) / 동의된 약관 버전 vs 현재 버전 비교(재동의 트리거)
+ * 발생 이벤트(PostHog): terms_agreement_screen_entered (start · F-Auth
+ *   가입+본인인증)  (lib/analytics-taxonomy)
+ * 서버 의존(L1): 약관 전문 로드(실패 시 alert+재시도) / 동의 기록 저장
+ *   엔드포인트 / 위치정보 동의 플래그는 S04c 지역 자동채움과 연동되므로
+ *   프로필 컨텍스트로 전달
+ * 정책 의존(L2): 약관 필수/선택 구분(서비스약관·개인정보=필수,
+ *   위치·마케팅=선택) / 약관 버전 변경 시 재동의 강제 운영 로직
+ * 와이어프레임 참조: all-screens S02
+ *
+ * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
+ *    실제 구현('모두 동의' 카드·약관 항목 행·19+ 배지·CTA 동작)은 owner 가 채운다.
+ */
 export default function TermsScreen() {
-  const router = useRouter();
-  const { acceptConsents } = useAccountGate();
-  const { ensureAnonymousSession } = useAuth();
-  const [acceptedIndexes, setAcceptedIndexes] = useState<number[]>([]);
-  const [marketingPushOptIn, setMarketingPushOptIn] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const allAccepted = acceptedIndexes.length === REQUIRED_TERMS.length;
-
-  const toggleRequired = (index: number) => {
-    setError(null);
-    setAcceptedIndexes((current) =>
-      current.includes(index) ? current.filter((item) => item !== index) : [...current, index],
-    );
-  };
-
-  const handleAccept = async () => {
-    setError(null);
-
-    if (!allAccepted) {
-      setError('필수 약관을 모두 동의해 주세요.');
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      await ensureAnonymousSession();
-      await acceptConsents({ marketingPushOptIn });
-      router.replace(ROUTES.phone as never);
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : '약관 동의를 저장할 수 없어요.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
-    <SafeAreaView className="bg-foreground/40 flex-1 justify-end" edges={['bottom']}>
-      <View className="bg-background rounded-t-[32px] px-8 pb-8 pt-9">
-        <View className="bg-muted mx-auto mb-8 h-1.5 w-20 rounded-full" />
-        <Text className="mb-8 text-2xl font-semibold">약관에 동의해 주세요</Text>
-
-        <View className="gap-0">
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: allAccepted && marketingPushOptIn }}
-            className="border-border flex-row items-center gap-4 border-b py-4"
-            onPress={() => {
-              if (allAccepted && marketingPushOptIn) {
-                setAcceptedIndexes([]);
-                setMarketingPushOptIn(false);
-                setError(null);
-                return;
-              }
-
-              setAcceptedIndexes(REQUIRED_TERMS.map((_, index) => index));
-              setMarketingPushOptIn(true);
-              setError(null);
-            }}>
-            <View
-              className={cn(
-                'border-primary h-8 w-8 items-center justify-center rounded-full border-2',
-                allAccepted && marketingPushOptIn && 'bg-primary',
-              )}>
-              {allAccepted && marketingPushOptIn ? <Check color="#F2EADA" size={20} /> : null}
-            </View>
-            <Text className="flex-1 text-lg font-semibold">전체 동의</Text>
-          </Pressable>
-
-        {REQUIRED_TERMS.map((term, index) => {
-          const isSelected = acceptedIndexes.includes(index);
-
-          return (
-            <View
-              className="border-border flex-row items-center gap-4 border-b py-4"
-              key={term.label}>
-              <Pressable
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: isSelected }}
-                className={cn(
-                  'border-primary h-8 w-8 items-center justify-center rounded-full border-2',
-                  isSelected && 'border-primary bg-primary',
-                )}
-                onPress={() => toggleRequired(index)}>
-                {isSelected ? <Check color="#F2EADA" size={20} /> : null}
-              </Pressable>
-              <Pressable
-                className="flex-1 flex-row items-center gap-4"
-                onPress={() =>
-                  router.push({
-                    pathname: ROUTES.termsDetail as never,
-                    params: { type: term.detailType },
-                  })
-                }>
-                <Text className="flex-1 text-base font-semibold leading-5">{term.label}</Text>
-                <Text className="text-muted-foreground text-xl">→</Text>
-              </Pressable>
-            </View>
-          );
-        })}
-
-        <View className="flex-row items-center gap-4 py-4">
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: marketingPushOptIn }}
-            className={cn(
-              'border-primary h-8 w-8 items-center justify-center rounded-full border-2',
-              marketingPushOptIn && 'border-primary bg-primary',
-            )}
-            onPress={() => setMarketingPushOptIn((value) => !value)}>
-            {marketingPushOptIn ? <Check color="#F2EADA" size={20} /> : null}
-          </Pressable>
-          <Pressable
-            className="flex-1 flex-row items-center gap-4"
-            onPress={() =>
-              router.push({
-                pathname: ROUTES.termsDetail as never,
-                params: { type: 'marketing' },
-              })
-            }>
-            <Text className="flex-1 text-base font-semibold leading-5">[선택] 마케팅 수신 동의</Text>
-            <Text className="text-muted-foreground text-xl">→</Text>
-          </Pressable>
-        </View>
-        </View>
-
-        {error ? <Text className="text-destructive mt-2 text-sm">{error}</Text> : null}
-
-        <Button className="mt-8" disabled={isSubmitting} onPress={handleAccept} size="lg">
-          {isSubmitting ? <ActivityIndicator color="#F2EADA" /> : <Text>동의하고 진행</Text>}
-        </Button>
+    <SafeAreaView className="flex-1 bg-bg">
+      <View className="flex-1 items-center justify-center gap-3 px-6">
+        <Text variant="h1">약관 + 19+ 자가확인</Text>
+        <Text variant="caption" className="text-center">
+          핸드오프: B 구현 예정 · all-screens S02
+        </Text>
       </View>
     </SafeAreaView>
   );

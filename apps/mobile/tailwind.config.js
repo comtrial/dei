@@ -1,54 +1,16 @@
 /** @type {import('tailwindcss').Config} */
+// v4 디자인 시스템: 토큰 SSOT 는 @dei/ui. 화면은 여기 preset 이 만든 토큰
+// 클래스(bg-accent, text-ink-3, rounded-md 등)만 사용한다 (raw 스타일 ESLint 금지).
 module.exports = {
   content: [
     './app/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
-    './lib/**/*.{ts,tsx}',
+    // @dei/ui 의 컴포넌트도 스캔 (workspace 경로)
+    '../../packages/ui/src/**/*.{ts,tsx}',
   ],
-  presets: [require('nativewind/preset')],
+  presets: [require('nativewind/preset'), require('@dei/ui/tokens/preset')],
   theme: {
-    extend: {
-      colors: {
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
-        },
-        secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))',
-        },
-        destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))',
-        },
-        muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))',
-        },
-        accent: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))',
-        },
-        popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))',
-        },
-        card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))',
-        },
-      },
-      borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
-      },
-    },
+    extend: {},
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [],
 };

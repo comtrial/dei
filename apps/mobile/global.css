@@ -2,66 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* v4 디자인 시스템 — 색 토큰 SSOT 는 @dei/ui (tailwind preset 으로 주입).
+   여기서는 NativeWind 레이어와 앱 전역 기본값만 둔다.
+   다크 모드는 1차 셋팅 범위 밖(HTML 와이어프레임이 light 단일) — 후속에서
+   @dei/ui 토큰에 dark 변형 추가 시 여기 :root[data-theme] 로 확장한다. */
 @layer base {
   :root {
-    --background: 40 48% 90%;
-    --foreground: 26 18% 8%;
-
-    --card: 42 71% 95%;
-    --card-foreground: 26 18% 8%;
-
-    --popover: 42 71% 95%;
-    --popover-foreground: 26 18% 8%;
-
-    --primary: 26 18% 8%;
-    --primary-foreground: 40 48% 90%;
-
-    --secondary: 42 46% 86%;
-    --secondary-foreground: 32 18% 20%;
-
-    --muted: 41 36% 83%;
-    --muted-foreground: 35 13% 38%;
-
-    --accent: 38 53% 37%;
-    --accent-foreground: 40 48% 90%;
-
-    --destructive: 16 52% 47%;
-    --destructive-foreground: 40 48% 90%;
-
-    --border: 41 36% 83%;
-    --input: 41 36% 83%;
-    --ring: 38 53% 37%;
-
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 30 28% 7%;
-    --foreground: 40 55% 91%;
-
-    --card: 26 18% 8%;
-    --card-foreground: 40 55% 91%;
-
-    --popover: 26 18% 8%;
-    --popover-foreground: 40 55% 91%;
-
-    --primary: 40 55% 91%;
-    --primary-foreground: 30 28% 7%;
-
-    --secondary: 32 18% 20%;
-    --secondary-foreground: 40 55% 91%;
-
-    --muted: 32 18% 20%;
-    --muted-foreground: 41 25% 70%;
-
-    --accent: 38 53% 37%;
-    --accent-foreground: 40 55% 91%;
-
-    --destructive: 12 63% 47%;
-    --destructive-foreground: 40 55% 91%;
-
-    --border: 32 18% 20%;
-    --input: 32 18% 20%;
-    --ring: 38 53% 37%;
+    --font-sans: 'Pretendard JP Variable';
   }
 }

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * `pnpm verify` — local reproduction of the Chat Verify CI gate.
+ * `pnpm verify` — local reproduction of the Verify CI gate.
  *
- * Runs the exact same ordered stages as .github/workflows/chat-verify.yml so a
+ * Runs the exact same ordered stages as .github/workflows/verify.yml so a
  * developer can reproduce the merge gate before pushing. Fail-fast: a failing
  * stage stops the run and exits non-zero (same as the CI `needs:` chain).
  *
@@ -87,27 +87,31 @@ function summary() {
 
 async function main() {
   console.log(
-    `${C.bold}dei chat verify${C.reset} — CI 게이트(.github/workflows/chat-verify.yml) 로컬 재현`,
+    `${C.bold}dei verify${C.reset} — CI 게이트(.github/workflows/verify.yml) 로컬 재현`,
   );
 
-  header('1/6 lint');
+  header('1/5 ds-enforce (DS 강제 lint — app/, raw 스타일 0)');
+  gate('ds-enforce', run('pnpm', ['ds-enforce']));
+
+  header('2/5 lint');
   gate('lint', run('pnpm', ['lint']));
 
-  header('2/6 typecheck (RN 앱 + e2e 하네스)');
+  header('3/5 typecheck (RN 앱 — 메인 tsconfig, e2e 하네스 제외)');
   gate('typecheck', run('pnpm', ['typecheck']));
 
-  header('3/6 unit (Vitest — shared / api / mobile lib)');
+  header('4/5 unit (Vitest — shared / api / ui 토큰 / mobile lib)');
   gate(
     'unit',
     run('pnpm', ['--filter', '@dei/shared', 'test']) &&
       run('pnpm', ['--filter', '@dei/api', 'test']) &&
+      run('pnpm', ['--filter', '@dei/ui', 'exec', 'vitest', 'run']) &&
       run('pnpm', ['--filter', 'mobile', 'test:unit']),
   );
 
-  header('4/6 component (Jest + RNTL)');
-  gate('component', run('pnpm', ['--filter', 'mobile', 'test:component']));
+  header('5/6 component (Jest + RNTL — @dei/ui 컴포넌트)');
+  gate('component', run('pnpm', ['--filter', '@dei/ui', 'exec', 'jest']));
 
-  header('5/6 integration (실제 Supabase — skip 은 실패로 취급)');
+  header('6/6 integration (실제 Supabase — skip 은 실패로 취급)');
   const reachable = await supabaseReachable();
   const hasServiceKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (!reachable || !hasServiceKey) {
@@ -118,7 +122,7 @@ async function main() {
       `${C.yellow}⚠ integration 로컬 미실행 — ${why}.${C.reset}`,
     );
     console.log(
-      `${C.yellow}  → CI(Chat Verify)는 supabase service container 로 *실제* 실행하며,${C.reset}`,
+      `${C.yellow}  → CI(Verify)는 supabase service container 로 *실제* 실행하며,${C.reset}`,
     );
     console.log(
       `${C.yellow}    0건 실행 시 게이트를 FAIL 시킨다 (PM 검증서 '서버 0검증' 해소).${C.reset}`,
@@ -172,22 +176,9 @@ async function main() {
     gate('integration', ok && reallyRan);
   }
 
-  header('6/6 e2e-web (Playwright — 실제 채팅 스크린)');
-  const installed = run('pnpm', [
-    '--filter',
-    'mobile',
-    'exec',
-    'playwright',
-    'install',
-    'chromium',
-  ]);
-  if (!installed) {
-    record('e2e-web', 'FAIL', 'playwright chromium 설치 실패');
-    console.log(`${C.red}✗ e2e-web — Chromium 설치 실패${C.reset}`);
-    summary();
-    process.exit(1);
-  }
-  gate('e2e-web', run('pnpm', ['--filter', 'mobile', 'test:e2e:web']));
+  // e2e-web 은 verify 게이트에서 제외(화면 스캐폴딩 단계, spec §9). 옛 채팅
+  // 도메인 Playwright 하네스는 참고용이라 현재 컴파일되지 않는다 — C 가 방/채팅
+  // 화면을 구현하며 하네스를 재구성할 때 이 단계를 다시 추가한다.
 
   summary();
   const blocked = results.some((r) => r.status === 'FAIL');
@@ -196,7 +187,7 @@ async function main() {
     process.exit(1);
   }
   console.log(
-    `\n${C.green}${C.bold}모든 채팅 검증 게이트 통과.${C.reset} ` +
+    `\n${C.green}${C.bold}모든 검증 게이트 통과.${C.reset} ` +
       `${C.dim}(integration 로컬 미실행 시 CI 가 최종 강제)${C.reset}`,
   );
 }

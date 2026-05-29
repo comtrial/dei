@@ -1,0 +1,139 @@
+name: Verify
+
+# dei 앱 전체 머지 게이트 (spec §9 · 핸드오프 README "검증 게이트").
+# ※ 방(room) 기능만 검증하는 게 아니라 앱 전반(DS 강제·타입·유닛·컴포넌트·통합)을 검증한다.
+#
+# 직렬 needs: 체인 — 하나라도 실패하면 머지 차단. 집계 잡 `verify` 가
+# branch protection 의 required status check 다.
+#
+#   ds-enforce(DS 강제 lint) → typecheck → unit → component → integration
+#
+# ds-enforce = 사용자 요구 "DS 안 쓰면 PR 이 CI 에서 튕기게". app/ 의 raw 스타일
+# (inline style / raw hex / StyleSheet.create)을 ESLint 가 error 로 막고,
+# --max-warnings=0 이라 경고도 통과 못 한다.
+#
+# e2e-web(Playwright)은 이번 셋팅에서 제외한다 — 화면이 스캐폴딩 단계라
+# 화면 e2e 는 후속(spec §9)이고, 남아있는 e2e 하네스는 옛 채팅 도메인 참고용
+# 으로 현재 컴파일되지 않는다(apps/mobile/e2e/README 경고 참조). C 가 방/채팅
+# 화면을 구현하며 하네스를 재구성할 때 이 워크플로우에 e2e-web 잡을 추가한다.
+
+on:
+  pull_request:
+    branches: [main, 'release/**']
+  # push 는 main 직접 반영(머지 후) 보호용으로만. release/feature 브랜치 검증은
+  # pull_request 트리거가 담당한다 — push+pull_request 를 둘 다 release 에 걸면
+  # 같은 커밋에 run 2개가 동시에 떠 integration 의 supabase 포트(54322)를
+  # 서로 점유하다 한쪽이 "address already in use" 로 깨진다(실제 발생).
+  push:
+    branches: [main]
+
+concurrency:
+  # event 까지 group 에 포함해, 혹시 중복 트리거돼도 같은 그룹이면 이전 run 을 취소.
+  group: verify-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ds-enforce:
+    name: ds-enforce (DS 강제 lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # app/ 의 디자인 시스템 강제 룰(D-04). 경고 0 이어야 통과.
+      - run: pnpm ds-enforce
+
+  typecheck:
+    name: typecheck
+    needs: ds-enforce
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # 모노레포 전역 typecheck (mobile 은 메인 tsconfig — e2e 하네스 제외).
+      - run: pnpm typecheck
+
+  unit:
+    name: unit (vitest)
+    needs: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # 토큰/로직/정책(vitest) + @dei/shared, @dei/api.
+      - run: pnpm --filter @dei/ui exec vitest run
+      - run: pnpm --filter @dei/shared test
+
+  component:
+    name: component (jest)
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # @dei/ui 컴포넌트 테스트(jest-expo + RNTL).
+      - run: pnpm --filter @dei/ui exec jest
+
+  integration:
+    name: integration (real Supabase)
+    needs: component
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase
+        run: pnpm dlx supabase start
+      - name: Inject keys + run integration
+        env:
+          RUN_INTEGRATION: '1'
+        run: |
+          STATUS=$(pnpm dlx supabase status -o env)
+          export EXPO_PUBLIC_SUPABASE_URL=$(echo "$STATUS" | grep -E '^API_URL=' | cut -d= -f2- | tr -d '"')
+          export EXPO_PUBLIC_SUPABASE_ANON_KEY=$(echo "$STATUS" | grep -E '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
+          pnpm --filter mobile test:integration
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm dlx supabase stop || true
+
+  # 집계 잡 — branch protection 의 required check 로 지정한다.
+  verify:
+    name: verify
+    needs: [ds-enforce, typecheck, unit, component, integration]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Gate result
+        run: |
+          if [ "${{ needs.ds-enforce.result }}" != "success" ] \
+            || [ "${{ needs.typecheck.result }}" != "success" ] \
+            || [ "${{ needs.unit.result }}" != "success" ] \
+            || [ "${{ needs.component.result }}" != "success" ] \
+            || [ "${{ needs.integration.result }}" != "success" ]; then
+            echo "verify 게이트 실패 — 위 잡 중 하나 이상이 통과하지 못했습니다."
+            exit 1
+          fi
+          echo "verify 게이트 전부 통과 ✅"

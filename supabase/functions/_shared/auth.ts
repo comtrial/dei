@@ -1,11 +1,11 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 function env() {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Supabase service environment is not configured");
+    throw new Error('Supabase service environment is not configured');
   }
   return { supabaseUrl, serviceRoleKey, anonKey };
 }
@@ -17,52 +17,12 @@ export function createAdminClient() {
   });
 }
 
-function getBearerToken(req: Request) {
-  return req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "").trim() ??
-    null;
-}
-
-function decodeBase64Url(value: string) {
-  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64.padEnd(
-    base64.length + (4 - base64.length % 4) % 4,
-    "=",
-  );
-  return atob(padded);
-}
-
-function getJwtRole(token: string) {
-  const payload = token.split(".")[1];
-
-  if (!payload) {
-    return null;
-  }
-
-  try {
-    const decoded = JSON.parse(decodeBase64Url(payload)) as { role?: unknown };
-    return typeof decoded.role === "string" ? decoded.role : null;
-  } catch {
-    return null;
-  }
-}
-
-export function isServiceRoleRequest(req: Request) {
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const token = getBearerToken(req);
-
-  if (!token) {
-    return false;
-  }
-
-  return token === serviceRoleKey || getJwtRole(token) === "service_role";
-}
-
 export async function getAuthenticatedUser(req: Request) {
-  const authorization = req.headers.get("Authorization");
-  const token = authorization?.replace("Bearer ", "").trim();
+  const authorization = req.headers.get('Authorization');
+  const token = authorization?.replace('Bearer ', '').trim();
 
   if (!token) {
-    throw new Error("authentication required");
+    throw new Error('authentication required');
   }
 
   const { supabaseUrl, serviceRoleKey, anonKey } = env();
@@ -79,7 +39,7 @@ export async function getAuthenticatedUser(req: Request) {
   });
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) {
-    throw new Error("authentication required");
+    throw new Error('authentication required');
   }
 
   // `supabaseAsUser` 는 *호출 사용자의 JWT* 를 단 클라이언트 — RLS +

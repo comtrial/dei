@@ -17,12 +17,7 @@
     },
     "android": {
       "package": "kr.cmdsoftware.dei",
-      "permissions": [
-        "com.android.vending.BILLING",
-        "android.permission.CAMERA",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.RECORD_AUDIO"
-      ],
+      "permissions": [],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -38,16 +33,6 @@
     },
     "plugins": [
       "expo-router",
-      "./plugins/with-orientation-turbo",
-      "@portone/react-native-sdk/plugin",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "dei.가 영상을 촬영하려면 카메라 접근이 필요합니다.",
-          "microphonePermission": "dei.가 영상을 촬영하려면 마이크 접근이 필요합니다.",
-          "recordAudioAndroid": true
-        }
-      ],
       [
         "expo-splash-screen",
         {
@@ -60,17 +45,17 @@
           }
         }
       ],
-      [
-        "expo-notifications",
-        {
-          "color": "#111827",
-          "defaultChannel": "default"
-        }
-      ],
-      "expo-video",
       "@sentry/react-native",
       "expo-web-browser"
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/92ac4c9e-baca-479d-9c1a-a0ac7fff3617",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
