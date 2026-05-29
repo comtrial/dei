@@ -45,3 +45,5 @@ export { SlideToConfirm } from './SlideToConfirm';
 export type { SlideToConfirmProps, SlideToConfirmTone } from './SlideToConfirm';
 export { Popover } from './Popover';
 export type { PopoverProps, PopoverItem } from './Popover';
+export { NewMessageJumpButton } from './NewMessageJumpButton';
+export type { NewMessageJumpButtonProps } from './NewMessageJumpButton';
