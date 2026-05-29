@@ -87,27 +87,31 @@ function summary() {
 
 async function main() {
   console.log(
-    `${C.bold}dei chat verify${C.reset} — CI 게이트(.github/workflows/chat-verify.yml) 로컬 재현`,
+    `${C.bold}dei rooms verify${C.reset} — CI 게이트(.github/workflows/rooms-verify.yml) 로컬 재현`,
   );
 
-  header('1/6 lint');
+  header('1/5 ds-enforce (DS 강제 lint — app/, raw 스타일 0)');
+  gate('ds-enforce', run('pnpm', ['ds-enforce']));
+
+  header('2/5 lint');
   gate('lint', run('pnpm', ['lint']));
 
-  header('2/6 typecheck (RN 앱 + e2e 하네스)');
+  header('3/5 typecheck (RN 앱 — 메인 tsconfig, e2e 하네스 제외)');
   gate('typecheck', run('pnpm', ['typecheck']));
 
-  header('3/6 unit (Vitest — shared / api / mobile lib)');
+  header('4/5 unit (Vitest — shared / api / ui 토큰 / mobile lib)');
   gate(
     'unit',
     run('pnpm', ['--filter', '@dei/shared', 'test']) &&
       run('pnpm', ['--filter', '@dei/api', 'test']) &&
+      run('pnpm', ['--filter', '@dei/ui', 'exec', 'vitest', 'run']) &&
       run('pnpm', ['--filter', 'mobile', 'test:unit']),
   );
 
-  header('4/6 component (Jest + RNTL)');
-  gate('component', run('pnpm', ['--filter', 'mobile', 'test:component']));
+  header('5/6 component (Jest + RNTL — @dei/ui 컴포넌트)');
+  gate('component', run('pnpm', ['--filter', '@dei/ui', 'exec', 'jest']));
 
-  header('5/6 integration (실제 Supabase — skip 은 실패로 취급)');
+  header('6/6 integration (실제 Supabase — skip 은 실패로 취급)');
   const reachable = await supabaseReachable();
   const hasServiceKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (!reachable || !hasServiceKey) {
@@ -172,22 +176,9 @@ async function main() {
     gate('integration', ok && reallyRan);
   }
 
-  header('6/6 e2e-web (Playwright — 실제 채팅 스크린)');
-  const installed = run('pnpm', [
-    '--filter',
-    'mobile',
-    'exec',
-    'playwright',
-    'install',
-    'chromium',
-  ]);
-  if (!installed) {
-    record('e2e-web', 'FAIL', 'playwright chromium 설치 실패');
-    console.log(`${C.red}✗ e2e-web — Chromium 설치 실패${C.reset}`);
-    summary();
-    process.exit(1);
-  }
-  gate('e2e-web', run('pnpm', ['--filter', 'mobile', 'test:e2e:web']));
+  // e2e-web 은 rooms-verify 게이트에서 제외(화면 스캐폴딩 단계, spec §9). 옛 채팅
+  // 도메인 Playwright 하네스는 참고용이라 현재 컴파일되지 않는다 — C 가 방/채팅
+  // 화면을 구현하며 하네스를 재구성할 때 이 단계를 다시 추가한다.
 
   summary();
   const blocked = results.some((r) => r.status === 'FAIL');
