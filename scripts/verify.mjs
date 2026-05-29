@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * `pnpm verify` — local reproduction of the Chat Verify CI gate.
+ * `pnpm verify` — local reproduction of the Verify CI gate.
  *
- * Runs the exact same ordered stages as .github/workflows/chat-verify.yml so a
+ * Runs the exact same ordered stages as .github/workflows/verify.yml so a
  * developer can reproduce the merge gate before pushing. Fail-fast: a failing
  * stage stops the run and exits non-zero (same as the CI `needs:` chain).
  *
@@ -87,7 +87,7 @@ function summary() {
 
 async function main() {
   console.log(
-    `${C.bold}dei rooms verify${C.reset} — CI 게이트(.github/workflows/rooms-verify.yml) 로컬 재현`,
+    `${C.bold}dei verify${C.reset} — CI 게이트(.github/workflows/verify.yml) 로컬 재현`,
   );
 
   header('1/5 ds-enforce (DS 강제 lint — app/, raw 스타일 0)');
@@ -122,7 +122,7 @@ async function main() {
       `${C.yellow}⚠ integration 로컬 미실행 — ${why}.${C.reset}`,
     );
     console.log(
-      `${C.yellow}  → CI(Chat Verify)는 supabase service container 로 *실제* 실행하며,${C.reset}`,
+      `${C.yellow}  → CI(Verify)는 supabase service container 로 *실제* 실행하며,${C.reset}`,
     );
     console.log(
       `${C.yellow}    0건 실행 시 게이트를 FAIL 시킨다 (PM 검증서 '서버 0검증' 해소).${C.reset}`,
@@ -176,7 +176,7 @@ async function main() {
     gate('integration', ok && reallyRan);
   }
 
-  // e2e-web 은 rooms-verify 게이트에서 제외(화면 스캐폴딩 단계, spec §9). 옛 채팅
+  // e2e-web 은 verify 게이트에서 제외(화면 스캐폴딩 단계, spec §9). 옛 채팅
   // 도메인 Playwright 하네스는 참고용이라 현재 컴파일되지 않는다 — C 가 방/채팅
   // 화면을 구현하며 하네스를 재구성할 때 이 단계를 다시 추가한다.
 
@@ -187,7 +187,7 @@ async function main() {
     process.exit(1);
   }
   console.log(
-    `\n${C.green}${C.bold}모든 채팅 검증 게이트 통과.${C.reset} ` +
+    `\n${C.green}${C.bold}모든 검증 게이트 통과.${C.reset} ` +
       `${C.dim}(integration 로컬 미실행 시 CI 가 최종 강제)${C.reset}`,
   );
 }

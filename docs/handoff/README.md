@@ -35,7 +35,7 @@ main 의 검증된 플랫폼 인프라만 가져오고(cherry-pick), 도메인·
 
 - **디자인 SSOT = `all-screens (3).html`.** main 옛 디자인 참조 금지.
 - **화면은 무조건 `@dei/ui` 토큰·컴포넌트만 import.** raw 스타일(inline style /
-  raw hex / StyleSheet.create) 금지 — **ESLint 가 error 로 막고 CI(`rooms-verify`)가 머지 차단.**
+  raw hex / StyleSheet.create) 금지 — **ESLint 가 error 로 막고 CI(`verify`)가 머지 차단.**
 - **DM(1:1 채팅) 완전 제거.** 단체 채팅 + `message.whisper_to_user_id` @멘션 귓속말만.
   DM 은 나중에 *별도 화면*(이번 미구현, 스키마에 `direct_message` 없음).
 - **알림·PortOne·영상 = 이식 안 함.** 인터페이스 경계 + placeholder stub 만(아래 §7).
@@ -193,8 +193,8 @@ app/
 
 ## 9. 검증 게이트 (수동 폰 확인 대체 근거)
 
-`.github/workflows/rooms-verify.yml` — 직렬 `needs:` 체인, 집계 잡 `rooms-verify` 가
-branch protection required check.
+`.github/workflows/verify.yml` (워크플로우명 `Verify`) — 직렬 `needs:` 체인, 집계 잡 `verify` 가
+branch protection required check. (방 기능만이 아니라 앱 전체를 검증한다.)
 
 ```
 ds-enforce(DS 강제 lint) → typecheck → unit(vitest) → component(jest) → integration(실 Supabase)

@@ -20,7 +20,7 @@
    - 데이터 = `@dei/api` supabase client + `import type { Database } from '@dei/api'`
    - 이벤트 = `apps/mobile/lib/analytics-taxonomy.ts` 상수 (raw 문자열 금지)
    - 완료 전: `pnpm -F mobile exec tsc --noEmit` + `pnpm ds-enforce` 통과 확인
-4. **절대 규칙(어기면 CI `rooms-verify` 가 머지 차단):**
+4. **절대 규칙(어기면 CI `verify` 게이트가 머지 차단):**
    - raw 스타일 0 — inline `style={{}}`, raw hex(`#fff`), `StyleSheet.create` 전부 금지. NativeWind className 토큰만.
    - DS 에 없는 시각요소 발견 시 직접 스타일링 ❌ → **A에게 `@dei/ui` 추가 요청** (전수 추출로 0이어야 정상).
    - 에러 로깅은 `@dei/shared` `logger` 만 (`@sentry/react-native` 직접 import 금지).
@@ -96,7 +96,7 @@
 - 방 내부 **채팅(S13a)은 A 담당.** 같은 방 화면이지만 메시지 송수신은 A.
 - 방 나가기(S16)는 B(UX) — 방 상태 전이는 C·A와 협의.
 - e2e: `apps/mobile/e2e/` 옛 채팅 하네스는 **참고용**(현재 컴파일 안 됨). 방/영상 화면 e2e 는
-  이 하네스 패턴(testID 규칙·경계 모킹)으로 새로 짜고, 완성되면 `rooms-verify.yml` 에 e2e-web 잡 추가.
+  이 하네스 패턴(testID 규칙·경계 모킹)으로 새로 짜고, 완성되면 `verify.yml` 에 e2e-web 잡 추가.
 
 ---
 
@@ -107,7 +107,7 @@
       경로 포함. `lib/realtime.ts` `subscribeRoomMessages` 로 수신. **DM(1:1)은 이번 범위 밖**(별도 화면).
 - [ ] 메시지 송신 Edge Function / RPC (security definer 단일 경로). 배포 = `supabase functions deploy`
       (마이그레이션과 별개 — CLAUDE.md 8·9, README §9).
-- [ ] 공통 플랫폼 유지: `@dei/ui` 추가 요청 처리, 스키마 🔴 변경 승인, `rooms-verify` 게이트 관리.
+- [ ] 공통 플랫폼 유지: `@dei/ui` 추가 요청 처리, 스키마 🔴 변경 승인, `verify` 게이트 관리.
 
 ---
 

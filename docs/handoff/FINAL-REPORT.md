@@ -29,7 +29,7 @@
 | `cc855c6` | **Phase 3 마무리** — jest 3파일 잔결함 + cn() 토큰 머지 버그 픽스 |
 | `8982bd2` | **Phase 5** — 아키텍처 골격(라우팅/인증/realtime/권한/taxonomy/stub) |
 | `657f5f1` | **Phase 6** — 화면 30개 스캐폴딩 + 헤더 + screens MD 29 (워크플로우 fan-out) |
-| `b43e521` | **Phase 7** — README/SECRETS + policy config + rooms-verify 게이트 |
+| `b43e521` | **Phase 7** — README/SECRETS + policy config + verify 게이트 |
 
 (이전 세션: Phase 0~4 = `7d3aab5`~`a4c865b`.)
 
@@ -48,7 +48,7 @@
 | 원격 스키마 | REST openapi introspection | ✅ 21테이블 |
 | 화면 파일 | `find apps/mobile/app -name '*.tsx'` | ✅ 35 (레이아웃4+splash1+화면30) · 헤더 전수 완비 |
 
-> **integration 은 로컬 Docker 부재로 NOT-RUN-LOCALLY** (정직 표기). CI(`rooms-verify.yml`)가
+> **integration 은 로컬 Docker 부재로 NOT-RUN-LOCALLY** (정직 표기). CI(`verify.yml`)가
 > 로컬 supabase 컨테이너로 실제 실행하며 0건 시 FAIL. — 이건 게이트 설계상 의도된 동작.
 
 ---
@@ -91,7 +91,7 @@
 | splash 5분기 부트스트랩 조회 | B | `app/index.tsx` TODO(B) — 현재 세션 유무 골격 분기 |
 | auth 익명→PortOne 승격 | B | `auth-provider.promoteWithIdentity` placeholder |
 | TanStack Query Provider | 첫 데이터 화면 담당 | 스캐폴딩 단계라 미설치(미사용 의존 회피, README §7) |
-| e2e Playwright 하네스 재구성 | C | 옛 채팅용 — 방/채팅 화면으로 재작성 시 rooms-verify 에 e2e-web 추가 |
+| e2e Playwright 하네스 재구성 | C | 옛 채팅용 — 방/채팅 화면으로 재작성 시 verify 게이트에 e2e-web 추가 |
 | 정책 config 테이블화 | 운영 도입 시 | 현재 POLICY 는 타입 고정 기본값/폴백(서버 config 가 최종 SSOT) |
 | Admin | A/PM | D-10 이번 제외 |
 | HEART env 드리프트 | 결제 담당 | .env.example↔.env 정합 (SECRETS.md §2) |

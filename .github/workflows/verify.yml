@@ -1,8 +1,9 @@
-name: Rooms Verify
+name: Verify
 
-# dei "과팅/방" 도메인 머지 게이트 (spec §9 · 핸드오프 README "검증 게이트").
+# dei 앱 전체 머지 게이트 (spec §9 · 핸드오프 README "검증 게이트").
+# ※ 방(room) 기능만 검증하는 게 아니라 앱 전반(DS 강제·타입·유닛·컴포넌트·통합)을 검증한다.
 #
-# 직렬 needs: 체인 — 하나라도 실패하면 머지 차단. 집계 잡 `rooms-verify` 가
+# 직렬 needs: 체인 — 하나라도 실패하면 머지 차단. 집계 잡 `verify` 가
 # branch protection 의 required status check 다.
 #
 #   ds-enforce(DS 강제 lint) → typecheck → unit → component → integration
@@ -23,7 +24,7 @@ on:
     branches: [main, 'release/**']
 
 concurrency:
-  group: rooms-verify-${{ github.ref }}
+  group: verify-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -114,8 +115,8 @@ jobs:
         run: pnpm dlx supabase stop || true
 
   # 집계 잡 — branch protection 의 required check 로 지정한다.
-  rooms-verify:
-    name: rooms-verify
+  verify:
+    name: verify
     needs: [ds-enforce, typecheck, unit, component, integration]
     runs-on: ubuntu-latest
     if: always()
@@ -127,7 +128,7 @@ jobs:
             || [ "${{ needs.unit.result }}" != "success" ] \
             || [ "${{ needs.component.result }}" != "success" ] \
             || [ "${{ needs.integration.result }}" != "success" ]; then
-            echo "rooms-verify 게이트 실패 — 위 잡 중 하나 이상이 통과하지 못했습니다."
+            echo "verify 게이트 실패 — 위 잡 중 하나 이상이 통과하지 못했습니다."
             exit 1
           fi
-          echo "rooms-verify 게이트 전부 통과 ✅"
+          echo "verify 게이트 전부 통과 ✅"
