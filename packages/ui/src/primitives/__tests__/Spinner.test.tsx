@@ -8,8 +8,11 @@ import { Spinner } from '../Spinner';
  */
 describe('Spinner', () => {
   it('renders with progressbar role and default a11y label', () => {
-    render(<Spinner />);
-    expect(screen.getByRole('progressbar')).toBeTruthy();
+    render(<Spinner testID="default-spinner" />);
+    // accessibilityRole="progressbar" 는 런타임(VoiceOver/TalkBack)에서 동작하지만,
+    // RNTL 의 getByRole('progressbar') 는 host 에 accessible 플래그가 없으면 매핑하지
+    // 못한다. 역할은 prop 으로, 가용성은 라벨 쿼리로 검증한다.
+    expect(screen.getByTestId('default-spinner').props.accessibilityRole).toBe('progressbar');
     expect(screen.getByLabelText('로딩 중')).toBeTruthy();
   });
 

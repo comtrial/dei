@@ -8,9 +8,12 @@ import { Radio } from '../Radio';
  *
  * dot className 은 Pressable 의 자식 View 에 있다(Checkbox 패턴과 동일하게
  * testID 는 Pressable, dot 은 children 으로 접근).
+ *
+ * RNTL/jest-expo 에서 Pressable 의 children 은 배열로 노출된다
+ * (`[0]` = 우리가 그린 dot View, `[1]` = Pressable 내부 요소). dot 은 항상 `[0]`.
  */
-const dotClass = (testID: string) =>
-  screen.getByTestId(testID).props.children.props.className as string;
+const dot = (testID: string) => screen.getByTestId(testID).props.children[0];
+const dotClass = (testID: string) => dot(testID).props.className as string;
 
 describe('Radio (P10)', () => {
   it('renders with radio role', () => {
@@ -26,8 +29,8 @@ describe('Radio (P10)', () => {
     expect(cls).toContain('rounded-full');
     expect(cls).toContain('border-[1.5px]');
     expect(cls).toContain('border-ink-4');
-    // empty 일 때 자식(inset 원) 없음.
-    expect(screen.getByTestId('rd').props.children.props.children).toBeNull();
+    // empty 일 때 dot 의 자식(inset 원) 없음.
+    expect(dot('rd').props.children).toBeNull();
   });
 
   it('selected ink (default tone): ink fill+border + inset white ring', () => {
@@ -37,7 +40,7 @@ describe('Radio (P10)', () => {
     expect(cls).toContain('border-ink');
     expect(cls).not.toContain('border-ink-4');
     // inset-fill 내부 원 — white(bg-paper) 3px 안쪽.
-    const inner = screen.getByTestId('rd').props.children.props.children;
+    const inner = dot('rd').props.children;
     expect(inner.props.className).toContain('inset-[3px]');
     expect(inner.props.className).toContain('bg-paper');
     expect(inner.props.className).toContain('rounded-full');
