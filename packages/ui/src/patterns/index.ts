@@ -31,6 +31,8 @@ export type {
 } from './GridRoom';
 export { InputBar } from './InputBar';
 export type { InputBarProps } from './InputBar';
+export { MentionAutocomplete } from './MentionAutocomplete';
+export type { MentionAutocompleteProps, MentionCandidate } from './MentionAutocomplete';
 export { BottomActionBar } from './BottomActionBar';
 export type { BottomActionBarProps, BottomActionBarLayout } from './BottomActionBar';
 export { ChoiceList } from './ChoiceList';
