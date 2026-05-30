@@ -1,12 +1,19 @@
 # C-0 · 영상 모듈 (recordClip / uploadClip / isClipVisible)
 
-- **status**: pending
+- **status**: in_progress  <!-- unit 통과 / e2e-realdb + A 리뷰 남음 -->
 - **owner**: C (손승태)
 - **priority**: P0 (모든 촬영·방 화면이 여기 의존)
-- **대상 파일**: `apps/mobile/lib/video.stub.ts` → 실구현으로 교체
+- **대상 파일**: `apps/mobile/lib/video.ts` (stub 파일 → 실구현으로 교체 완료)
 - **DB 테이블**: `video` (필드: `id, room_id, user_id, storage_path, thumbnail_path, duration_ms, hour_slot, status, created_at`)
-- **Storage 버킷**: `room-videos` (신규 생성 필요)
+- **Storage 버킷**: `room-videos` (마이그레이션 작성됨 — `20260530120100_create_room_videos_bucket.sql`. **db push 는 A 승인 후 별도**)
 - **선행**: 없음 (가장 먼저)
+- **임시 가정 채택 (2026-05-30, 옵션 B)**:
+  1. 버킷 path = `room-videos/{room_id}/{user_id}/{video_id}.mp4` (단일 버킷, 썸네일 `.jpg` 같이)
+  2. status 전이 = 클라가 영상+썸네일 둘 다 업로드 성공 후 `status='ready'` 직접 INSERT
+  3. 인코딩 정규화 = 클라 측 (expo-camera `videoQuality='720p'` + `videoBitrate`)
+  4. `isClipVisible` 판정 = 클라 로컬 계산 (video 테이블 SELECT, 24h 윈도우)
+  5. A 승인 분리 = 마이그레이션 파일·`expo-video-thumbnails` 추가는 작성만, `supabase db push` / `pnpm install` 실행은 사용자/A 승인 후 별도
+  → A 리뷰 시 정식화. PR 본문에 명시 필수.
 
 ---
 
