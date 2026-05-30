@@ -52,6 +52,30 @@ describe('ChatBubble (X8)', () => {
     expect(body).toContain('italic');
   });
 
+  it('"whisper" + mine: right-aligned (self-end), directional name keeps no 귓속말 suffix (body-render-9)', () => {
+    render(
+      <ChatBubble testID="cb" variant="whisper" mine name="→ 민준에게">
+        비밀 메시지
+      </ChatBubble>,
+    );
+    const row = screen.getByTestId('cb').props.className as string;
+    expect(row).toContain('self-end');
+    // 방향 이름은 "→" 를 포함하므로 자동 " → 귓속말" 접미가 붙지 않는다.
+    expect(screen.getByText('→ 민준에게')).toBeTruthy();
+    expect(screen.queryByText(/→ 귓속말/)).toBeNull();
+  });
+
+  it('"whisper" + mine + failed: renders tappable retry firing onRetry (body-render-9)', () => {
+    const onRetry = jest.fn();
+    render(
+      <ChatBubble testID="cb" variant="whisper" mine sendState="failed" name="→ 민준에게" onRetry={onRetry}>
+        실패한 귓속말
+      </ChatBubble>,
+    );
+    fireEvent.press(screen.getByTestId('chat-bubble-retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
   it('"mention" renders an inline accent-700 token (.bub .mention)', () => {
     render(<ChatBubble variant="mention">@수아</ChatBubble>);
     const token = screen.getByText('@수아').props.className as string;
