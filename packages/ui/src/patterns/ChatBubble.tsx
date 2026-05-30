@@ -83,6 +83,18 @@ export interface ChatBubbleProps extends ViewProps {
   avatarInitial?: string;
   /** 아바타 배경 className(§3A peer 색 등). 예: `bg-[#7A8DB8]`. */
   avatarBg?: string;
+  /** 좌측 아바타 프로필 이미지 URL. 지정 시 이니셜 대신 원형 이미지(Avatar 위임). */
+  avatarPhotoUrl?: string;
+  /**
+   * 아바타 탭 핸들러. 지정 시 `them` 아바타를 Pressable(role=button,
+   * label=`<name> 프로필 보기`) 로 감싸 프로필 라우팅 트리거에 쓴다.
+   */
+  onAvatarPress?: () => void;
+  /**
+   * `mention` 변형 한정: 어두운 버블(me=ink) 위 렌더 여부.
+   * true 면 대비 보정으로 `accent-soft` 사용(body-render-8). 기본 false.
+   */
+  onDark?: boolean;
   /** 버블 본문. 문자열이면 자동으로 Text 래핑, 노드면 그대로 렌더(인라인 mention 혼용). */
   children?: React.ReactNode;
   className?: string;
@@ -95,28 +107,41 @@ export interface ChatBubbleProps extends ViewProps {
 }
 
 type RNTextRef = React.ComponentRef<typeof Text>;
-interface MentionTokenProps extends React.ComponentProps<typeof Text> {
+export interface MentionTokenProps extends React.ComponentProps<typeof Text> {
   className?: string;
+  /**
+   * 어두운 버블 배경(me=ink) 위에 얹힐 때 true.
+   * accent(#FF2D6F)는 ink(#191919) 대비가 부족해(body-render-8) 밝은
+   * `accent-soft`(#FFE9EF) 로 보정한다. them/whisper(밝은 배경)는 false 유지.
+   */
+  onDark?: boolean;
 }
 
 /**
  * 인라인 @멘션 토큰 (`.bub .mention`): accent 700.
  * 버블 본문 안에 다른 Text 조각과 섞어 쓰는 텍스트 변형이라 행 레이아웃이 없다.
+ * `onDark` 면 me(ink) 배경 대비 보정으로 `text-accent-soft` 사용(body-render-8).
  */
-const MentionToken = React.forwardRef<RNTextRef, MentionTokenProps>(function MentionToken(
-  { children, className, ...rest },
+export const MentionToken = React.forwardRef<RNTextRef, MentionTokenProps>(function MentionToken(
+  { children, className, onDark = false, ...rest },
   ref,
 ) {
   return (
     <Text
       ref={ref}
-      className={cn('text-[13px] font-bold text-accent', className)}
+      className={cn(
+        'text-[13px] font-bold',
+        onDark ? 'text-accent-soft' : 'text-accent',
+        className,
+      )}
       {...rest}
     >
       {children}
     </Text>
   );
 });
+
+MentionToken.displayName = 'MentionToken';
 
 /**
  * ChatBubble pattern. `mention` 변형은 인라인 Text 토큰(MentionToken)으로
@@ -129,6 +154,9 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
     name,
     avatarInitial,
     avatarBg,
+    avatarPhotoUrl,
+    onAvatarPress,
+    onDark = false,
     children,
     className,
     sendState = 'sent',
@@ -141,13 +169,18 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
 ) {
   // mention: 행이 아니라 인라인 텍스트 토큰. View 가 아닌 Text 를 반환한다.
   if (variant === 'mention') {
-    return <MentionToken className={className as string}>{children}</MentionToken>;
+    return (
+      <MentionToken className={className as string} onDark={onDark}>
+        {children}
+      </MentionToken>
+    );
   }
 
   // me 는 이름 숨김(`.msg.me .nm{display:none}`). them/whisper 만 이름 표시.
   const showName = variant !== 'me' && name != null;
   // them 만 좌측 아바타 표시(me/whisper 는 `.av` 없음).
-  const showAvatar = variant === 'them' && avatarInitial != null;
+  // 이니셜·photoUrl 중 하나라도 있으면 표시(photoUrl 만으로도 아바타 surface).
+  const showAvatar = variant === 'them' && (avatarInitial != null || avatarPhotoUrl != null);
   // whisper 이름엔 " → 귓속말" 접미(`.nm::after`).
   const displayName = variant === 'whisper' && name != null ? `${name}${WHISPER_SUFFIX}` : name;
 
@@ -158,6 +191,11 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
     ) : (
       children
     );
+
+  // 좌측 아바타 노드(them 한정). photoUrl 우선, 없으면 이니셜 폴백.
+  const avatarNode = showAvatar ? (
+    <Avatar initial={avatarInitial} photoUrl={avatarPhotoUrl} size={28} bg={avatarBg} />
+  ) : null;
 
   return (
     <View
@@ -171,7 +209,19 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
       )}
       {...rest}
     >
-      {showAvatar ? <Avatar initial={avatarInitial} size={28} bg={avatarBg} /> : null}
+      {avatarNode != null && onAvatarPress != null ? (
+        // 아바타 탭 → 프로필 라우팅 트리거(role=button). 목적지 화면은 caller 책임.
+        <Pressable
+          testID="chat-bubble-avatar"
+          accessibilityRole="button"
+          accessibilityLabel={name != null ? `${name} 프로필 보기` : '프로필 보기'}
+          onPress={onAvatarPress}
+        >
+          {avatarNode}
+        </Pressable>
+      ) : (
+        avatarNode
+      )}
 
       {/* .col: flex column (이름 + 버블) */}
       <View className="min-w-0 flex-1">
