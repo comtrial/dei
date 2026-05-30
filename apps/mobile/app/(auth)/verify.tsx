@@ -1,8 +1,12 @@
+import { IdentityVerification } from '@portone/react-native-sdk';
+import type { IdentityVerificationRequest, IdentityVerificationResponse } from '@portone/browser-sdk/v2';
 import { useRouter } from 'expo-router';
 import { X } from 'lucide-react-native';
-import { View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { analytics, logger } from '@dei/shared';
 import {
   BrandTransitionFrame,
   IconButton,
@@ -10,7 +14,15 @@ import {
   Text,
 } from '@dei/ui';
 
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import {
+  confirmIdentityVerification,
+  IdentityVerificationError,
+  recordIdentityVerificationFailure,
+  startIdentityVerification,
+} from '@/lib/portone.stub';
 import { ROUTES } from '@/lib/routes';
+import { useAuth } from '@/providers/auth-provider';
 
 /**
  * S03 — 본인인증 진행 중 (PortOne)
@@ -39,6 +51,184 @@ import { ROUTES } from '@/lib/routes';
  */
 export default function VerifyScreen() {
   const router = useRouter();
+  const { ensureAnonymousSession, promoteWithIdentity, signOut } = useAuth();
+  const [verificationRequest, setVerificationRequest] =
+    useState<IdentityVerificationRequest | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const hasStartedRef = useRef(false);
+  const verificationRequestRef = useRef<IdentityVerificationRequest | null>(null);
+
+  const leaveAuthFlow = useCallback(() => {
+    void signOut().catch((error) => {
+      logger.captureException(error, {
+        tags: { feature: 'identity-verification', action: 'sign-out-after-block' },
+      });
+    });
+    router.replace(ROUTES.splash);
+  }, [router, signOut]);
+
+  const handleIdentityError = useCallback(
+    (error: unknown) => {
+      if (error instanceof IdentityVerificationError) {
+        if (error.code === 'IDENTITY_ALREADY_VERIFIED') {
+          router.replace(ROUTES.profileStep1);
+          return;
+        }
+
+        if (error.code === 'UNDERAGE') {
+          Alert.alert('이용할 수 없어요', error.message, [
+            { text: '확인', onPress: leaveAuthFlow },
+          ]);
+          return;
+        }
+
+        if (error.code === 'CI_DUPLICATE') {
+          Alert.alert('이미 가입된 번호예요', error.message, [
+            { text: '확인', onPress: leaveAuthFlow },
+          ]);
+          return;
+        }
+
+        if (error.code === 'IDENTITY_LOCKED') {
+          Alert.alert('잠시 후 다시 시도해주세요', error.message, [
+            { text: '확인', onPress: () => router.replace(ROUTES.terms) },
+          ]);
+          return;
+        }
+      } else {
+        logger.captureException(error, {
+          tags: { feature: 'identity-verification', action: 'handle-error' },
+        });
+      }
+
+      router.replace(ROUTES.verifyFailed);
+    },
+    [leaveAuthFlow, router],
+  );
+
+  const handleCancel = useCallback(() => {
+    analytics.capture(ANALYTICS_EVENTS.phone_auth_cancelled_by_user);
+    const identityVerificationId = verificationRequestRef.current?.identityVerificationId;
+
+    if (identityVerificationId) {
+      void recordIdentityVerificationFailure({
+        failureCode: 'SDK_CANCELLED',
+        failureMessage: 'user cancelled identity verification',
+        identityVerificationId,
+      }).catch((error) => {
+        if (error instanceof IdentityVerificationError) {
+          if (error.code === 'IDENTITY_LOCKED') {
+            handleIdentityError(error);
+          }
+          return;
+        }
+
+        logger.captureException(error, {
+          tags: { feature: 'identity-verification', action: 'record-cancel' },
+        });
+      });
+    }
+
+    router.replace(ROUTES.terms);
+  }, [handleIdentityError, router]);
+
+  const handleComplete = useCallback(
+    async (response: IdentityVerificationResponse) => {
+      const request = verificationRequestRef.current;
+      setIsConfirming(true);
+
+      try {
+        const result = await confirmIdentityVerification(
+          response,
+          request?.identityVerificationId,
+        );
+        await promoteWithIdentity(result);
+        setVerificationRequest(null);
+        verificationRequestRef.current = null;
+        router.replace(ROUTES.profileStep1);
+      } catch (error) {
+        setVerificationRequest(null);
+        verificationRequestRef.current = null;
+        handleIdentityError(error);
+      } finally {
+        setIsConfirming(false);
+      }
+    },
+    [handleIdentityError, promoteWithIdentity, router],
+  );
+
+  const handleSdkError = useCallback(
+    (sdkError: Error) => {
+      const identityVerificationId = verificationRequestRef.current?.identityVerificationId;
+
+      if (!identityVerificationId) {
+        handleIdentityError(sdkError);
+        return;
+      }
+
+      void recordIdentityVerificationFailure({
+        failureCode: 'SDK_ERROR',
+        failureMessage: sdkError.message,
+        identityVerificationId,
+      }).catch(handleIdentityError);
+    },
+    [handleIdentityError],
+  );
+
+  useEffect(() => {
+    if (hasStartedRef.current) {
+      return;
+    }
+
+    hasStartedRef.current = true;
+
+    const start = async () => {
+      try {
+        await ensureAnonymousSession();
+        const request = await startIdentityVerification();
+        verificationRequestRef.current = request;
+        setVerificationRequest(request);
+      } catch (error) {
+        handleIdentityError(error);
+      }
+    };
+
+    void start();
+  }, [ensureAnonymousSession, handleIdentityError]);
+
+  if (verificationRequest) {
+    return (
+      <SafeAreaView className="flex-1 bg-bg">
+        <View className="items-end px-[18px] pt-[8px]">
+          <IconButton
+            glyph={X}
+            variant="filled-circle"
+            size={36}
+            accessibilityLabel="본인인증 취소"
+            onPress={handleCancel}
+            testID="verify-close"
+          />
+        </View>
+
+        <View className="flex-1">
+          <IdentityVerification
+            request={verificationRequest}
+            onComplete={handleComplete}
+            onError={handleSdkError}
+          />
+        </View>
+
+        {isConfirming ? (
+          <View className="absolute inset-0 items-center justify-center bg-bg/80 px-[32px]">
+            <Spinner size={80} accessibilityLabel="본인인증 결과 확인 중" />
+            <Text variant="body" tone="ink-3" className="mt-[18px] text-center">
+              인증 결과를 확인하고 있어요
+            </Text>
+          </View>
+        ) : null}
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
@@ -48,7 +238,7 @@ export default function VerifyScreen() {
           variant="filled-circle"
           size={36}
           accessibilityLabel="본인인증 취소"
-          onPress={() => router.replace(ROUTES.terms)}
+          onPress={handleCancel}
           testID="verify-close"
         />
       </View>
