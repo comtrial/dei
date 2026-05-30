@@ -24,9 +24,9 @@ CLI 를 쓰더라도 같은 규칙을 따라야 합니다 — 그래서 내용�
 6. **DB/realtime 연동 변경은 push 전 실DB e2e 로 관통 검증** (unit/component/
    e2e-web 은 전부 mock — 통과해도 실제 동작·realtime 왕복·RLS 가시성은
    보장 안 됨). 전용 테스트 유저(`e2e-*@example.test`)만 쓰고 `try/finally`
-   로 전량 cleanup. 자세한 규칙은 `CLAUDE.md` Testing 규칙 7, 기준 구현·
-   리포트는 `docs/chat-spec/e2e-realdb-report.md`. "테스트 다 통과" 를 실DB
-   동작 검증으로 보고하지 말 것.
+   로 전량 cleanup. 자세한 규칙은 `CLAUDE.md` Testing 규칙 7. 기준 패턴은
+   `feat/chat-system` git history (rooms-pivot zero-base 후 rooms e2e 로
+   재정립 예정). "테스트 다 통과" 를 실DB 동작 검증으로 보고하지 말 것.
 7. **마이그레이션 ≠ Edge Function 배포 (별개 경로, 실제로 놓쳤던 항목).**
    `supabase db push` 는 테이블/RLS/RPC 만 반영 — Edge Function 은
    `supabase functions deploy <name>` 별도 필수. 백엔드 완료 = 마이그레이션

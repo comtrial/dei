@@ -252,8 +252,9 @@ logger.setUser({ id: session.user.id });
    `e2e-*@example.test`)만 생성·사용 → 원격/로컬 Supabase 에 실제 RPC·
    realtime 구독으로 흐름 관통 → `try/finally` 로 테스트 데이터 전량
    cleanup (기존 실데이터 무접촉, 시작=끝 카운트 동일 확인). 기준 구현·
-   리포트: `docs/chat-spec/e2e-realdb-report.md`, 스크립트 패턴은 거기
-   참조. **"단위/통합 테스트 다 통과" 를 실DB 동작 검증으로 보고하지 말 것**
+   리포트: 채팅 시스템 실DB e2e 패턴(`feat/chat-system` 브랜치 / git
+   history 참조 — rooms-pivot zero-base 후 rooms 모듈 e2e 로 재정립
+   예정). **"단위/통합 테스트 다 통과" 를 실DB 동작 검증으로 보고하지 말 것**
    — 통과율 ≠ 실제 동작. 협업 agent 는 DB/realtime 변경 PR 을 올리기 전
    해당 흐름의 실DB e2e 를 추가·실행하고 그 결과를 근거로 보고한다.
 8. **백엔드 변경은 "배포 산출물 체크리스트" 를 빠짐없이 — DB 마이그레이션과
