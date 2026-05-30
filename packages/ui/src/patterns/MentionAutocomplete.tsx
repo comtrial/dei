@@ -21,6 +21,12 @@ export interface MentionCandidate {
   avatarInitial?: string;
   /** peer 식별 bg className(§3A). 예: 'bg-[#7A8DB8]'. */
   avatarBg?: string;
+  /**
+   * 동명이인/동일 prefix 다수 후보 구분용 보조 식별 라벨(input-parse-4).
+   * name 만으로 같아 보이는 행을 구분하도록 caller 가 짧은 식별자(팀/별칭 등)를
+   * 주입한다. 미지정 시 보조 라벨을 렌더하지 않는다(기본 동작 불변).
+   */
+  secondaryLabel?: string;
 }
 
 export interface MentionAutocompleteProps extends Omit<ViewProps, 'children'> {
@@ -67,6 +73,17 @@ export function MentionAutocomplete({
         >
           <Avatar initial={c.avatarInitial} size={28} bg={c.avatarBg} />
           <Text className="text-[13px] text-ink">{c.name}</Text>
+          {c.secondaryLabel != null ? (
+            <Text
+              testID={`mention-row-${c.userId}-secondary`}
+              variant="caption"
+              tone="ink-3"
+              numberOfLines={1}
+              className="shrink"
+            >
+              {c.secondaryLabel}
+            </Text>
+          ) : null}
         </Pressable>
       ))}
     </View>
