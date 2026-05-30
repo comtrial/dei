@@ -36,7 +36,7 @@ export default function VerifyFailedScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="items-end px-5 py-3">
+      <View className="items-end px-[18px] pt-[8px]">
         <IconButton
           glyph={X}
           variant="filled-circle"
@@ -47,16 +47,16 @@ export default function VerifyFailedScreen() {
         />
       </View>
 
-      <StateView
-        kind="error"
-        icon="!"
-        title="본인인증에 실패했어요"
-        desc="인증 도중 취소되었거나 시간이 초과됐어요. 다시 시도해주세요."
-        className="pb-24"
-      />
+      <View className="flex-1 px-[32px] pb-[32px]">
+        <StateView
+          kind="error"
+          icon="!"
+          title={'본인인증에\n실패했어요'}
+          desc={'인증 도중 취소되었거나\n시간이 초과됐어요. 다시 시도해주세요.'}
+          className="justify-start px-0 pt-[76px]"
+        />
 
-      <View className="border-t border-line bg-bg px-6 pb-5 pt-3">
-        <View className="gap-3">
+        <View className="gap-[10px] pb-[24px]">
           <Button
             fullWidth
             onPress={() => router.replace(ROUTES.verify)}
