@@ -10,11 +10,55 @@ permission:
   grep: allow
   list: allow
   bash:
-    "pnpm *": allow
-    "cd *": allow
+    # 읽기/탐색 — 무조건 allow
     "ls *": allow
+    "cd *": allow
+    "find *": allow
+    "grep *": allow
+    "rg *": allow
+    "cat *": allow
+    "head *": allow
+    "tail *": allow
+    "wc *": allow
+    "echo *": allow
+    "pwd": allow
+    "which *": allow
+    "file *": allow
+    "stat *": allow
+    "tree *": allow
+    "diff *": allow
+    # 검증 도구 — allow (verifier 본업)
+    "pnpm *": allow
+    "npm *": allow
+    "npx *": allow
+    "node *": allow
+    "tsc *": allow
+    "vitest *": allow
+    "jest *": allow
+    "supabase status": allow
+    "supabase migration list": allow
+    # git 읽기 — allow / 쓰기 — ask
+    "git status": allow
+    "git status *": allow
+    "git diff": allow
+    "git diff *": allow
+    "git log *": allow
+    "git show *": allow
+    "git branch *": allow
+    "git rev-parse *": allow
+    "git ls-files *": allow
+    # 파괴/원격/배포/실행 — ask 유지
     "rm *": ask
-    "git *": ask
+    "mv *": ask
+    "supabase db *": ask
+    "supabase functions deploy *": ask
+    "git push *": ask
+    "git reset *": ask
+    "git commit *": ask
+    "git checkout *": ask
+    "gh *": ask
+    "sudo *": ask
+    "curl *": ask
     "*": ask
   todowrite: allow
   write: deny
