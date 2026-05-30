@@ -1,7 +1,19 @@
+import { useRouter } from 'expo-router';
+import { X } from 'lucide-react-native';
+import { useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import {
+  BrandTransitionFrame,
+  Button,
+  IconButton,
+  PulseRing,
+  Spinner,
+  Text,
+} from '@dei/ui';
+
+import { ROUTES } from '@/lib/routes';
 
 /**
  * S03 — 본인인증 진행 중 (PortOne)
@@ -25,18 +37,79 @@ import { Text } from '@dei/ui';
  *   불가(가입 시 1회)
  * 와이어프레임 참조: all-screens S03
  *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(PortOne SDK 호출·브랜드 전환·콜백 자동 진행·조건부 alert)은
- *    owner 가 채운다.
+ * B-01 Auth UI shell — PortOne 전환/진행 상태의 시각 UI 만 구현.
+ * SDK 호출, Edge Function 검증, auth 승격, 실패 카운터 정책은 후속 PR 범위다.
  */
 export default function VerifyScreen() {
+  const router = useRouter();
+  const [isInProgress, setIsInProgress] = useState(false);
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">본인인증 진행 중</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S03
-        </Text>
+      <View className="items-end px-5 py-3">
+        <IconButton
+          glyph={X}
+          variant="filled-circle"
+          size={36}
+          accessibilityLabel="본인인증 취소"
+          onPress={() => router.replace(ROUTES.terms)}
+          testID="verify-close"
+        />
+      </View>
+
+      <View className="flex-1 items-center justify-center gap-8 px-8 pb-8">
+        <View className="items-center gap-5">
+          {isInProgress ? (
+            <Spinner size={80} accessibilityLabel="본인인증 진행 중" />
+          ) : (
+            <PulseRing
+              accessibilityLabel="본인인증 준비"
+              core={
+                <Text className="text-sm font-black text-white">
+                  dei
+                </Text>
+              }
+            />
+          )}
+
+          <BrandTransitionFrame target="PortOne" />
+        </View>
+
+        <View className="items-center gap-3">
+          <Text variant="h1" className="text-center leading-9">
+            {isInProgress
+              ? 'PortOne 본인인증을 진행하고 있어요'
+              : 'PortOne 본인인증을 준비했어요'}
+          </Text>
+          <Text variant="body" tone="ink-3" className="text-center leading-6">
+            NICE / KCB 본인인증 기관으로 잠시 이동합니다.
+          </Text>
+          <Text variant="caption" tone="ink-4" className="text-center leading-5">
+            인증이 끝나면 자동으로 진행돼요.
+          </Text>
+        </View>
+
+        <View className="w-full gap-3">
+          <Button
+            fullWidth
+            disabled={isInProgress}
+            onPress={() => setIsInProgress(true)}
+            testID="verify-start"
+          >
+            {isInProgress ? '본인인증 진행 중' : '본인인증 시작'}
+          </Button>
+
+          {isInProgress ? (
+            <Button
+              variant="secondary"
+              fullWidth
+              onPress={() => router.push(ROUTES.verifyFailed)}
+              testID="verify-fallback-failed"
+            >
+              인증이 잘 안 돼요
+            </Button>
+          ) : null}
+        </View>
       </View>
     </SafeAreaView>
   );

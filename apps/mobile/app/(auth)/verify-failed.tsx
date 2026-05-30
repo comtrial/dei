@@ -1,7 +1,11 @@
+import { useRouter } from 'expo-router';
+import { X } from 'lucide-react-native';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import { Button, IconButton, StateView } from '@dei/ui';
+
+import { ROUTES } from '@/lib/routes';
 
 /**
  * S03f — 본인인증 실패
@@ -24,17 +28,51 @@ import { Text } from '@dei/ui';
  *   19세 미만 거부는 이 화면 아님(별도 alert + splash 강제 복귀)
  * 와이어프레임 참조: all-screens S03f
  *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(에러 일러스트·다시 시도/취소 동선·24h 잠금 alert)은 owner 가 채운다.
+ * B-01 Auth UI shell — 실패 안내와 재시도/취소 라우팅만 구현.
+ * 실패 사유 기록, 연속 실패/24h 잠금 alert 는 후속 PR 범위다.
  */
 export default function VerifyFailedScreen() {
+  const router = useRouter();
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">본인인증 실패</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S03f
-        </Text>
+      <View className="items-end px-5 py-3">
+        <IconButton
+          glyph={X}
+          variant="filled-circle"
+          size={36}
+          accessibilityLabel="닫기"
+          onPress={() => router.replace(ROUTES.terms)}
+          testID="verify-failed-close"
+        />
+      </View>
+
+      <StateView
+        kind="error"
+        icon="!"
+        title="본인인증에 실패했어요"
+        desc="인증 도중 취소되었거나 시간이 초과됐어요. 다시 시도해주세요."
+        className="pb-24"
+      />
+
+      <View className="border-t border-line bg-bg px-6 pb-5 pt-3">
+        <View className="gap-3">
+          <Button
+            fullWidth
+            onPress={() => router.replace(ROUTES.verify)}
+            testID="verify-failed-retry"
+          >
+            다시 시도
+          </Button>
+          <Button
+            variant="secondary"
+            fullWidth
+            onPress={() => router.replace(ROUTES.terms)}
+            testID="verify-failed-cancel"
+          >
+            취소
+          </Button>
+        </View>
       </View>
     </SafeAreaView>
   );

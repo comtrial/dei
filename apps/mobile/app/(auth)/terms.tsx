@@ -1,7 +1,19 @@
-import { View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Chip,
+  Text,
+  TopNav,
+} from '@dei/ui';
+
+import { ROUTES } from '@/lib/routes';
 
 /**
  * S02 — 약관 + 19+ 자가확인
@@ -27,17 +39,146 @@ import { Text } from '@dei/ui';
  *   위치·마케팅=선택) / 약관 버전 변경 시 재동의 강제 운영 로직
  * 와이어프레임 참조: all-screens S02
  *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현('모두 동의' 카드·약관 항목 행·19+ 배지·CTA 동작)은 owner 가 채운다.
+ * B-01 Auth UI shell — 약관/연령 확인 UI 와 S03 진입만 구현.
+ * 약관 전문 로드, 동의 버전 저장, DB 연동은 후속 PR 범위다.
  */
+type AgreementId = 'service' | 'privacy' | 'adult' | 'location' | 'marketing';
+
+type AgreementItem = {
+  id: AgreementId;
+  label: string;
+  required: boolean;
+};
+
+const AGREEMENT_ITEMS: AgreementItem[] = [
+  { id: 'service', label: '서비스 이용약관', required: true },
+  { id: 'privacy', label: '개인정보 수집 및 이용', required: true },
+  { id: 'adult', label: '만 19세 이상입니다', required: true },
+  { id: 'location', label: '위치정보 활용 동의', required: false },
+  { id: 'marketing', label: '이벤트 및 혜택 알림', required: false },
+];
+
+const INITIAL_AGREEMENTS: Record<AgreementId, boolean> = {
+  service: false,
+  privacy: false,
+  adult: false,
+  location: false,
+  marketing: false,
+};
+
 export default function TermsScreen() {
+  const router = useRouter();
+  const [agreements, setAgreements] =
+    useState<Record<AgreementId, boolean>>(INITIAL_AGREEMENTS);
+
+  const requiredAccepted = agreements.service && agreements.privacy && agreements.adult;
+  const allAccepted = Object.values(agreements).every(Boolean);
+
+  const toggleAll = () => {
+    const next = !allAccepted;
+    setAgreements({
+      service: next,
+      privacy: next,
+      adult: next,
+      location: next,
+      marketing: next,
+    });
+  };
+
+  const toggleAgreement = (id: AgreementId) => {
+    setAgreements((current) => ({ ...current, [id]: !current[id] }));
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">약관 + 19+ 자가확인</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S02
-        </Text>
+      <TopNav
+        left="back"
+        title="약관 동의"
+        onLeftPress={() => router.replace(ROUTES.splash)}
+      />
+
+      <ScrollView className="flex-1">
+        <View className="gap-6 px-6 pb-7 pt-7">
+          <View className="gap-4">
+            <Badge variant="age">
+              만 19세 이상 이용 가능
+            </Badge>
+            <View className="gap-2">
+              <Text variant="h1" className="leading-9">
+                약관 동의 후 본인인증을 시작해요
+              </Text>
+              <Text variant="body" tone="ink-3" className="leading-6">
+                만 19세 이상 전용 서비스예요. 본인인증으로 확인할게요.
+              </Text>
+            </View>
+          </View>
+
+          <Card className="overflow-hidden">
+            <View className="flex-row items-center gap-3 bg-bg-2 px-5 py-5">
+              <Checkbox
+                variant={allAccepted ? 'master' : 'round'}
+                checked={allAccepted}
+                onPress={toggleAll}
+                testID="terms-check-all"
+              />
+              <View className="flex-1">
+                <Text variant="h2">
+                  모두 동의
+                </Text>
+                <Text variant="micro" tone="ink-3" className="mt-1">
+                  필수와 선택 약관을 한 번에 확인해요.
+                </Text>
+              </View>
+            </View>
+
+            {AGREEMENT_ITEMS.map((item) => (
+              <View
+                key={item.id}
+                className="flex-row items-center gap-3 border-t border-line-2 px-5 py-4"
+              >
+                <Checkbox
+                  checked={agreements[item.id]}
+                  optional={!item.required}
+                  onPress={() => toggleAgreement(item.id)}
+                  testID={`terms-${item.id}`}
+                />
+                <View className="flex-1 flex-row items-center gap-2">
+                  <Text variant="body" tone="ink" className="flex-1 text-sm">
+                    {item.label}
+                  </Text>
+                  <Chip
+                    variant={item.required ? 'me' : 'default'}
+                    label={item.required ? '필수' : '선택'}
+                    textClassName={item.required ? 'text-accent font-bold' : undefined}
+                  />
+                </View>
+                <Button variant="tertiary" size="sm" className="px-2 py-2">
+                  보기
+                </Button>
+              </View>
+            ))}
+          </Card>
+
+          <Card className="gap-2 bg-bg-2 px-5 py-4">
+            <Text variant="meta" tone="ink">
+              본인인증 전 확인
+            </Text>
+            <Text variant="caption" tone="ink-3" className="leading-5">
+              계속하면 PortOne 본인인증으로 이동합니다.
+            </Text>
+          </Card>
+        </View>
+      </ScrollView>
+
+      <View className="border-t border-line bg-bg px-6 pb-5 pt-3">
+        <Button
+          fullWidth
+          disabled={!requiredAccepted}
+          onPress={() => router.push(ROUTES.verify)}
+          testID="terms-continue"
+        >
+          동의하고 본인인증 시작
+        </Button>
       </View>
     </SafeAreaView>
   );
