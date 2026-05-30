@@ -68,4 +68,30 @@ describe('Avatar (P6)', () => {
     render(<Avatar ref={ref} testID="av" initial="수" />);
     expect(ref.current).not.toBeNull();
   });
+
+  it('renders a circular Image when photoUrl is given (size-matched, no initial)', () => {
+    render(<Avatar testID="av" initial="수" size={28} photoUrl="https://cdn.test/u/me.jpg" />);
+    // photoUrl wins over the initial fallback — the letter is not rendered
+    expect(screen.queryByText('수')).toBeNull();
+    const img = screen.getByTestId('av-photo');
+    expect(img.props.source).toEqual({ uri: 'https://cdn.test/u/me.jpg' });
+    // image fills the circular container (size 28) and is clipped to a circle
+    const cls = img.props.className as string;
+    expect(cls).toContain('w-[28px]');
+    expect(cls).toContain('h-[28px]');
+    expect(cls).toContain('rounded-full');
+  });
+
+  it('falls back to the initial when photoUrl is not given', () => {
+    render(<Avatar testID="av" initial="수" />);
+    expect(screen.queryByTestId('av-photo')).toBeNull();
+    expect(screen.getByText('수')).toBeTruthy();
+  });
+
+  it('keeps the accessibilityLabel when rendering a photo', () => {
+    render(
+      <Avatar testID="av" initial="수" photoUrl="https://cdn.test/u/me.jpg" accessibilityLabel="수아 아바타" />,
+    );
+    expect(screen.getByLabelText('수아 아바타')).toBeTruthy();
+  });
 });

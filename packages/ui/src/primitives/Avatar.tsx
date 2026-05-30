@@ -1,5 +1,6 @@
 import { forwardRef } from 'react';
 import { View, Text, type ViewProps } from 'react-native';
+import { Image } from 'expo-image';
 
 import { cn } from '../lib/cn';
 
@@ -32,6 +33,11 @@ const DEFAULT_BG = 'bg-[#E07A4F]'; // self(내 아바타). peer(#7A8DB8)는 bg p
 export interface AvatarProps extends ViewProps {
   /** 표시할 이니셜(보통 1글자). 예: '수'. */
   initial?: string;
+  /**
+   * 프로필 이미지 URL. 지정 시 이니셜 대신 원형(size) 이미지로 렌더하며,
+   * 미지정/로드 실패 전까지 `initial` 폴백을 사용한다. expo-image 로 디코딩.
+   */
+  photoUrl?: string;
   /** 원형 지름(px). 18~120. 기본 38 (S05 `.av-me`). */
   size?: number;
   /**
@@ -80,6 +86,7 @@ function initialClass(size: number): string {
 export const Avatar = forwardRef<View, AvatarProps>(function Avatar(
   {
     initial,
+    photoUrl,
     size = 38,
     bg,
     ring = false,
@@ -98,7 +105,7 @@ export const Avatar = forwardRef<View, AvatarProps>(function Avatar(
       accessibilityRole="image"
       accessibilityLabel={accessibilityLabel ?? (initial ? `${initial} 아바타` : undefined)}
       className={cn(
-        'relative items-center justify-center rounded-full',
+        'relative items-center justify-center overflow-hidden rounded-full',
         `w-[${size}px] h-[${size}px]`,
         bg ?? DEFAULT_BG,
         // PresenceAvatar accent 링: 1.5px accent 보더(box-shadow 대체).
@@ -107,7 +114,15 @@ export const Avatar = forwardRef<View, AvatarProps>(function Avatar(
       )}
       {...rest}
     >
-      {initial != null ? (
+      {photoUrl != null ? (
+        // 프로필 이미지: 원형 컨테이너를 가득 채우는 cover 이미지(이니셜 폴백 대체).
+        <Image
+          testID="av-photo"
+          source={{ uri: photoUrl }}
+          contentFit="cover"
+          className={cn('rounded-full', `w-[${size}px] h-[${size}px]`)}
+        />
+      ) : initial != null ? (
         <Text className={cn(initialClass(size), textClassName)}>{initial}</Text>
       ) : null}
 
