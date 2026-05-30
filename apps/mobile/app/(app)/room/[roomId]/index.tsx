@@ -1,49 +1,175 @@
-import { View } from 'react-native';
+import { useEffect, useMemo, useRef } from 'react';
+import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Image } from 'expo-image';
+import { LinearGradient, type LinearGradientProps } from 'expo-linear-gradient';
 
-import { Text } from '@dei/ui';
+import { GridRoom, Text } from '@dei/ui';
+import type { GridRoomCell, GridRoomTimeSlot, GradientComponentProps } from '@dei/ui';
+import type { Database } from '@dei/api';
+import { POLICY, analytics, formatTimeStripSlots, isQuietHourKst } from '@dei/shared';
 
-/**
- * S13 — 일상 공유 방 (8셀 분할 ★시그니처)
- * ==================================================================
- * 담당자: C
- * 화면 목적: dei의 유일한 시그니처 화면. PRD §4 핵심 메커니즘이 모두 여기서 작동 —
- *   매시간 3초 영상 모자이크 / 블러 게이트 / 방 단위 공유. 매칭 후 홈의 ③b 언블러
- *   모드(영상 올린 후 상태). S10(③a 블러)과 같은 '바뀐 홈'의 두 상태이며 24h
- *   마지막 영상 경과 시 ③b→③a 자동 전환.
- * 의존 DS 컴포넌트: TopNav(RoomHeader: 중앙 dei 로고 + back 숨김) · IconButton(채팅
- *   💬 / ⋯ 메뉴) · Badge(채팅 미읽음 dot) · Chip(TimeStrip 시간대 pill row) ·
- *   GridRoom(8셀 2×4 그리드) · Avatar(PresenceAvatar: who 칩 아바타) ·
- *   PulseRing(라이브 presence 링) · FullscreenVideo(셀 본체 탭 → S13b 풀스크린) ·
- *   EmptyBlob(빈 셀 '안 올림' / 새벽 'zzz' blob 얼굴) · Banner(24h 경과 임박 /
- *   멤버 자동 퇴장 / 방 종료 안내 토스트, 조건부)  [@dei/ui]
- * 의존 데이터: conversations/room(방 직행 라우팅 조건) · room_members(멤버 리스트,
- *   성별 컬럼 split, 자동 퇴장/차단 상태) · video_clips(멤버별 시간대 3초 영상 —
- *   셀 배경/업로드 시각, 24h 만료 판정) · messages(헤더 채팅 미읽음 dot 카운트) ·
- *   block 관계(차단 멤버 → 본인 화면 셀 빈 칸)
- * 발생 이벤트(PostHog): S5:room_joined_unblurred · L2:rematch_restriction_evaluated ·
- *   S3:home_entered_waiting · S5:blur_reapplied_24h_passed  (lib/analytics-taxonomy)
- * 서버 의존(L1): Realtime 구독(새 영상 자동 갱신, 끊김 시 pull-to-refresh) /
- *   blur 게이트 평가(본인 24h 내 영상 존재 여부 → ③a/③b 결정, PRD §8) /
- *   푸시(PRD §11-5, 본인 24h 경과 임박 알림)
- * 정책 의존(L2): rematch_restriction(방 나가기 후 24h 재매칭 제한, 여성 자동 면제 /
- *   남성 BM 결제) · blur 게이트 24h 단일 규칙(PRD §8) · PRD §9(멤버 자동 퇴장 /
- *   차단 멤버 가시성) · 방 자동 종료(마지막 1명 이탈 시 영상·채팅 영구 소멸) ·
- *   L3 차단·신고 게이트(S14 경유)
- * 와이어프레임 참조: all-screens S13
- *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(8셀 그리드·timestrip·realtime 동기화·블러 게이트)은 owner 가 채운다.
- */
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { useAuth } from '@/providers/auth-provider';
+import { useRoomVideos } from '@/hooks/useRoomVideos';
+import { useRoomMembers } from '@/hooks/useRoomMembers';
+import { useRoomPresence } from '@/hooks/useRoomPresence';
+import { useHourSlot } from '@/hooks/useHourSlot';
+import { useAppStateRefetch } from '@/hooks/useAppStateRefetch';
+
+type RoomMemberRow = Database['public']['Tables']['room_member']['Row'];
+type VideoRow = Database['public']['Tables']['video']['Row'];
+
+function GradientWrapper({ colors, start, end, className }: GradientComponentProps) {
+  return (
+    <LinearGradient
+      colors={colors as LinearGradientProps['colors']}
+      start={start}
+      end={end}
+      className={className}
+    />
+  );
+}
+
+function buildCells(
+  members: RoomMemberRow[],
+  videosByHour: Record<number, VideoRow[]>,
+  currentHour: number,
+  onlineUserIds: Set<string>,
+): GridRoomCell[] {
+  const hourVideos = videosByHour[currentHour] ?? [];
+  const videoByUser = new Map<string, VideoRow>();
+  for (const v of hourVideos) {
+    if (!videoByUser.has(v.user_id)) videoByUser.set(v.user_id, v);
+  }
+
+  return members.map((member): GridRoomCell => {
+    const video = videoByUser.get(member.user_id);
+    if (!video || video.status === 'failed' || video.status === 'archived') {
+      return { kind: 'empty', name: member.user_id.slice(0, 6) };
+    }
+    const uploadHour = video.created_at
+      ? new Date(video.created_at).toLocaleTimeString('ko-KR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })
+      : '--:--';
+    return {
+      kind: undefined,
+      name: member.user_id.slice(0, 6),
+      uploadTime: uploadHour,
+      videoId: video.id,
+      present: onlineUserIds.has(member.user_id),
+      media:
+        video.thumbnail_path ? (
+          <Image
+            source={{ uri: video.thumbnail_path }}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={250}
+            className="absolute inset-0"
+          />
+        ) : undefined,
+    };
+  });
+}
+
 export default function RoomScreen() {
+  const router = useRouter();
+  const { roomId } = useLocalSearchParams<{ roomId: string }>();
+  const { user } = useAuth();
+
+  const { currentHour, setCurrentHour } = useHourSlot();
+  const hourRange = POLICY.gridPerformance.prefetchHourRange;
+
+  const { videosByHour, loading: videosLoading, refetch: refetchVideos } = useRoomVideos(
+    roomId,
+    currentHour,
+    hourRange,
+  );
+  const { members, refetch: refetchMembers } = useRoomMembers(roomId);
+  const { onlineUserIds } = useRoomPresence(roomId, user?.id ?? null);
+
+  useAppStateRefetch(() => {
+    refetchVideos();
+    refetchMembers();
+  });
+
+  const cells = useMemo(
+    () => buildCells(members, videosByHour, currentHour, onlineUserIds),
+    [members, videosByHour, currentHour, onlineUserIds],
+  );
+
+  const timeStrip = useMemo<GridRoomTimeSlot[]>(() => {
+    return formatTimeStripSlots(currentHour, hourRange).map((s) => ({
+      label: s.isQuiet ? `${s.label} zzz` : s.label,
+      isNow: s.isNow,
+    }));
+  }, [currentHour, hourRange]);
+
+  const firstRenderRef = useRef(false);
+  const renderStartRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (!videosLoading && !firstRenderRef.current) {
+      firstRenderRef.current = true;
+      const latencyMs = Date.now() - renderStartRef.current;
+      analytics.capture(ANALYTICS_EVENTS.room_grid_first_render, {
+        room_id: roomId,
+        video_count: cells.filter((c) => c.kind !== 'empty').length,
+        latency_ms: latencyMs,
+      });
+    }
+  }, [videosLoading, cells, roomId]);
+
+  const prevHourRef = useRef(currentHour);
+
+  const slots = useMemo(
+    () => formatTimeStripSlots(currentHour, hourRange),
+    [currentHour, hourRange],
+  );
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">일상 공유 방 (8셀)</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: C 구현 예정 · all-screens S13
+      <ScrollView className="flex-1" contentContainerClassName="pb-8">
+        <Text variant="h2" className="px-4 py-3">
+          일상 공유 방
         </Text>
-      </View>
+        {videosLoading ? (
+          <View className="flex-1 items-center justify-center py-16">
+            <ActivityIndicator />
+          </View>
+        ) : (
+          <GridRoom
+            cells={cells}
+            timeStrip={timeStrip}
+            timeHint="시간대를 밀어서 회상"
+            GradientComponent={GradientWrapper}
+            onCellPress={(cell) => {
+              if (cell.kind === 'empty') return;
+              const videoId = (cell as { videoId?: string }).videoId;
+              if (!videoId) return;
+              router.push(`/room/${roomId}/video/${videoId}`);
+            }}
+            onTimeSlotPress={(slotIndex) => {
+              const slot = slots[slotIndex];
+              if (!slot) return;
+              if (isQuietHourKst(slot.hour)) return;
+              const fromHour = prevHourRef.current;
+              const cacheHit = slot.hour in videosByHour;
+              analytics.capture(ANALYTICS_EVENTS.room_timestrip_swipe, {
+                from_hour: fromHour,
+                to_hour: slot.hour,
+                cache_hit: cacheHit,
+              });
+              prevHourRef.current = slot.hour;
+              setCurrentHour(slot.hour);
+            }}
+          />
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
