@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { analytics, logger } from '@dei/shared';
 
 import { supabase } from '@/lib/supabase';
+import type { ConfirmIdentityVerificationResponse } from '@/lib/portone.stub';
 
 /**
  * 인증 골격 (spec §3.3 · A-4)
@@ -21,8 +22,8 @@ type AuthContextValue = {
   user: User | null;
   /** 익명 세션 보장(없으면 생성). 본인인증 진입 전 임시 세션. */
   ensureAnonymousSession: () => Promise<Session>;
-  /** ⚠️ handoff: PortOne 본인인증 결과로 익명→검증 신원 승격 (B 구현 예정). */
-  promoteWithIdentity: () => Promise<void>;
+  /** PortOne 본인인증 결과로 익명 세션을 검증된 앱 사용자 상태로 확정. */
+  promoteWithIdentity: (identity: ConfirmIdentityVerificationResponse) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -120,12 +121,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data.session;
   }, [session]);
 
-  const promoteWithIdentity = useCallback(async () => {
-    // handoff: PortOne 본인인증(portone.stub.startIdentityVerification) → 서버
-    // 콜백 검증 → auth_verification 기록 → 동일 계정에 본인인증 메타 반영.
-    // B 담당. 익명 사용자를 영구 계정으로 승격하는 경로도 여기서 잇는다.
-    throw new Error('handoff: PortOne 본인인증 승격(B) 구현 예정');
-  }, []);
+  const promoteWithIdentity = useCallback(
+    async (identity: ConfirmIdentityVerificationResponse) => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        throw error;
+      }
+
+      const nextSession = data.session ?? session;
+      setSession(nextSession);
+
+      const userId = nextSession?.user.id;
+
+      if (userId) {
+        logger.setUser({ id: userId });
+        analytics.identify(userId, {
+          birth_year: identity.birthYear,
+          gender: identity.gender,
+          identity_verified: true,
+          is_adult: identity.isAdult,
+        });
+      }
+    },
+    [session],
+  );
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();

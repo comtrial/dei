@@ -71,9 +71,18 @@ export type Database = {
           ci_hash: string | null
           created_at: string
           di_hash: string | null
+          failed_at: string | null
+          failure_code: string | null
+          failure_count: number
+          failure_message: string | null
           id: string
+          identity_verification_tx_id: string | null
+          lock_until: string | null
           provider: string
+          provider_metadata: Json
+          provider_verification_id: string | null
           status: string
+          updated_at: string
           user_id: string
           verified_at: string | null
         }
@@ -81,9 +90,18 @@ export type Database = {
           ci_hash?: string | null
           created_at?: string
           di_hash?: string | null
+          failed_at?: string | null
+          failure_code?: string | null
+          failure_count?: number
+          failure_message?: string | null
           id?: string
+          identity_verification_tx_id?: string | null
+          lock_until?: string | null
           provider?: string
+          provider_metadata?: Json
+          provider_verification_id?: string | null
           status?: string
+          updated_at?: string
           user_id: string
           verified_at?: string | null
         }
@@ -91,9 +109,18 @@ export type Database = {
           ci_hash?: string | null
           created_at?: string
           di_hash?: string | null
+          failed_at?: string | null
+          failure_code?: string | null
+          failure_count?: number
+          failure_message?: string | null
           id?: string
+          identity_verification_tx_id?: string | null
+          lock_until?: string | null
           provider?: string
+          provider_metadata?: Json
+          provider_verification_id?: string | null
           status?: string
+          updated_at?: string
           user_id?: string
           verified_at?: string | null
         }
