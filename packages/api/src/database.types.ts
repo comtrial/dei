@@ -256,6 +256,7 @@ export type Database = {
       message: {
         Row: {
           body: string
+          client_msg_id: string | null
           created_at: string
           id: string
           room_id: string
@@ -265,6 +266,7 @@ export type Database = {
         }
         Insert: {
           body: string
+          client_msg_id?: string | null
           created_at?: string
           id?: string
           room_id: string
@@ -274,6 +276,7 @@ export type Database = {
         }
         Update: {
           body?: string
+          client_msg_id?: string | null
           created_at?: string
           id?: string
           room_id?: string
@@ -453,6 +456,27 @@ export type Database = {
           quiet_hours_end?: number
           quiet_hours_start?: number
           region?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      push_token: {
+        Row: {
+          platform: string
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          platform: string
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          platform?: string
+          token?: string
           updated_at?: string
           user_id?: string
         }

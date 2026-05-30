@@ -10,3 +10,4 @@ export type {
   Enums,
   CompositeTypes,
 } from './database.types';
+export * from './schemas/sendMessage';

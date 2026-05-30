@@ -114,6 +114,10 @@ jobs:
           STATUS=$(pnpm dlx supabase status -o env)
           export EXPO_PUBLIC_SUPABASE_URL=$(echo "$STATUS" | grep -E '^API_URL=' | cut -d= -f2- | tr -d '"')
           export EXPO_PUBLIC_SUPABASE_ANON_KEY=$(echo "$STATUS" | grep -E '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
+          # service-role 키 주입 — send-message-rpc.test.ts 가 makeServiceClient()/hasServiceRoleKey()
+          # 로 service-role 을 요구한다. 미주입 시 그 스위트가 통째로 SKIP → CLAUDE.md 룰3
+          # ("실행 0건이면 FAIL / skip=통과 금지") 위반. 반드시 export 해 실제 실행시킨다.
+          export SUPABASE_SERVICE_ROLE_KEY=$(echo "$STATUS" | grep -E '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '"')
           pnpm --filter mobile test:integration
       - name: Stop local Supabase
         if: always()

@@ -3,8 +3,8 @@ export { BrandTransitionFrame } from './BrandTransitionFrame';
 export type { BrandTransitionFrameProps } from './BrandTransitionFrame';
 export { BottomSheet } from './BottomSheet';
 export type { BottomSheetProps } from './BottomSheet';
-export { ChatBubble } from './ChatBubble';
-export type { ChatBubbleProps, ChatBubbleVariant } from './ChatBubble';
+export { ChatBubble, MentionToken } from './ChatBubble';
+export type { ChatBubbleProps, ChatBubbleVariant, MentionTokenProps } from './ChatBubble';
 export { PermissionGate } from './PermissionGate';
 export type {
   PermissionGateProps,
@@ -31,6 +31,8 @@ export type {
 } from './GridRoom';
 export { InputBar } from './InputBar';
 export type { InputBarProps } from './InputBar';
+export { MentionAutocomplete } from './MentionAutocomplete';
+export type { MentionAutocompleteProps, MentionCandidate } from './MentionAutocomplete';
 export { BottomActionBar } from './BottomActionBar';
 export type { BottomActionBarProps, BottomActionBarLayout } from './BottomActionBar';
 export { ChoiceList } from './ChoiceList';
