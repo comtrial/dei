@@ -1,42 +1,96 @@
-import { View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import { analytics, POLICY } from '@dei/shared';
+import {
+  AlertDialog,
+  Banner,
+  BottomActionBar,
+  ChoiceList,
+  SlideToConfirm,
+  Text,
+  Textarea,
+  TopNav,
+} from '@dei/ui';
 
-/**
- * S20 — 회원 탈퇴
- * ==================================================================
- * 담당자: B
- * 화면 목적: S19 '회원 탈퇴' row → 진입. 비가역 영구 삭제 + 본인인증 재확인 +
- *           사유 수집 + 충동 방지를 위한 슬라이드 액션. 30일 재가입 제한
- *           (악성 재진입 방지).
- * 의존 DS 컴포넌트: Text(DestructiveHeading 대형 h1 + sub 카피) · TopNav(뒤로가기 +
- *   타이틀 '회원 탈퇴') · Card(DangerBox — 영구삭제 항목 + 30일 재가입 제한 안내) ·
- *   Radio/ChoiceList(RadioReasonList 사유 5개) · Textarea(ConditionalInput '기타'
- *   자유입력) · SettingsRow(VerifyCta 본인인증 재확인 진입) · Button(VerifyCta 인증하기) ·
- *   SlideToConfirm(SlideToAction '밀어서 탈퇴하기', S16 일관)  [@dei/ui]
- * 의존 데이터: 본인 계정/프로필(영구 삭제 대상: 프로필·사진·자기소개·잔여 패스·결제 이력)
- *   / CI 기반 30일 재가입 차단 레코드(테이블명 미명시) / 탈퇴 사유 수집 적재(테이블명 미명시)
- * 발생 이벤트(PostHog): S20:withdraw_screen_entered · terminal · 30d_reregister_blocked
- * 서버 의존(L1): 탈퇴 처리(계정·관련 데이터 영구 삭제) 엔드포인트 / 동일 CI 30일 재가입
- *   차단 기록 / PortOne 본인인증 재확인(외부 — 재인증 성공 후에만 탈퇴 처리) /
- *   탈퇴 후 세션 무효화·로그아웃
- * 정책 의존(L2): 비가역 영구 삭제 범위 정책(영상·채팅은 휘발이라 제외) / 동일 CI 30일
- *   재가입 제한 정책 / 본인인증 재확인 선행 필수 게이트
- * 와이어프레임 참조: all-screens S20
- *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(위험 박스·사유 라디오·본인인증 CTA·슬라이드 투 액션)은 owner 가 채운다.
- */
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { WITHDRAW_REASONS } from '@/lib/b-flow';
+import { ROUTES } from '@/lib/routes';
+
 export default function WithdrawScreen() {
+  const router = useRouter();
+  const [reason, setReason] = useState<string | null>(null);
+  const [detail, setDetail] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+
+  useEffect(() => {
+    analytics.capture(ANALYTICS_EVENTS.withdraw_screen_entered);
+  }, []);
+
+  const canRequest = !!reason && (reason !== 'other' || detail.trim().length > 0);
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">회원 탈퇴</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S20
-        </Text>
-      </View>
+      <TopNav title="회원 탈퇴" onLeftPress={() => router.back()} />
+
+      <ScrollView className="flex-1 bg-bg">
+        <View className="px-[24px] pb-[128px] pt-[22px]">
+          <Text variant="h1" className="text-[25px] leading-[33px]">
+            정말 dei를 떠나실까요?
+          </Text>
+          <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+            계정과 결제 기록을 함께 확인해야 해서 탈퇴 전 마지막 확인이 필요해요.
+          </Text>
+
+          <Banner tone="danger" icon="!" title="삭제 정책">
+            계정 삭제 요청 시 영상은 {POLICY.video.purgeOnAccountDeletionHours}시간 안에 정리되어야 합니다.
+          </Banner>
+
+          <ChoiceList
+            tone="danger"
+            value={reason}
+            onChange={setReason}
+            options={WITHDRAW_REASONS.map((item) => ({
+              ...item,
+              conditionalInput:
+                item.value === 'other' ? (
+                  <Textarea
+                    value={detail}
+                    onChangeText={setDetail}
+                    maxLength={200}
+                    showCount
+                    placeholder="떠나는 이유를 적어주세요"
+                  />
+                ) : undefined,
+            }))}
+            className="mt-[24px]"
+          />
+        </View>
+      </ScrollView>
+
+      <BottomActionBar fixed>
+        <SlideToConfirm
+          disabled={!canRequest}
+          label="길게 눌러 탈퇴 요청"
+          onConfirm={() => setConfirmed(true)}
+          className={!canRequest ? 'opacity-40' : undefined}
+        />
+      </BottomActionBar>
+
+      <AlertDialog
+        visible={confirmed}
+        tone="info"
+        icon="i"
+        title="탈퇴 요청은 고객센터에서 도와드릴게요"
+        description="계정 삭제와 환불 여부를 함께 확인해야 해서 상담으로 이어집니다."
+        actions={[
+          { label: '고객센터로 이동', variant: 'ink', onPress: () => router.replace(ROUTES.support) },
+          { label: '홈으로', variant: 'secondary', onPress: () => router.replace(ROUTES.home) },
+        ]}
+        onDismiss={() => router.replace(ROUTES.home)}
+      />
     </SafeAreaView>
   );
 }

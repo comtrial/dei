@@ -1,41 +1,163 @@
-import { View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import { analytics, logger, POLICY } from '@dei/shared';
+import { Badge, Banner, Button, Card, ProfileHero, SettingsRow, Text, TopNav } from '@dei/ui';
 
-/**
- * S19 — 본인 프로필 수정 (허브)
- * ==================================================================
- * 담당자: B
- * 화면 목적: S05 우상단 아바타 탭 → 진입. 본인 정보 수정 + 잔여 패스·환불·설정·
- *           계정 관리 모든 진입점이 모이는 허브 화면. PRD 미명시(묶음 6 신규).
- *           묶음 6 모든 진입점의 hub(잔여 패스·환불·고객센터·탈퇴·알림·약관).
- * 의존 DS 컴포넌트: TopNav(뒤로가기 + '내 프로필' 타이틀 + 저장 우측 액션) ·
- *   ProfileHero(90px 아바타 + edit ✎ 배지) · SettingsRow(프로필/설정 row,
- *   locked·danger 변형 + SectionGroup 그룹핑) · Card(잔여 바로 매치 PassCard) ·
- *   Button/Chip('더 사기'·'지금 시작' cta-mini 알약) · Text  [@dei/ui]
- * 의존 데이터: profiles(닉네임/자기소개/MBTI/지역/성별/생년월일/아바타 — 본인 row
- *   UPDATE) / 닉네임 변경 throttle 메타(nickname_changed_at 등 — 30일 제한 계산) /
- *   잔여 바로 매치 패스 잔량(passes/entitlements 류, 테이블명 HTML 미명시)
- * 발생 이벤트(PostHog): S19:profile_hub_opened · S19:nickname_change_throttled_30d
- * 서버 의존(L1): 프로필 UPDATE RPC/엔드포인트(HTML 미명시) / 닉네임 30일 throttle
- *   서버 검증(HTML 미명시) / 잔여 패스 조회(HTML 미명시)
- * 정책 의존(L2): 닉네임 30일 1회 변경 제한 / lock 필드(성별·생년월일·본인인증
- *   변경 불가) / 잔여 패스 0회 시 CTA 분기('지금 시작' vs '더 사기')
- * 와이어프레임 참조: all-screens S19
- *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(3섹션·잔여 패스 카드·lock row·저장 토글)은 owner 가 채운다.
- */
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import {
+  MOCK_SELF_PROFILE,
+  profileMeta,
+  toInitial,
+} from '@/lib/b-flow';
+import { ROUTES } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/auth-provider';
+
+type ProfileState = {
+  bio: string | null;
+  birthYear: number | null;
+  gender: string | null;
+  nickname: string | null;
+  passCount: number;
+  region: string | null;
+};
+
 export default function MyProfileScreen() {
+  const router = useRouter();
+  const { signOut, user } = useAuth();
+  const [profile, setProfile] = useState<ProfileState>({
+    bio: MOCK_SELF_PROFILE.bio,
+    birthYear: MOCK_SELF_PROFILE.birthYear,
+    gender: MOCK_SELF_PROFILE.gender,
+    nickname: MOCK_SELF_PROFILE.nickname,
+    passCount: MOCK_SELF_PROFILE.passCount,
+    region: MOCK_SELF_PROFILE.region,
+  });
+
+  useEffect(() => {
+    analytics.capture(ANALYTICS_EVENTS.profile_hub_opened);
+
+    if (!user) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'my-profile.load',
+      async () => {
+        const [{ data: profileData, error: profileError }, { data: passes, error: passError }] =
+          await Promise.all([
+            supabase
+              .from('profile')
+              .select('bio, birth_year, gender, nickname, region')
+              .eq('user_id', user.id)
+              .maybeSingle(),
+            supabase
+              .from('pass')
+              .select('remaining')
+              .eq('user_id', user.id)
+              .eq('status', 'active'),
+          ]);
+
+        if (profileError) throw profileError;
+        if (passError) throw passError;
+
+        setProfile({
+          bio: profileData?.bio ?? MOCK_SELF_PROFILE.bio,
+          birthYear: profileData?.birth_year ?? MOCK_SELF_PROFILE.birthYear,
+          gender: profileData?.gender ?? MOCK_SELF_PROFILE.gender,
+          nickname: profileData?.nickname ?? MOCK_SELF_PROFILE.nickname,
+          passCount: passes?.reduce((sum, pass) => sum + pass.remaining, 0) ?? 0,
+          region: profileData?.region ?? MOCK_SELF_PROFILE.region,
+        });
+      },
+      { tags: { screen: 'my-profile', action: 'load' } },
+    );
+  }, [user]);
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">내 프로필</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S19
-        </Text>
-      </View>
+      <TopNav title="마이프로필" onLeftPress={() => router.back()} />
+
+      <ScrollView className="flex-1 bg-bg">
+        <View className="pb-[42px]">
+          <View className="px-[24px] pt-[26px]">
+            <ProfileHero
+              size="lg"
+              editable
+              name={profile.nickname ?? MOCK_SELF_PROFILE.nickname}
+              meta={profileMeta(profile)}
+              initial={toInitial(profile.nickname)}
+              onEditPress={() => router.push(ROUTES.profileStep2)}
+            />
+
+            <Text className="mt-[14px] text-center text-[13px] leading-[19px] text-ink-3">
+              {profile.bio}
+            </Text>
+
+            <Card className="mt-[24px] px-[16px] py-[16px]">
+              <View className="flex-row items-center justify-between">
+                <View>
+                  <Text className="text-[14px] font-extrabold text-ink">바로 매치 패스</Text>
+                  <Text className="mt-[3px] text-[11.5px] text-ink-3">
+                    {POLICY.payment.instantRematchProductId}
+                  </Text>
+                </View>
+                <Badge variant="count">잔여 {profile.passCount}회</Badge>
+              </View>
+              <Button
+                variant="mini-pill"
+                className="mt-[12px]"
+                onPress={() => router.push(ROUTES.booster)}
+              >
+                바로 매치
+              </Button>
+            </Card>
+          </View>
+
+          <View className="mt-[28px]">
+            <SettingsRow
+              label="알림 설정"
+              value="매칭·멘션·리마인드"
+              onPress={() => router.push(ROUTES.settingsNotifications)}
+            />
+            <SettingsRow
+              label="고객센터"
+              value="환불·문의"
+              onPress={() => router.push(ROUTES.support)}
+            />
+            <SettingsRow
+              variant="locked"
+              label="성별·생년"
+              value="본인인증 자동"
+            />
+            <SettingsRow
+              variant="danger"
+              label="회원 탈퇴"
+              onPress={() => router.push(ROUTES.settingsWithdraw)}
+            />
+          </View>
+
+          <View className="px-[24px] pt-[22px]">
+            <Banner tone="info" icon="i" title="닉네임 변경">
+              닉네임 변경은 {POLICY.identity.nicknameChangeThrottleDays}일에 한 번만 가능하도록
+              제한돼요.
+            </Banner>
+            <Button
+              variant="tertiary"
+              fullWidth
+              className="mt-[14px]"
+              onPress={() => {
+                void signOut();
+              }}
+            >
+              로그아웃
+            </Button>
+          </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

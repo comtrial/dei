@@ -1,39 +1,89 @@
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import { logger, POLICY } from '@dei/shared';
+import { Badge, Banner, BottomActionBar, Button, Spinner, Text, TopNav } from '@dei/ui';
 
-/**
- * S07 — 매칭 큐 대기 (홈 ② 매칭 중)
- * ==================================================================
- * 담당자: B
- * 화면 목적: 홈 3-state 중 ② 매칭 중 상태. 대기 시간이 2~6시간이라 사용자는
- *           앱을 닫고 일상을 보냄 — 매칭 성사 신호는 푸시 알림이 사실상 유일한
- *           채널. 이 화면은 큐에 들어가 있다는 상태 확인 + 취소 진입점일 뿐.
- * 의존 DS 컴포넌트: Text · PulseRing(대기 펄스 + dei 코어 마크) ·
- *   Card(EstimateBox '2~6 시간' bg-2 박스) · IconButton(우하단 fab 매칭 취소) ·
- *   AlertDialog(큐 등록 실패 alert + S05 복귀)  [@dei/ui]
- * 의존 데이터: match_queue(현재 큐 등록 상태·큐 깊이) · 푸시 알림 토큰(매칭 성사
- *   신호 채널)
- * 발생 이벤트(PostHog): 없음
- * 서버 의존(L1): 매칭 워커 B1(match_succeeded_push_sent 푸시 발송) /
- *   큐 상태·평균 대기시간 조회(실시간 동적) / 큐 등록 실패 핸들링
- * 정책 의존(L2): 대기 시간 = 서버단 동적 산출(큐 깊이·매칭 속도) /
- *   큐 위치·단계 비노출 / 큐 만료 24h(S09 트리거)
- * 와이어프레임 참조: all-screens S07
- *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(펄스 대기 표시·EstimateBox·취소 fab·등록 실패 alert)은 owner 가 채운다.
- */
+import { ROUTES } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/auth-provider';
+
 export default function QueueScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [memberCount, setMemberCount] = useState(1);
+  const [region, setRegion] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'queue.load-context',
+      async () => {
+        const { data, error } = await supabase
+          .from('profile')
+          .select('region')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          throw error;
+        }
+
+        setRegion(data?.region ?? null);
+      },
+      { tags: { screen: 'queue', action: 'load-context' } },
+    );
+  }, [user]);
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">매칭 큐 대기 (매칭 중)</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S07
-        </Text>
+      <TopNav
+        title="매칭 대기"
+        left="close"
+        onLeftPress={() => router.push(ROUTES.matchCancelConfirm)}
+        rightActions={<Badge variant="count">{`${memberCount}명`}</Badge>}
+      />
+
+      <View className="flex-1 px-[24px] pb-[32px] pt-[54px]">
+        <View className="items-center">
+          <Spinner size={80} />
+          <Text variant="h1" className="mt-[28px] text-center text-[25px] leading-[33px]">
+            맞는 묶음을 찾고 있어요
+          </Text>
+          <Text className="mt-[10px] text-center text-[13.5px] leading-[21px] text-ink-3">
+            상대 성별, 지역, 방 상태를 기준으로 확인합니다.
+          </Text>
+        </View>
+
+        <View className="mt-[34px] gap-[10px]">
+          <Banner tone="warn" icon="!" title="대기 중 앱을 닫아도 괜찮아요">
+            알림을 켜두면 매칭 완료 시 바로 알려드려요.
+          </Banner>
+          <Banner tone="info" icon="i" title="현재 매칭 조건">
+            {region ? `${region} 기준 · 반대 성별 · 최대 ${POLICY.matching.queueExpiryHours}시간 대기` : `반대 성별 · 최대 ${POLICY.matching.queueExpiryHours}시간 대기`}
+          </Banner>
+        </View>
+
+        <View className="mt-auto gap-[10px]">
+          <Button variant="secondary" fullWidth onPress={() => setMemberCount((count) => Math.min(count + 1, POLICY.team.maxMembers))}>
+            묶음 인원 미리보기
+          </Button>
+          <Button variant="tertiary" fullWidth onPress={() => router.push(ROUTES.matchFailed)}>
+            매칭 실패 안내 보기
+          </Button>
+        </View>
       </View>
+
+      <BottomActionBar fixed>
+        <Button variant="secondary" fullWidth onPress={() => router.push(ROUTES.matchCancelConfirm)}>
+          대기 취소
+        </Button>
+      </BottomActionBar>
     </SafeAreaView>
   );
 }

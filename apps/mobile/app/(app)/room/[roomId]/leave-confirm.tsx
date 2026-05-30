@@ -1,49 +1,128 @@
-import { View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import { logger } from '@dei/shared';
+import {
+  AlertDialog,
+  Banner,
+  BottomActionBar,
+  ChoiceList,
+  SlideToConfirm,
+  Text,
+  Textarea,
+  TopNav,
+} from '@dei/ui';
 
-/**
- * S16 — 방 나가기 모달
- * ==================================================================
- * 담당자: B
- * 화면 목적: S13 방 헤더 ⋯ 메뉴에서 진입하는, 방 안 유일한 이탈 동선.
- *   비가역 액션 + PRD §13 24h 재매칭 제한 + 운영팀 사유 수집.
- *   '충동 이탈 방지'가 디자인의 핵심. 슬라이드업 시트(방 그리드 뒤 흐림).
- *   이탈 후 → S05(홈 + 24h 제한 상태). 마지막 1명 이탈 시점에만 방 자동 종료.
- * 의존 DS 컴포넌트: BottomSheet(방 그리드 뒤 흐림 슬라이드업 시트) ·
- *   SheetHandle(핸들) · Text(헤딩/서브카피) · Banner(24h 제한·방 영구
- *   소멸 danger 안내 박스) · Radio(이탈 사유 4개: 분위기·실수·불쾌한
- *   멤버·기타) · Textarea('기타' 사유 자유 입력) · SlideToConfirm
- *   ('밀어서 방 나가기' 비가역 confirm) · StateView('불쾌한 멤버' 선택 시
- *   차단·신고 안내) · AlertDialog(이탈 트랜잭션 실패 재시도)  [@dei/ui]
- * 의존 데이터: 현재 방/멤버십 상태(본인 이탈 vs 마지막 1명 판정) /
- *   leave_reason 적재 테이블(4개 사유 + 기타 텍스트) / rematch_restriction
- *   24h 제한 상태(사용자별) / 부스터·패스 잔여(24h 면제권 안내 연계)
- * 발생 이벤트(PostHog): leave_room_menu_opened · leave_cancelled ·
- *   rematch_restriction_evaluated · room_closed_last_member_left
- * 서버 의존(L1): 방 이탈 트랜잭션(Edge/RPC, 본인 이탈 처리·실패 시
- *   alert+재시도, 마지막 1명 이탈 시 방 자동 종료 + 영상·채팅 영구 소멸) /
- *   이탈 사유 적재(4개 사유 + 기타 자유 입력) / 24h 재매칭 제한 상태 기록(L2)
- * 정책 의존(L2): 24h 재매칭 제한(PRD §13, 즉시 재매칭은 부스터 필요) /
- *   방 휘발·영구 소멸(마지막 멤버 이탈 시 영상·채팅 즉시 폭파) /
- *   과팅 묶음 = 매칭 시점만 묶음, 방 안에서는 개별 멤버 이탈(PRD §6 v0.8) /
- *   비가역 이탈 + 슬라이드 confirm 유지(충동 이탈 방지)
- * 와이어프레임 참조: all-screens S16
- *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(슬라이드업 시트·danger 안내·사유 라디오·SlideToConfirm·
- *    실패 재시도)은 owner 가 채운다.
- */
+import { isUuidLike, LEAVE_REASONS } from '@/lib/b-flow';
+import { ROUTES } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/auth-provider';
+
 export default function RoomLeaveConfirmScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { roomId } = useLocalSearchParams<{ roomId: string }>();
+  const [reason, setReason] = useState<string | null>(null);
+  const [detail, setDetail] = useState('');
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const canLeave = !!reason && (reason !== 'other' || detail.trim().length > 0);
+
+  const handleLeave = () => {
+    if (!canLeave || isLeaving) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'room.leave',
+      async () => {
+        setIsLeaving(true);
+
+        if (user && isUuidLike(roomId)) {
+          const { error } = await supabase
+            .from('room_member')
+            .update({ left_at: new Date().toISOString(), status: 'left' })
+            .eq('room_id', Array.isArray(roomId) ? roomId[0] : roomId)
+            .eq('user_id', user.id);
+
+          if (error) {
+            throw error;
+          }
+        }
+
+        router.replace(ROUTES.home);
+      },
+      { tags: { screen: 'room-leave-confirm', action: 'leave' } },
+    )
+      .catch((error) => {
+        logger.captureException(error, {
+          tags: { screen: 'room-leave-confirm', action: 'leave-catch' },
+        });
+        setFailed(true);
+      })
+      .finally(() => setIsLeaving(false));
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">방 나가기 모달</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S16
-        </Text>
-      </View>
+      <TopNav title="방 나가기" onLeftPress={() => router.back()} />
+
+      <ScrollView className="flex-1 bg-bg">
+        <View className="px-[24px] pb-[128px] pt-[22px]">
+          <Text variant="h1" className="text-[25px] leading-[33px]">
+            정말 방을 나갈까요?
+          </Text>
+          <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+            나가면 이 방의 대화와 영상 흐름으로 다시 돌아올 수 없어요.
+          </Text>
+
+          <Banner tone="danger" icon="!" title="24시간 재매칭 제한">
+            방을 나가면 일정 시간 동안 새 매칭이 제한될 수 있어요.
+          </Banner>
+
+          <ChoiceList
+            value={reason}
+            onChange={setReason}
+            options={LEAVE_REASONS.map((item) => ({
+              ...item,
+              conditionalInput:
+                item.value === 'other' ? (
+                  <Textarea
+                    value={detail}
+                    onChangeText={setDetail}
+                    maxLength={160}
+                    showCount
+                    placeholder="사유를 적어주세요"
+                  />
+                ) : undefined,
+            }))}
+            className="mt-[24px]"
+          />
+        </View>
+      </ScrollView>
+
+      <BottomActionBar fixed>
+        <SlideToConfirm
+          tone="ink"
+          disabled={!canLeave || isLeaving}
+          onConfirm={handleLeave}
+          label={isLeaving ? '나가는 중' : '길게 눌러 방 나가기'}
+          className={!canLeave || isLeaving ? 'opacity-40' : undefined}
+        />
+      </BottomActionBar>
+
+      <AlertDialog
+        visible={failed}
+        tone="warn"
+        icon="!"
+        title="방을 나가지 못했어요"
+        description="잠시 후 다시 시도해주세요."
+        actions={[{ label: '확인', variant: 'ink', onPress: () => setFailed(false) }]}
+        onDismiss={() => setFailed(false)}
+      />
     </SafeAreaView>
   );
 }

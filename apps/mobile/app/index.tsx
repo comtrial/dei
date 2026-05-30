@@ -6,7 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { logger } from '@dei/shared';
 import { Spinner, Text } from '@dei/ui';
 
-import { ROUTES } from '@/lib/routes';
+import { roomRoutes, ROUTES } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 
 /**
@@ -48,12 +49,63 @@ export default function SplashRouter() {
           return;
         }
 
-        // TODO(B): 부트스트랩 조회로 프로필 완성/큐 등록/방 존재를 1회 판별해
-        // 아래 5분기를 완성한다. 현재는 로그인=홈으로 보내는 골격.
-        //   if (!profileComplete) router.replace(ROUTES.profileStep1);
-        //   else if (hasRoom)     router.replace(roomRoutes.index(roomId));
-        //   else if (inQueue)     router.replace(ROUTES.queue);
-        //   else                  router.replace(ROUTES.home);
+        const [{ data: profile, error: profileError }, { data: roomMember, error: roomError }] =
+          await Promise.all([
+            supabase
+              .from('profile')
+              .select('nickname, region')
+              .eq('user_id', user.id)
+              .maybeSingle(),
+            supabase
+              .from('room_member')
+              .select('room_id')
+              .eq('user_id', user.id)
+              .eq('status', 'active')
+              .limit(1)
+              .maybeSingle(),
+          ]);
+
+        if (profileError) throw profileError;
+        if (roomError) throw roomError;
+
+        if (roomMember?.room_id) {
+          router.replace(roomRoutes.index(roomMember.room_id));
+          return;
+        }
+
+        const profileComplete = !!profile?.nickname && !!profile?.region;
+
+        if (!profileComplete) {
+          router.replace(ROUTES.profileStep1);
+          return;
+        }
+
+        const { data: teamMembers, error: teamError } = await supabase
+          .from('team_member')
+          .select('team_id')
+          .eq('user_id', user.id);
+
+        if (teamError) throw teamError;
+
+        const teamIds = teamMembers?.map((team) => team.team_id) ?? [];
+
+        if (teamIds.length > 0) {
+          const { data: queue, error: queueError } = await supabase
+            .from('match_queue')
+            .select('id')
+            .in('team_id', teamIds)
+            .eq('status', 'waiting')
+            .limit(1)
+            .maybeSingle();
+
+          if (queueError) throw queueError;
+
+          if (queue) {
+            router.replace(ROUTES.queue);
+            return;
+          }
+        }
+
         router.replace(ROUTES.home);
       },
       { tags: { screen: 'splash' } },

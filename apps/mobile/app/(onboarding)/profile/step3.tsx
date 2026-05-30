@@ -1,42 +1,172 @@
-import { View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import { analytics, logger } from '@dei/shared';
+import {
+  AlertDialog,
+  Banner,
+  BottomActionBar,
+  Button,
+  ProgressBar,
+  Select,
+  Text,
+  TopNav,
+} from '@dei/ui';
 
-/**
- * S04c — 프로필 작성 (3/3) 신상 정보
- * ==================================================================
- * 담당자: B
- * 화면 목적: 멀티스텝 마지막 단계 — MBTI · 지역 입력. 분할 피드 영상 +
- *           사진과 함께 멤버 프로필(S14)에서 노출.
- * 의존 DS 컴포넌트: Text · IconButton(뒤로가기 BackButton) ·
- *   ProgressBar(스텝 f3 full) · Select(MBTI/지역, placeholder·chevron 미입력 변형) ·
- *   Button(BottomFixedCTA 'dei 시작하기' 항상 활성) ·
- *   AlertDialog(가입 완료 트랜잭션 실패 조건부)  [@dei/ui]
- * 의존 데이터: MBTI 값(profiles 컬럼, 표시 전용) / 지역 값(시·도 단위, S02
- *   위치 동의 시 GPS 자동·미동의/실패 시 직접 선택) / 위치정보 동의 플래그
- *   (S02 consents 연동) / 가입 완료 트랜잭션(프로필 commit + 계정 활성화)
- * 발생 이벤트(PostHog): 없음
- * 서버 의존(L1): 가입 완료 트랜잭션 엔드포인트(원자적 commit, 실패 시
- *   재시도·데이터 유지) / 지역 GPS 역지오코딩(자동 채움, 실패 시 직접 선택
- *   fallback) / MBTI·지역 부분 저장
- * 정책 의존(L2): 모든 신상 필드 선택(빈칸 허용)·CTA 항상 활성 / 지역 입도
- *   = 시·도만 / 지역 자동채움 = S02 위치정보 동의 연동 / 지역 매칭 활용
- *   방식(서버 알고리즘, PRD §7 보류)
- * 와이어프레임 참조: all-screens S04c
- *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(MBTI·지역 Select·progress f3·CTA 트랜잭션)은 owner 가 채운다.
- */
-export default function ProfileStep3Screen() {
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { MBTI_OPTIONS, REGION_OPTIONS } from '@/lib/b-flow';
+import { ROUTES } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/auth-provider';
+
+function OptionGrid({
+  options,
+  selected,
+  onSelect,
+}: {
+  options: readonly string[];
+  selected: string;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <View className="mt-[10px] flex-row flex-wrap gap-[8px]">
+      {options.map((option) => (
+        <Button
+          key={option}
+          size="sm"
+          variant={selected === option ? 'ink' : 'secondary'}
+          onPress={() => onSelect(option)}
+          className="px-[12px] py-[10px]"
+        >
+          {option}
+        </Button>
+      ))}
+    </View>
+  );
+}
+
+export default function ProfilePreferenceStepScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [mbti, setMbti] = useState('');
+  const [region, setRegion] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+
+  const handleFinish = () => {
+    if (!region || isSaving) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'onboarding.step3.save',
+      async () => {
+        setIsSaving(true);
+
+        if (user) {
+          const { error } = await supabase
+            .from('profile')
+            .update({ region })
+            .eq('user_id', user.id);
+
+          if (error) {
+            throw error;
+          }
+        }
+
+        analytics.capture(ANALYTICS_EVENTS.profile_step_completed, {
+          mbti: mbti || 'unknown',
+          region,
+          step: 3,
+        });
+
+        router.replace(ROUTES.home);
+      },
+      { tags: { screen: 'onboarding-step3', action: 'save' } },
+    )
+      .catch((error) => {
+        logger.captureException(error, {
+          tags: { screen: 'onboarding-step3', action: 'save-catch' },
+        });
+        setSaveFailed(true);
+      })
+      .finally(() => setIsSaving(false));
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">프로필 작성 (3/3) 신상 정보</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S04c
-        </Text>
-      </View>
+      <TopNav title="프로필 작성" onLeftPress={() => router.back()} />
+
+      <ScrollView className="flex-1 bg-bg">
+        <View className="px-[24px] pb-[128px] pt-[18px]">
+          <Text variant="meta" tone="ink-3">
+            취향 정보 · 3 / 3
+          </Text>
+          <ProgressBar value={1} className="mt-[10px]" />
+
+          <View className="mt-[30px]">
+            <Text variant="h1" className="text-[25px] leading-[33px]">
+              매칭에 쓸 정보를 골라주세요
+            </Text>
+            <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+              지역은 필수이고 MBTI는 선택이에요. 나중에 마이프로필에서 다시 정리할 수 있어요.
+            </Text>
+          </View>
+
+          <View className="mt-[30px]">
+            <Text variant="eyebrow" tone="ink-3">
+              MBTI
+            </Text>
+            <Select
+              value={mbti}
+              placeholder="선택해주세요"
+              className="mt-[8px]"
+              onPress={() => setMbti(mbti ? '' : 'ENFP')}
+            />
+            <OptionGrid options={MBTI_OPTIONS} selected={mbti} onSelect={setMbti} />
+          </View>
+
+          <View className="mt-[30px]">
+            <Text variant="eyebrow" tone="ink-3">
+              활동 지역
+            </Text>
+            <Select
+              value={region}
+              placeholder="활동 지역 선택"
+              className="mt-[8px]"
+              onPress={() => setRegion(region || '서울')}
+            />
+            <OptionGrid options={REGION_OPTIONS} selected={region} onSelect={setRegion} />
+          </View>
+
+          <Banner tone="info" icon="i" title="지역 안내">
+            활동 지역은 가까운 일상 반경의 매칭을 돕는 데 사용돼요.
+          </Banner>
+        </View>
+      </ScrollView>
+
+      <BottomActionBar fixed>
+        <Button
+          fullWidth
+          disabled={!region || isSaving}
+          onPress={handleFinish}
+          testID="onboarding-step3-finish"
+        >
+          {isSaving ? '저장 중' : '프로필 완료'}
+        </Button>
+      </BottomActionBar>
+
+      <AlertDialog
+        visible={saveFailed}
+        tone="warn"
+        icon="!"
+        title="프로필을 마무리하지 못했어요"
+        description="지역 저장 중 문제가 생겼어요. 잠시 후 다시 시도해주세요."
+        actions={[{ label: '확인', variant: 'ink', onPress: () => setSaveFailed(false) }]}
+        onDismiss={() => setSaveFailed(false)}
+      />
     </SafeAreaView>
   );
 }
