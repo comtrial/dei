@@ -15,6 +15,7 @@ import {
 import type { ChatMessage } from '@/lib/chat/message-merge';
 import type { RoomMemberLite } from '@/lib/chat/mention';
 import { filterCandidates, parseMentionQuery } from '@/lib/chat/mention';
+import { renderBodyWithMentions } from '@/lib/chat/renderBody';
 import { isSendable, MAX_BODY, messageLength } from '@/lib/chat/length';
 
 /**
@@ -34,7 +35,13 @@ export interface RoomChatViewProps {
   messages: ChatMessage[];
   members: RoomMemberLite[];
   input: string;
-  whisperTarget: { userId: string; name: string; avatarInitial?: string; avatarBg?: string } | null;
+  whisperTarget: {
+    userId: string;
+    name: string;
+    avatarInitial?: string;
+    avatarBg?: string;
+    photoUrl?: string;
+  } | null;
   onChangeInput: (t: string) => void;
   onSend: () => void;
   onRetry: (clientMsgId: string) => void;
@@ -61,10 +68,13 @@ export function RoomChatView(props: RoomChatViewProps) {
     props.onJump();
   }, [props]);
 
-  // 멘션 후보: @쿼리가 활성이고 귓속말 대상이 아직 없을 때만 노출. self/blocked/left 제외.
+  // 멘션 후보: @쿼리가 활성이면 노출(self/blocked/left 제외). 귓속말 대상이 이미
+  // 있어도(whisper-mode-2/3, 게이트 F) 본문에 새 @ 를 치면 '대상 교체' 모드로 후보를
+  // 다시 보여준다 — onSelectMention 이 setWhisperTarget 로 대상을 덮어쓰므로 어긋난
+  // @텍스트가 첫 대상에게 평문으로 박히는 누락을 막는다.
   const candidates: MentionCandidate[] = useMemo(() => {
     const mention = parseMentionQuery(input);
-    if (!mention.active || whisperTarget != null) return [];
+    if (!mention.active) return [];
     return filterCandidates(members, mention.query, {
       selfId,
       blockedIds: blockedIds ?? new Set<string>(),
@@ -74,7 +84,7 @@ export function RoomChatView(props: RoomChatViewProps) {
       avatarInitial: m.avatarInitial,
       avatarBg: m.avatarBg,
     }));
-  }, [input, members, selfId, blockedIds, whisperTarget]);
+  }, [input, members, selfId, blockedIds]);
 
   const sendable = isSendable(input) && !props.roomEnded;
 
@@ -102,20 +112,40 @@ export function RoomChatView(props: RoomChatViewProps) {
           renderItem={({ item }) => {
             const mine = item.userId === selfId;
             const member = members.find((mm) => mm.userId === item.userId);
-            const variant = item.whisperToUserId != null ? 'whisper' : mine ? 'me' : 'them';
+            const isWhisper = item.whisperToUserId != null;
+            const variant: 'them' | 'me' | 'whisper' = isWhisper ? 'whisper' : mine ? 'me' : 'them';
+
+            // body-render-9: 귓속말 발신자명 분기.
+            //  - 내가 보낸 귓속말(mine): 누구에게 보냈는지 보이게 '→ <대상>에게'(대상 멤버명).
+            //  - 받은 귓속말: '<발신자> → 나에게'. 내가 보낸 귓속말이 '나'로 안 뜨게.
+            let name = member?.name;
+            if (isWhisper) {
+              if (mine) {
+                const targetName =
+                  members.find((mm) => mm.userId === item.whisperToUserId)?.name ?? '상대';
+                name = `→ ${targetName}에게`;
+              } else {
+                name = `${member?.name ?? '익명'} → 나에게`;
+              }
+            }
+
             return (
               <View className="px-[14px] py-[3px]">
                 <ChatBubble
                   variant={variant}
-                  name={member?.name}
+                  mine={mine}
+                  name={name}
                   avatarInitial={member?.avatarInitial}
                   avatarBg={member?.avatarBg}
+                  avatarPhotoUrl={member?.photoUrl}
+                  onAvatarPress={() => props.onAvatarPress(item.userId)}
                   sendState={mine ? item.sendState : 'sent'}
                   onRetry={() => {
                     if (item.clientMsgId) props.onRetry(item.clientMsgId);
                   }}
                 >
-                  {item.body}
+                  {/* G-B: 본문 @토큰을 mention 노드로 강조(them/me/whisper·낙관 공통). */}
+                  {renderBodyWithMentions(item.body, { variant })}
                 </ChatBubble>
               </View>
             );
