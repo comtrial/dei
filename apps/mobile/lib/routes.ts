@@ -18,7 +18,8 @@ export const ROUTES = {
 
   // (auth) — 비로그인
   terms: '/(auth)/terms', // S02
-  verify: '/(auth)/verify', // S03 / S03f
+  verify: '/(auth)/verify', // S03
+  verifyFailed: '/(auth)/verify-failed', // S03f
 
   // (onboarding) — 가입 멀티스텝
   profileStep1: '/(onboarding)/profile/step1', // S04
@@ -44,6 +45,7 @@ type RouteKey =
   | 'splash'
   | 'terms'
   | 'verify'
+  | 'verifyFailed'
   | 'profileStep1'
   | 'profileStep2'
   | 'profileStep3'
