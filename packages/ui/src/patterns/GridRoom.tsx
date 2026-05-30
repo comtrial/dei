@@ -1,4 +1,4 @@
-import { forwardRef, type ComponentType, type ReactNode } from 'react';
+import { forwardRef, memo, useMemo, type ComponentType, type ReactNode } from 'react';
 import { Pressable, View, type ViewProps } from 'react-native';
 
 import { Text } from '../primitives/Text';
@@ -63,21 +63,15 @@ export interface GradientComponentProps {
   className?: string;
 }
 
-/** 영상이 올라온 셀. */
 export interface GridRoomFilledCell {
   kind?: 'filled';
-  /** 멤버 표시 이름(닉네임). */
   name: string;
-  /** presence avatar 이니셜(보통 이름 첫 글자). 미지정 시 name 첫 글자. */
   initial?: string;
-  /** 업로드 시각 라벨(예: '14:02'). */
   uploadTime: string;
-  /** 썸네일 placeholder 그라데이션 키. media 미지정 시 사용. 기본 'a'. */
   gradient?: CellGradient;
-  /** 실데이터 썸네일(이미지 등). 지정 시 그라데이션 대신 렌더. */
   media?: ReactNode;
-  /** 온라인 presence dot 표시. 기본 true. */
   present?: boolean;
+  videoId?: string;
 }
 
 /** 아직 영상을 안 올린 셀. */
@@ -102,21 +96,13 @@ export interface GridRoomTimeSlot {
 }
 
 export interface GridRoomProps extends ViewProps {
-  /** 시간대 strip 마커들. 미지정 시 strip 미렌더. */
   timeStrip?: GridRoomTimeSlot[];
-  /** strip 하단 스와이프 안내 문구. */
   timeHint?: string;
-  /** 8셀(또는 그 이하). 행 우선 배치. */
   cells: GridRoomCell[];
-  /**
-   * 그라데이션 placeholder 렌더 컴포넌트(expo-linear-gradient `LinearGradient`).
-   * 미주입 시 토큰 fallback(bg-bg-2) View 로 렌더 — DS 패키지를 Expo 에 비결합 유지.
-   */
   GradientComponent?: ComponentType<GradientComponentProps>;
-  /** 셀 본체 탭 → 영상 풀스크린. */
   onCellPress?: (cell: GridRoomCell, index: number) => void;
-  /** presence avatar 탭 → 멤버 프로필. */
   onAvatarPress?: (cell: GridRoomFilledCell, index: number) => void;
+  onTimeSlotPress?: (slotIndex: number, slot: GridRoomTimeSlot) => void;
   className?: string;
 }
 
@@ -163,8 +149,7 @@ function TimeChip({ slot }: { slot: GridRoomTimeSlot }) {
   );
 }
 
-/** 셀 좌상단 presence avatar(22px) — accent ring + accent presence dot. */
-function PresenceAvatar({
+const PresenceAvatar = memo(function PresenceAvatar({
   initial,
   present,
 }: {
@@ -173,7 +158,6 @@ function PresenceAvatar({
 }) {
   return (
     <View className="relative w-[22px] h-[22px]">
-      {/* HTML box-shadow accent ring → RN 은 border 로 등가 표현(토큰 border-accent). */}
       <View className="w-[22px] h-[22px] items-center justify-center rounded-full border-[1.5px] border-accent bg-[rgba(0,0,0,0.35)]">
         <Text className="text-2xs font-bold text-paper">{initial}</Text>
       </View>
@@ -182,10 +166,9 @@ function PresenceAvatar({
       ) : null}
     </View>
   );
-}
+});
 
-/** 그라데이션/미디어 썸네일 배경 채움. */
-function CellBackground({
+const CellBackground = memo(function CellBackground({
   cell,
   GradientComponent,
 }: {
@@ -206,62 +189,66 @@ function CellBackground({
       />
     );
   }
-  // GradientComponent 미주입(테스트/SSR) — 토큰 fallback 표면.
   return (
     <View testID="gridroom-cell-bg-fallback" className="absolute inset-0 bg-bg-2" />
   );
-}
+});
 
-function FilledCell({
-  cell,
-  index,
-  GradientComponent,
-  onCellPress,
-  onAvatarPress,
-}: {
-  cell: GridRoomFilledCell;
-  index: number;
-  GradientComponent?: ComponentType<GradientComponentProps>;
-  onCellPress?: GridRoomProps['onCellPress'];
-  onAvatarPress?: GridRoomProps['onAvatarPress'];
-}) {
-  const initial = cell.initial ?? cell.name.charAt(0);
-  return (
-    <Pressable
-      testID={`gridroom-cell-${index}`}
-      accessibilityRole="button"
-      accessibilityLabel={`${cell.name} 영상 — ${cell.uploadTime}`}
-      onPress={onCellPress ? () => onCellPress(cell, index) : undefined}
-      className="relative aspect-[3/4] overflow-hidden rounded-md"
-    >
-      <CellBackground cell={cell} GradientComponent={GradientComponent} />
-      {/* 좌상단 who: presence avatar + 닉 */}
+const FilledCell = memo(
+  function FilledCell({
+    cell,
+    index,
+    GradientComponent,
+    onCellPress,
+    onAvatarPress,
+  }: {
+    cell: GridRoomFilledCell;
+    index: number;
+    GradientComponent?: ComponentType<GradientComponentProps>;
+    onCellPress?: GridRoomProps['onCellPress'];
+    onAvatarPress?: GridRoomProps['onAvatarPress'];
+  }) {
+    const initial = cell.initial ?? cell.name.charAt(0);
+    return (
       <Pressable
-        testID={`gridroom-avatar-${index}`}
+        testID={`gridroom-cell-${index}`}
         accessibilityRole="button"
-        accessibilityLabel={`${cell.name} 프로필`}
-        onPress={
-          onAvatarPress ? () => onAvatarPress(cell, index) : undefined
-        }
-        className="absolute left-[8px] top-[8px] flex-row items-center gap-[5px]"
+        accessibilityLabel={`${cell.name} 영상 — ${cell.uploadTime}`}
+        onPress={onCellPress ? () => onCellPress(cell, index) : undefined}
+        className="relative aspect-[3/4] overflow-hidden rounded-md"
       >
-        <PresenceAvatar initial={initial} present={cell.present ?? true} />
-        <Text className="text-2xs font-bold text-paper">{cell.name}</Text>
-      </Pressable>
-      {/* 중앙 업로드 시각(hr) — HTML top:50%+translateY(-50%) 를 RN inset 센터링으로 등가 */}
-      <View className="absolute inset-0 items-center justify-center">
-        <Text
-          className="text-3xl font-black text-paper tracking-tight"
-          tabularNums
+        <CellBackground cell={cell} GradientComponent={GradientComponent} />
+        <Pressable
+          testID={`gridroom-avatar-${index}`}
+          accessibilityRole="button"
+          accessibilityLabel={`${cell.name} 프로필`}
+          onPress={
+            onAvatarPress ? () => onAvatarPress(cell, index) : undefined
+          }
+          className="absolute left-[8px] top-[8px] flex-row items-center gap-[5px]"
         >
-          {cell.uploadTime}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
+          <PresenceAvatar initial={initial} present={cell.present ?? true} />
+          <Text className="text-2xs font-bold text-paper">{cell.name}</Text>
+        </Pressable>
+        <View className="absolute inset-0 items-center justify-center">
+          <Text
+            className="text-3xl font-black text-paper tracking-tight"
+            tabularNums
+          >
+            {cell.uploadTime}
+          </Text>
+        </View>
+      </Pressable>
+    );
+  },
+  (prev, next) =>
+    prev.cell.videoId === next.cell.videoId &&
+    prev.cell.uploadTime === next.cell.uploadTime &&
+    prev.cell.present === next.cell.present &&
+    prev.index === next.index,
+);
 
-function EmptyCell({
+const EmptyCell = memo(function EmptyCell({
   cell,
   index,
   onCellPress,
@@ -286,7 +273,7 @@ function EmptyCell({
       </View>
     </Pressable>
   );
-}
+});
 
 export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
   {
@@ -296,17 +283,18 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
     GradientComponent,
     onCellPress,
     onAvatarPress,
+    onTimeSlotPress,
     className,
     ...rest
   },
   ref,
 ) {
+  const pairs = useMemo(() => chunkPairs(cells), [cells]);
+
   return (
     <View ref={ref} testID="gridroom" className={cn('bg-bg', className)} {...rest}>
-      {/* Timestrip */}
       {timeStrip && timeStrip.length > 0 ? (
         <View className="relative mx-[8px] px-0 pb-[14px] pt-[6px]">
-          {/* 좌우 chevron — HTML top:50%+translateY(-50%) 를 RN inset-y 센터링으로 등가 */}
           <View className="absolute left-[6px] top-[6px] bottom-[14px] justify-center">
             <Text className="text-2xs text-ink-4">‹</Text>
           </View>
@@ -315,7 +303,14 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
           </View>
           <View className="flex-row items-center justify-center gap-[6px]">
             {timeStrip.map((slot, i) => (
-              <TimeChip key={`${slot.label}-${i}`} slot={slot} />
+              <Pressable
+                key={`${slot.label}-${i}`}
+                onPress={onTimeSlotPress ? () => onTimeSlotPress(i, slot) : undefined}
+                accessibilityRole="button"
+                accessibilityLabel={`${slot.label} 시간대`}
+              >
+                <TimeChip slot={slot} />
+              </Pressable>
             ))}
           </View>
           {timeHint ? (
@@ -326,9 +321,8 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
         </View>
       ) : null}
 
-      {/* 8셀 그리드 — 2-col(1fr 1fr) gap 4px, padding 0 12px. 행 우선 배치. */}
       <View className="gap-[4px] px-[12px]">
-        {chunkPairs(cells).map((pair, rowIndex) => (
+        {pairs.map((pair, rowIndex) => (
           <View key={rowIndex} className="flex-row gap-[4px]">
             {pair.map(({ cell, index }) => (
               <View key={index} className="flex-1">
