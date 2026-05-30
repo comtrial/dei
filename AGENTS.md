@@ -34,5 +34,15 @@ CLI 를 쓰더라도 같은 규칙을 따라야 합니다 — 그래서 내용�
    우선/RPC 폴백)로 e2e 검증**. 실DB e2e 는 RPC 직접 호출만 하지 말고
    `supabase.functions.invoke` 경로도 포함. 자세히는 `CLAUDE.md` Testing
    규칙 8 (배포 산출물 체크리스트).
+8. **브랜치 / 커밋 / PR 규약** — 새 작업은 `git fetch` 후 최신 `origin/main`
+   에서 `feature/{담당자}/{YYYYMMDD}-{범위}` 형태로 새 브랜치 생성. 커밋은
+   작게·한 의도만. PR 본문에 **변경 내용 + 영향 범위 + 검증 결과 + AI 변경
+   파일 / 임의 판단** 필수. **사용자 명시 지시 없이 `git push` · `--force`
+   · `gh pr create/merge` 금지.** 자세한 규약은 `CLAUDE.md` 의 **Branch /
+   Commit / PR 규약 (CRITICAL)** 섹션.
+9. **"작업 완료" 와 "검증 완료" 분리.** 작업 완료 = 코드 구현 + 화면 연결 +
+   placeholder 제거. 검증 완료 = typecheck + lint + test + 필요 시 실DB / 실
+   Edge Function 까지. DB/Auth/Edge/결제/알림/Realtime 변경은 별도 체크리스트
+   (CLAUDE.md Testing 규칙 8·9).
 
 전체 규칙은 `CLAUDE.md` 를 읽어주세요.
