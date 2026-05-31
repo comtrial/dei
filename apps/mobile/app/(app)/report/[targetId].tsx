@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,16 +11,27 @@ import {
   Button,
   Checkbox,
   ChoiceList,
+  SettingsRow,
   Text,
   Textarea,
   TopNav,
 } from '@dei/ui';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
-import { isUuidLike, reportCategoryOptions } from '@/lib/b-flow';
-import { ROUTES } from '@/lib/routes';
+import {
+  isUuidLike,
+  reportCategoryOptions,
+  toInitial,
+} from '@/lib/b-flow';
+import { roomRoutes, ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
+
+type TargetMember = {
+  id: string;
+  initial: string;
+  nickname: string;
+};
 
 export default function ReportCategoryScreen() {
   const router = useRouter();
@@ -32,9 +43,68 @@ export default function ReportCategoryScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [complete, setComplete] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [targetMember, setTargetMember] = useState<TargetMember>({
+    id: '',
+    initial: '?',
+    nickname: '상대',
+  });
 
   const needsDetail = category === 'other';
-  const canSubmit = !!category && (!needsDetail || detail.trim().length > 0);
+  const targetIdValue = Array.isArray(targetId) ? targetId[0] : targetId;
+  const roomIdValue = Array.isArray(roomId) ? roomId[0] : roomId;
+  const canUseTarget = isUuidLike(targetIdValue);
+  const canSubmit = canUseTarget && !!category && (!needsDetail || detail.trim().length > 0);
+  const returnAfterComplete = useCallback(() => {
+    if (isUuidLike(roomIdValue)) {
+      router.replace(roomRoutes.index(roomIdValue));
+      return;
+    }
+
+    router.replace(ROUTES.home);
+  }, [roomIdValue, router]);
+
+  useEffect(() => {
+    analytics.capture(ANALYTICS_EVENTS.report_category_entered);
+  }, []);
+
+  useEffect(() => {
+    if (!isUuidLike(targetIdValue)) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'safety.load-report-target',
+      async () => {
+        const { data, error } = await supabase
+          .from('profile')
+          .select('nickname')
+          .eq('user_id', targetIdValue)
+          .maybeSingle();
+
+        if (error) {
+          throw error;
+        }
+
+        if (data?.nickname) {
+          setTargetMember({
+            id: targetIdValue,
+            initial: toInitial(data.nickname),
+            nickname: data.nickname,
+          });
+        }
+      },
+      { tags: { screen: 'report-category', action: 'load-target' } },
+    );
+  }, [targetIdValue]);
+
+  useEffect(() => {
+    if (!complete) {
+      return;
+    }
+
+    const timer = setTimeout(returnAfterComplete, 900);
+    return () => clearTimeout(timer);
+  }, [complete, returnAfterComplete]);
 
   const handleSubmit = () => {
     if (!canSubmit || isSubmitting) {
@@ -46,9 +116,9 @@ export default function ReportCategoryScreen() {
       async () => {
         setIsSubmitting(true);
 
-        if (user && isUuidLike(targetId)) {
-          const reportedUserId = (Array.isArray(targetId) ? targetId[0] : targetId) ?? '';
-          const activeRoomId = isUuidLike(roomId) ? (Array.isArray(roomId) ? roomId[0] : roomId) : null;
+        if (user && canUseTarget && targetIdValue) {
+          const reportedUserId = targetIdValue;
+          const activeRoomId = isUuidLike(roomIdValue) ? roomIdValue : null;
 
           const { error: reportError } = await supabase.from('report').insert({
             category: category!,
@@ -63,11 +133,15 @@ export default function ReportCategoryScreen() {
           }
 
           if (blockToo) {
-            const { error: blockError } = await supabase.from('block').insert({
-              blocked_user_id: reportedUserId,
-              blocker_user_id: user.id,
-              room_id: activeRoomId,
-            });
+            const { error: blockError } = await supabase.from('block').upsert(
+              {
+                blocked_user_id: reportedUserId,
+                blocker_user_id: user.id,
+                room_id: activeRoomId,
+                unblocked_at: null,
+              },
+              { onConflict: 'blocker_user_id,blocked_user_id' },
+            );
 
             if (blockError) {
               throw blockError;
@@ -98,11 +172,18 @@ export default function ReportCategoryScreen() {
 
       <ScrollView className="flex-1 bg-bg">
         <View className="px-[24px] pb-[128px] pt-[22px]">
+          <SettingsRow
+            variant="member"
+            label={targetMember.nickname}
+            initial={targetMember.initial}
+            className="mb-[22px] px-0"
+          />
+
           <Text variant="h1" className="text-[25px] leading-[33px]">
-            신고 사유를 선택해주세요
+            어떤 점이 불편했나요?
           </Text>
           <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-            선택한 내용은 상대에게 공개되지 않고 운영팀 검토 큐로만 전달돼요.
+            신고 시 운영팀이 검토합니다.
           </Text>
 
           <ChoiceList
@@ -125,17 +206,6 @@ export default function ReportCategoryScreen() {
             className="mt-[24px]"
           />
 
-          {category && category !== 'other' ? (
-            <Textarea
-              value={detail}
-              onChangeText={setDetail}
-              maxLength={300}
-              showCount
-              placeholder="추가 설명이 있다면 적어주세요"
-              className="mt-[12px]"
-            />
-          ) : null}
-
           <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{ checked: blockToo }}
@@ -148,8 +218,8 @@ export default function ReportCategoryScreen() {
             </Text>
           </Pressable>
 
-          <Banner tone="info" icon="i" title="자동 정지는 하지 않아요" className="mt-[22px]">
-            계정 정지는 자동 처리하지 않고 운영팀 검토 후 판단합니다.
+          <Banner tone="info" icon="i" title="무알림 정책" className="mt-[22px]">
+            상대에게 알림이 가지 않아요. 조회 기록도 남지 않습니다.
           </Banner>
         </View>
       </ScrollView>
@@ -161,16 +231,6 @@ export default function ReportCategoryScreen() {
       </BottomActionBar>
 
       <AlertDialog
-        visible={complete}
-        tone="info"
-        icon="i"
-        title="신고를 접수했어요"
-        description="운영팀이 내용을 확인할게요."
-        actions={[{ label: '확인', variant: 'ink', onPress: () => router.replace(ROUTES.home) }]}
-        onDismiss={() => router.replace(ROUTES.home)}
-      />
-
-      <AlertDialog
         visible={failed}
         tone="warn"
         icon="!"
@@ -179,6 +239,16 @@ export default function ReportCategoryScreen() {
         actions={[{ label: '확인', variant: 'ink', onPress: () => setFailed(false) }]}
         onDismiss={() => setFailed(false)}
       />
+
+      {complete ? (
+        <View className="absolute bottom-[34px] left-0 right-0 items-center px-[24px]">
+          <View className="rounded-full bg-ink px-[16px] py-[10px]">
+            <Text className="text-center text-[12.5px] font-bold text-white">
+              신고 접수됐어요. 운영팀이 검토합니다.
+            </Text>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

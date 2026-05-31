@@ -7,22 +7,19 @@ import { logger } from '@dei/shared';
 import {
   AlertDialog,
   Banner,
-  BottomActionBar,
+  BottomSheet,
   ChoiceList,
   SlideToConfirm,
   Text,
   Textarea,
-  TopNav,
 } from '@dei/ui';
 
 import { isUuidLike, LEAVE_REASONS } from '@/lib/b-flow';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/providers/auth-provider';
 
 export default function RoomLeaveConfirmScreen() {
   const router = useRouter();
-  const { user } = useAuth();
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
   const [reason, setReason] = useState<string | null>(null);
   const [detail, setDetail] = useState('');
@@ -41,12 +38,15 @@ export default function RoomLeaveConfirmScreen() {
       async () => {
         setIsLeaving(true);
 
-        if (user && isUuidLike(roomId)) {
-          const { error } = await supabase
-            .from('room_member')
-            .update({ left_at: new Date().toISOString(), status: 'left' })
-            .eq('room_id', Array.isArray(roomId) ? roomId[0] : roomId)
-            .eq('user_id', user.id);
+        if (isUuidLike(roomId)) {
+          const roomIdValue = Array.isArray(roomId) ? roomId[0] : roomId;
+          const { error } = await supabase.functions.invoke('leave-room', {
+            body: {
+              detail: detail.trim() || undefined,
+              reason,
+              roomId: roomIdValue,
+            },
+          });
 
           if (error) {
             throw error;
@@ -68,19 +68,23 @@ export default function RoomLeaveConfirmScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <TopNav title="방 나가기" onLeftPress={() => router.back()} />
+      <View className="flex-1 items-center justify-center px-[24px]">
+        <Text className="text-center text-[14px] font-semibold text-ink-3">
+          방 화면
+        </Text>
+      </View>
 
-      <ScrollView className="flex-1 bg-bg">
-        <View className="px-[24px] pb-[128px] pt-[22px]">
-          <Text variant="h1" className="text-[25px] leading-[33px]">
-            정말 방을 나갈까요?
+      <BottomSheet visible heightPct={78} onClose={() => router.back()}>
+        <ScrollView className="flex-1 px-[24px] pt-[14px]">
+          <Text variant="h2" className="text-center text-[22px] font-extrabold">
+            정말 방을 나가시겠어요?
           </Text>
-          <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-            나가면 이 방의 대화와 영상 흐름으로 다시 돌아올 수 없어요.
+          <Text className="mt-[8px] text-center text-[13.5px] leading-[20px] text-ink-3">
+            한 번 나가면 같은 방으로 돌아올 수 없어요.
           </Text>
 
-          <Banner tone="danger" icon="!" title="24시간 재매칭 제한">
-            방을 나가면 일정 시간 동안 새 매칭이 제한될 수 있어요.
+          <Banner tone="danger" icon="!" title="다음 매칭은 24시간 후부터 가능해요">
+            바로 다시 매칭하려면 부스터가 필요해요. 마지막 멤버가 나가면 방의 모든 영상·채팅이 영구 소멸돼요.
           </Banner>
 
           <ChoiceList
@@ -99,20 +103,26 @@ export default function RoomLeaveConfirmScreen() {
                   />
                 ) : undefined,
             }))}
-            className="mt-[24px]"
+            className="mt-[22px]"
           />
-        </View>
-      </ScrollView>
 
-      <BottomActionBar fixed>
-        <SlideToConfirm
-          tone="ink"
-          disabled={!canLeave || isLeaving}
-          onConfirm={handleLeave}
-          label={isLeaving ? '나가는 중' : '길게 눌러 방 나가기'}
-          className={!canLeave || isLeaving ? 'opacity-40' : undefined}
-        />
-      </BottomActionBar>
+          {reason === 'bad_member' ? (
+            <Banner tone="info" icon="i" title="멤버만 따로 처리할 수도 있어요">
+              차단·신고로 그 멤버만 처리할 수 있어요. 그래도 방 나가기는 계속 진행할 수 있어요.
+            </Banner>
+          ) : null}
+
+          <View className="pb-[22px] pt-[18px]">
+            <SlideToConfirm
+              tone="ink"
+              disabled={!canLeave || isLeaving}
+              onConfirm={handleLeave}
+              label={isLeaving ? '나가는 중' : '밀어서 방 나가기'}
+              className={!canLeave || isLeaving ? 'opacity-40' : undefined}
+            />
+          </View>
+        </ScrollView>
+      </BottomSheet>
 
       <AlertDialog
         visible={failed}

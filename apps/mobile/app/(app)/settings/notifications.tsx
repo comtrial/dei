@@ -4,25 +4,18 @@ import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { analytics, logger, POLICY } from '@dei/shared';
-import { AlertDialog, Banner, SettingsRow, TopNav } from '@dei/ui';
+import { AlertDialog, Banner, SettingsRow, Text, TopNav } from '@dei/ui';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
-import { openSystemSettings } from '@/lib/permissions';
 import { useAuth } from '@/providers/auth-provider';
 import { supabase } from '@/lib/supabase';
 
 type NotificationSettings = {
-  chat_mention: boolean;
-  match_alert: boolean;
   push_enabled: boolean;
-  upload_reminder: boolean;
 };
 
 const DEFAULT_SETTINGS: NotificationSettings = {
-  chat_mention: true,
-  match_alert: true,
   push_enabled: true,
-  upload_reminder: true,
 };
 
 export default function NotificationSettingsScreen() {
@@ -43,7 +36,7 @@ export default function NotificationSettingsScreen() {
       async () => {
         const { data, error } = await supabase
           .from('notification_setting')
-          .select('chat_mention, match_alert, push_enabled, upload_reminder')
+          .select('push_enabled')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -59,8 +52,8 @@ export default function NotificationSettingsScreen() {
     );
   }, [user]);
 
-  const updateSetting = (key: keyof NotificationSettings, value: boolean) => {
-    setSettings((current) => ({ ...current, [key]: value }));
+  const updateMasterSetting = (value: boolean) => {
+    setSettings({ push_enabled: value });
 
     void logger.withErrorCapture(
       'notifications.update-setting',
@@ -69,17 +62,21 @@ export default function NotificationSettingsScreen() {
           return;
         }
 
-        const next = { ...settings, [key]: value };
         const { error } = await supabase
           .from('notification_setting')
-          .upsert({ ...next, user_id: user.id }, { onConflict: 'user_id' });
+          .upsert({
+            chat_mention: value,
+            match_alert: value,
+            push_enabled: value,
+            upload_reminder: value,
+            user_id: user.id,
+          }, { onConflict: 'user_id' });
 
         if (error) {
           throw error;
         }
 
         analytics.capture(ANALYTICS_EVENTS.notification_master_toggled, {
-          key,
           value,
         });
       },
@@ -88,57 +85,41 @@ export default function NotificationSettingsScreen() {
       logger.captureException(error, {
         tags: { screen: 'settings-notifications', action: 'update-catch' },
       });
-      setSettings((current) => ({ ...current, [key]: !value }));
+      setSettings({ push_enabled: !value });
       setFailed(true);
     });
   };
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <TopNav title="알림 설정" onLeftPress={() => router.back()} />
+      <TopNav title="알림" onLeftPress={() => router.back()} />
 
       <ScrollView className="flex-1 bg-bg">
         <View className="pb-[42px] pt-[18px]">
           <SettingsRow
             variant="master"
-            label="푸시 알림"
-            value="앱 밖에서도 매칭과 방 소식을 받을게요."
+            label="알림 받기"
+            value="OFF 시 매칭 결과·메시지·멘션을 받지 못해요"
             toggleValue={settings.push_enabled}
-            onToggleChange={(value) => updateSetting('push_enabled', value)}
+            onToggleChange={updateMasterSetting}
           />
-          <SettingsRow
-            variant="master"
-            label="매칭 완료"
-            value="새 방이 열리면 알려드려요."
-            toggleValue={settings.match_alert}
-            onToggleChange={(value) => updateSetting('match_alert', value)}
-          />
-          <SettingsRow
-            variant="master"
-            label="영상 리마인드"
-            value="오늘의 3초를 놓치지 않게 알려드려요."
-            toggleValue={settings.upload_reminder}
-            onToggleChange={(value) => updateSetting('upload_reminder', value)}
-          />
-          <SettingsRow
-            variant="master"
-            label="멘션"
-            value="방에서 나를 부르면 알려드려요."
-            toggleValue={settings.chat_mention}
-            onToggleChange={(value) => updateSetting('chat_mention', value)}
-          />
+          <Text className="px-[24px] pt-[10px] text-[11.5px] leading-[17px] text-ink-3">
+            앱 안 알림 설정이에요. OS 권한이 꺼져 있으면 시스템 설정에서 켜야 해요.
+          </Text>
 
           <View className="px-[24px] pt-[22px]">
+            {!settings.push_enabled ? (
+              <Banner tone="warn" icon="!" title="매칭을 시작할 수 없어요">
+                알림 받기를 켜야 매칭 성사와 방 알림을 받을 수 있어요.
+              </Banner>
+            ) : null}
             <Banner
               tone="info"
-              icon="i"
-              title="조용한 시간"
-              cta="OS 설정"
-              onCtaPress={() => {
-                void openSystemSettings();
-              }}
+              icon="🌙"
+              title="새벽 알림 자동 차단"
+              className={!settings.push_enabled ? 'mt-[12px]' : undefined}
             >
-              {POLICY.notifications.quietHours.startHourKst}시부터 {POLICY.notifications.quietHours.endHourKst}시까지 정기 알림은 보내지 않아요.
+              {POLICY.notifications.quietHours.startHourKst}~{POLICY.notifications.quietHours.endHourKst}시에는 알림이 자동으로 가지 않아요. 별도 설정 불필요.
             </Banner>
           </View>
         </View>

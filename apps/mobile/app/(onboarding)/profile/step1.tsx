@@ -9,35 +9,56 @@ import {
   Badge,
   BottomActionBar,
   Button,
+  ChoiceList,
   Input,
   ProgressBar,
   Text,
 } from '@dei/ui';
 
 import {
-  birthYearLabel,
-  genderLabel,
+  birthDateLabel,
+  GENDER_OPTIONS,
   NICKNAME_MAX_LENGTH,
   normalizeNickname,
+  type ProfileGender,
   validateNickname,
   type NicknameValidation,
 } from '@/lib/b-flow';
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { hasVerifiedIdentity } from '@/lib/auth-flow';
+import {
+  repairProfileIdentityFromVerification,
+  VERIFIED_IDENTITY_SELECT,
+} from '@/lib/identity-profile';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
+
+function birthDateLongLabel(birthDate?: string | null, birthYear?: number | null) {
+  if (!birthDate) {
+    return birthDateLabel(birthDate, birthYear);
+  }
+
+  const [year, month, day] = birthDate.split('-');
+  if (!year || !month || !day) {
+    return birthDateLabel(birthDate, birthYear);
+  }
+
+  return `${year}년 ${month}월 ${day}일`;
+}
 
 /**
  * S04 — 프로필 작성 (1/3) 기본 정보
  * ==================================================================
  * 담당자: B
  * 화면 목적: 본인인증 통과 직후 첫 진입. 멀티스텝 3단계 중 1단계 = 기본
- *           정보(닉네임). 성별·생년월일은 본인인증 결과로 자동 채워지고 lock.
+ *           정보(닉네임·성별 선택). 생년월일은 본인인증 결과로 자동 채워지고 lock.
  * 의존 DS 컴포넌트: Text(헤딩/서브카피/카운트/검사메시지) · ProgressBar(스텝 33%
  *   진행바, S04/S04b/S04c 공유) · Input(닉네임 입력 필드) · Spinner(검사 중 상태)
- *   · Input/Select(성별·생년월일 lock 필드 — locked 변형) · Badge(🔒 본인인증 자동
+ *   · ChoiceList(성별 선택) · Input(생년월일 lock 필드 — locked 변형) · Badge(🔒 본인인증 자동
  *   인라인 잠금) · Button(BottomFixedCTA '다음 (2/3)', 검사 통과 시에만 활성)  [@dei/ui]
- * 의존 데이터: 본인인증 결과 성별·생년월일(S03 root of trust, lock) / 닉네임 중복
+ * 의존 데이터: 본인인증 결과 생년월일(S03 root of trust, lock) / 성별 직접 선택 /
+ *   닉네임 중복
  *   조회(profiles.nickname unique, 0.5초 debounce) / 닉네임 blocklist(욕설 필터 +
  *   운영팀 수동) / 온보딩 진행 단계 저장(재진입 복원)
  * 발생 이벤트(PostHog): profile_step_completed(F24 멀티스텝 3단계 start) ·
@@ -46,25 +67,26 @@ import { useAuth } from '@/providers/auth-provider';
  *   프로필 step1 저장(닉네임 + 본인인증 자동필드 commit) / 온보딩 단계 진행상태 저장
  * 정책 의존(L2): 닉네임 정책(한글·영문·숫자, 특수문자·이모지 금지, 1~10자) /
  *   닉네임 = 시스템 unique key(PRD §6 친구 초대 기반) / 닉네임 변경 30일 1회 throttle /
- *   성별·생년월일 변경 불가(본인인증 lock)
+ *   생년월일 변경 불가(본인인증 lock) / 성별은 매칭용 프로필 값으로 직접 선택
  * 와이어프레임 참조: all-screens S04
  *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(진행바·닉네임 입력+debounce 검사·lock 필드 2개·하단 고정 CTA)은
- *    owner 가 채운다.
+ * 현재 구현: 본인인증 lock 필드 조회, 닉네임 형식/중복 debounce 검사,
+ * step1 저장과 다음 단계 라우팅을 실제 Supabase 경로로 처리한다.
  */
 export default function ProfileStep1Screen() {
   const router = useRouter();
   const { user } = useAuth();
   const [nickname, setNickname] = useState('');
+  const [gender, setGender] = useState<ProfileGender | ''>('');
+  const [originalNickname, setOriginalNickname] = useState<string | null>(null);
   const [validation, setValidation] = useState<NicknameValidation>({
     state: 'idle',
     message: '한글, 영문, 숫자만 1~10자로 입력해주세요.',
   });
-  const [lockedProfile, setLockedProfile] = useState<{
+  const [verifiedProfile, setVerifiedProfile] = useState<{
+    birthDate: string | null;
     birthYear: number | null;
-    gender: string | null;
-  }>({ birthYear: null, gender: null });
+  }>({ birthDate: null, birthYear: null });
   const [isSaving, setIsSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
@@ -78,27 +100,58 @@ export default function ProfileStep1Screen() {
     void logger.withErrorCapture(
       'onboarding.step1.load-profile',
       async () => {
-        const { data, error } = await supabase
-          .from('profile')
-          .select('birth_year, gender, nickname')
-          .eq('user_id', user.id)
-          .maybeSingle();
+        const [
+          { data, error },
+          { data: verifiedIdentity, error: verifiedIdentityError },
+        ] = await Promise.all([
+          supabase
+            .from('profile')
+            .select('birth_date, birth_year, gender, is_adult, nickname, nickname_changed_at')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          supabase
+            .from('auth_verification')
+            .select(VERIFIED_IDENTITY_SELECT)
+            .eq('user_id', user.id)
+            .eq('provider', 'portone')
+            .eq('status', 'verified')
+            .order('verified_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
 
         if (error) {
           throw error;
         }
 
-        if (!mounted || !data) {
+        if (verifiedIdentityError) {
+          throw verifiedIdentityError;
+        }
+
+        if (!mounted) {
           return;
         }
 
-        setLockedProfile({
-          birthYear: data.birth_year,
-          gender: data.gender,
+        const profile = await repairProfileIdentityFromVerification({
+          profile: data,
+          userId: user.id,
+          verification: verifiedIdentity,
         });
 
-        if (data.nickname) {
-          setNickname(data.nickname);
+        if (!hasVerifiedIdentity(profile)) {
+          router.replace(ROUTES.terms);
+          return;
+        }
+
+        setVerifiedProfile({
+          birthDate: profile.birth_date ?? null,
+          birthYear: profile.birth_year,
+        });
+        setGender(profile.gender === 'male' || profile.gender === 'female' ? profile.gender : '');
+
+        if (profile.nickname) {
+          setNickname(profile.nickname);
+          setOriginalNickname(profile.nickname);
         }
       },
       { tags: { screen: 'onboarding-step1' } },
@@ -107,7 +160,7 @@ export default function ProfileStep1Screen() {
     return () => {
       mounted = false;
     };
-  }, [user]);
+  }, [router, user]);
 
   useEffect(() => {
     const base = validateNickname(nickname);
@@ -149,8 +202,8 @@ export default function ProfileStep1Screen() {
         { tags: { screen: 'onboarding-step1', action: 'nickname-check' } },
       ).catch(() => {
         setValidation({
-          state: 'valid',
-          message: '형식은 좋아요. 저장 시 한 번 더 확인할게요.',
+          state: 'invalid',
+          message: '닉네임 확인에 실패했어요. 잠시 후 다시 시도해주세요.',
         });
       });
     }, 500);
@@ -158,12 +211,20 @@ export default function ProfileStep1Screen() {
     return () => clearTimeout(timer);
   }, [nickname, user]);
 
-  const canContinue = validation.state === 'valid' && normalizeNickname(nickname).length > 0;
+  const canContinue =
+    validation.state === 'valid'
+    && normalizeNickname(nickname).length > 0
+    && Boolean(gender);
   const helperClassName = useMemo(() => {
-    if (validation.state === 'valid') return 'text-accent';
+    if (validation.state === 'valid') return 'text-success';
     if (validation.state === 'invalid') return 'text-danger';
     return undefined;
   }, [validation.state]);
+  const helperMessage = useMemo(() => {
+    if (validation.state === 'valid') return `✓ ${validation.message}`;
+    if (validation.state === 'invalid') return `✗ ${validation.message}`;
+    return validation.message;
+  }, [validation.message, validation.state]);
 
   const handleNext = () => {
     if (!canContinue || isSaving) {
@@ -175,11 +236,17 @@ export default function ProfileStep1Screen() {
       async () => {
         setIsSaving(true);
         const normalized = normalizeNickname(nickname);
+        const selectedGender = gender || null;
 
-        if (user) {
+        if (user && selectedGender) {
+          const nicknameChanged = normalized !== normalizeNickname(originalNickname ?? '');
           const { error } = await supabase
             .from('profile')
-            .update({ nickname: normalized })
+            .update({
+              gender: selectedGender,
+              nickname: normalized,
+              ...(nicknameChanged ? { nickname_changed_at: new Date().toISOString() } : {}),
+            })
             .eq('user_id', user.id);
 
           if (error) {
@@ -214,10 +281,10 @@ export default function ProfileStep1Screen() {
 
         <View className="mt-[34px]">
           <Text variant="h1" className="text-[26px] leading-[34px]">
-            닉네임을 알려주세요
+            닉네임과 성별을{'\n'}알려주세요
           </Text>
           <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-            매칭 후에도 변경 가능해요. 단, 변경은 30일에 한 번만 가능해요.
+            성별은 매칭에 사용돼요
           </Text>
         </View>
 
@@ -229,11 +296,28 @@ export default function ProfileStep1Screen() {
           labelAccessory={`${normalizeNickname(nickname).length} / ${NICKNAME_MAX_LENGTH}`}
           placeholder="예: 하루산책"
           state={validation.state === 'invalid' ? 'error' : 'default'}
-          helper={validation.message}
+          helper={helperMessage}
           helperClassName={helperClassName}
           className="mt-[30px]"
           testID="onboarding-nickname-input"
         />
+
+        <View className="mt-[24px]">
+          <Text variant="eyebrow" tone="ink-3">
+            성별 선택
+          </Text>
+          <ChoiceList
+            tone="accent"
+            className="mt-[10px]"
+            value={gender}
+            onChange={(value) => {
+              if (value === 'male' || value === 'female') {
+                setGender(value);
+              }
+            }}
+            options={GENDER_OPTIONS}
+          />
+        </View>
 
         <View className="mt-[28px] gap-[12px]">
           <Text variant="eyebrow" tone="ink-3">
@@ -242,19 +326,12 @@ export default function ProfileStep1Screen() {
           <Input
             state="locked"
             readonly
-            label="성별"
-            labelAccessory="본인인증 자동"
-            value={genderLabel(lockedProfile.gender)}
-          />
-          <Input
-            state="locked"
-            readonly
-            label="생년"
-            labelAccessory="본인인증 자동"
-            value={birthYearLabel(lockedProfile.birthYear)}
+            label="생년월일"
+            labelAccessory="🔒 본인인증 자동"
+            value={birthDateLongLabel(verifiedProfile.birthDate, verifiedProfile.birthYear)}
           />
           <Badge variant="required" tone="info">
-            성별과 생년은 직접 수정할 수 없어요.
+            생년월일은 본인인증 기준으로만 사용돼요.
           </Badge>
         </View>
       </View>

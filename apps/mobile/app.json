@@ -12,7 +12,9 @@
       "bundleIdentifier": "kr.cmdsoftware.dei",
       "supportsTablet": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "프로필 사진과 일상 공유 영상을 촬영하기 위해 카메라를 사용합니다.",
+        "NSLocationWhenInUseUsageDescription": "위치정보 동의 시 활동 지역을 자동으로 채우기 위해 현재 위치를 확인합니다."
       }
     },
     "android": {

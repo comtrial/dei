@@ -3,6 +3,7 @@ import { POLICY, REPORT_CATEGORIES } from '@dei/shared';
 export const NICKNAME_MAX_LENGTH = 10;
 export const PROFILE_BIO_MAX_LENGTH = 60;
 export const SUPPORT_MESSAGE_MAX_LENGTH = 500;
+export const TERMS_VERSION = '2026-05-30';
 export const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -45,41 +46,24 @@ export const REGION_OPTIONS = [
   '제주',
 ] as const;
 
-export const MOCK_SELF_PROFILE = {
-  bio: '오늘은 커피 들고 산책 중',
-  birthYear: 2000,
-  gender: 'female',
-  initial: '나',
-  mbti: 'ENFP',
-  nickname: '하루산책',
-  passCount: 0,
-  region: '서울',
-} as const;
-
-export const MOCK_TARGET_MEMBER = {
-  id: 'target-member-preview',
-  initial: '도',
-  nickname: '도윤',
-  sub: '같은 방 멤버',
-} as const;
-
-export const MOCK_SEARCH_RESULTS = [
-  { id: 'friend-1', initial: '민', nickname: '민지', status: 'available' },
-  { id: 'friend-2', initial: '준', nickname: '준호', status: 'busy' },
-  { id: 'friend-3', initial: '서', nickname: '서연', status: 'available' },
+export const GENDER_OPTIONS = [
+  { label: '여성', value: 'female' },
+  { label: '남성', value: 'male' },
 ] as const;
 
+export type ProfileGender = (typeof GENDER_OPTIONS)[number]['value'];
+
 export const LEAVE_REASONS = [
-  { label: '분위기가 맞지 않았어요', value: 'mood' },
+  { label: '분위기가 맞지 않아요', value: 'mood' },
   { label: '실수로 들어왔어요', value: 'mistake' },
   { label: '불쾌한 멤버가 있어요', value: 'bad_member' },
   { label: '기타', value: 'other' },
 ] as const;
 
 export const WITHDRAW_REASONS = [
-  { label: '자주 보이는 상대가 있어요', value: 'repeat_matches' },
-  { label: '매칭이 잘 되지 않아요', value: 'low_match' },
-  { label: '다른 앱을 사용할게요', value: 'another_app' },
+  { label: '자주 보이는 상대가 부담돼요', value: 'repeat_matches' },
+  { label: '매칭이 잘 안 돼요', value: 'low_match' },
+  { label: '다른 앱을 써요', value: 'another_app' },
   { label: '잠시 쉬고 싶어요', value: 'break' },
   { label: '기타', value: 'other' },
 ] as const;
@@ -91,24 +75,36 @@ export const SUPPORT_CATEGORIES = [
   '기타',
 ] as const;
 
+const PAYMENT_PRICE_LABELS = {
+  pack1: process.env.EXPO_PUBLIC_INSTANT_REMATCH_PRICE_1_LABEL ?? '스토어 가격',
+  pack3: process.env.EXPO_PUBLIC_INSTANT_REMATCH_PRICE_3_LABEL ?? '스토어 가격',
+  pack10: process.env.EXPO_PUBLIC_INSTANT_REMATCH_PRICE_10_LABEL ?? '스토어 가격',
+} as const;
+
 export const PAYMENT_PACKS = [
   {
+    badge: null,
     id: POLICY.payment.instantRematchProductId,
     label: '1회',
-    sub: '지금 바로 매칭 제한을 한 번 면제',
-    badge: '기본',
+    price: PAYMENT_PRICE_LABELS.pack1,
+    sub: '한 번의 바로 매치',
+    unit: null,
   },
   {
+    badge: '12% 할인',
     id: `${POLICY.payment.instantRematchProductId}_pack3`,
     label: '3회 팩',
-    sub: '스토어 상품 가격으로 결제 전 최종 확인',
-    badge: '팩',
+    price: PAYMENT_PRICE_LABELS.pack3,
+    sub: '바로 매치 3회 묶음',
+    unit: '3',
   },
   {
+    badge: '29% 할인',
     id: `${POLICY.payment.instantRematchProductId}_pack10`,
     label: '10회 팩',
-    sub: '스토어 가격 기준으로 결제 전 최종 확인',
-    badge: '팩',
+    price: PAYMENT_PRICE_LABELS.pack10,
+    sub: '바로 매치 10회 묶음',
+    unit: '10',
   },
 ] as const;
 
@@ -147,15 +143,23 @@ export function validateNickname(value: string): NicknameValidation {
 export function genderLabel(gender?: string | null) {
   if (gender === 'male') return '남성';
   if (gender === 'female') return '여성';
-  return '본인인증 완료';
+  return '성별 미제공';
 }
 
 export function birthYearLabel(birthYear?: number | null) {
-  return birthYear ? `${birthYear}년생` : `${POLICY.identity.minAge}세 이상 확인`;
+  return birthYear ? `${birthYear}년생` : '본인인증 필요';
+}
+
+export function birthDateLabel(birthDate?: string | null, birthYear?: number | null) {
+  if (birthDate) {
+    return birthDate.replaceAll('-', '.');
+  }
+
+  return birthYearLabel(birthYear);
 }
 
 export function ageLabel(birthYear?: number | null) {
-  if (!birthYear) return `${POLICY.identity.minAge}세 이상`;
+  if (!birthYear) return '나이 미확인';
 
   const now = new Date();
   return `${now.getFullYear() - birthYear + 1}세`;

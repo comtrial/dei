@@ -1,14 +1,16 @@
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { analytics, logger } from '@dei/shared';
 import {
   AlertDialog,
-  Banner,
+  BottomSheet,
   BottomActionBar,
   Button,
+  ChoiceList,
   ProgressBar,
   Select,
   Text,
@@ -16,35 +18,49 @@ import {
 } from '@dei/ui';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
-import { MBTI_OPTIONS, REGION_OPTIONS } from '@/lib/b-flow';
+import { MBTI_OPTIONS, REGION_OPTIONS, TERMS_VERSION } from '@/lib/b-flow';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 
-function OptionGrid({
-  options,
-  selected,
-  onSelect,
-}: {
-  options: readonly string[];
-  selected: string;
-  onSelect: (value: string) => void;
-}) {
-  return (
-    <View className="mt-[10px] flex-row flex-wrap gap-[8px]">
-      {options.map((option) => (
-        <Button
-          key={option}
-          size="sm"
-          variant={selected === option ? 'ink' : 'secondary'}
-          onPress={() => onSelect(option)}
-          className="px-[12px] py-[10px]"
-        >
-          {option}
-        </Button>
-      ))}
-    </View>
-  );
+type Picker = 'mbti' | 'region' | null;
+
+const REGION_ALIASES: Record<(typeof REGION_OPTIONS)[number], string[]> = {
+  강원: ['강원', 'Gangwon'],
+  경기: ['경기', 'Gyeonggi'],
+  경남: ['경남', 'Gyeongnam', 'South Gyeongsang'],
+  경북: ['경북', 'Gyeongbuk', 'North Gyeongsang'],
+  광주: ['광주', 'Gwangju'],
+  대구: ['대구', 'Daegu'],
+  대전: ['대전', 'Daejeon'],
+  부산: ['부산', 'Busan'],
+  서울: ['서울', 'Seoul'],
+  세종: ['세종', 'Sejong'],
+  울산: ['울산', 'Ulsan'],
+  인천: ['인천', 'Incheon'],
+  전남: ['전남', 'Jeonnam', 'South Jeolla'],
+  전북: ['전북', 'Jeonbuk', 'North Jeolla'],
+  제주: ['제주', 'Jeju'],
+  충남: ['충남', 'Chungnam', 'South Chungcheong'],
+  충북: ['충북', 'Chungbuk', 'North Chungcheong'],
+};
+
+function inferRegionFromAddress(address?: Location.LocationGeocodedAddress) {
+  const searchable = [
+    address?.city,
+    address?.district,
+    address?.isoCountryCode,
+    address?.name,
+    address?.region,
+    address?.street,
+    address?.subregion,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(' ');
+
+  return REGION_OPTIONS.find((regionOption) =>
+    REGION_ALIASES[regionOption].some((alias) => searchable.includes(alias)),
+  ) ?? null;
 }
 
 export default function ProfilePreferenceStepScreen() {
@@ -52,11 +68,62 @@ export default function ProfilePreferenceStepScreen() {
   const { user } = useAuth();
   const [mbti, setMbti] = useState('');
   const [region, setRegion] = useState('');
+  const [picker, setPicker] = useState<Picker>(null);
+  const [isLocating, setIsLocating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'onboarding.step3.auto-region',
+      async () => {
+        const { data: termsAgreement, error: termsError } = await supabase
+          .from('terms_agreement')
+          .select('location_collection')
+          .eq('user_id', user.id)
+          .eq('terms_version', TERMS_VERSION)
+          .maybeSingle();
+
+        if (termsError) {
+          throw termsError;
+        }
+
+        if (!termsAgreement?.location_collection) {
+          return;
+        }
+
+        setIsLocating(true);
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status !== Location.PermissionStatus.GRANTED) {
+          return;
+        }
+
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const [address] = await Location.reverseGeocodeAsync(position.coords);
+        const nextRegion = inferRegionFromAddress(address);
+
+        if (nextRegion) {
+          setRegion((current) => current || nextRegion);
+        }
+      },
+      { tags: { screen: 'onboarding-step3', action: 'auto-region' } },
+    )
+      .catch((error) => {
+        logger.captureException(error, {
+          tags: { screen: 'onboarding-step3', action: 'auto-region-catch' },
+        });
+      })
+      .finally(() => setIsLocating(false));
+  }, [user]);
+
   const handleFinish = () => {
-    if (!region || isSaving) {
+    if (isSaving) {
       return;
     }
 
@@ -68,7 +135,11 @@ export default function ProfilePreferenceStepScreen() {
         if (user) {
           const { error } = await supabase
             .from('profile')
-            .update({ region })
+            .update({
+              mbti: mbti || null,
+              onboarding_completed_at: new Date().toISOString(),
+              region: region || null,
+            })
             .eq('user_id', user.id);
 
           if (error) {
@@ -97,64 +168,63 @@ export default function ProfilePreferenceStepScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <TopNav title="프로필 작성" onLeftPress={() => router.back()} />
+      <TopNav className="border-b-0 bg-bg" onLeftPress={() => router.back()} />
 
       <ScrollView className="flex-1 bg-bg">
         <View className="px-[24px] pb-[128px] pt-[18px]">
           <Text variant="meta" tone="ink-3">
-            취향 정보 · 3 / 3
+            신상 정보 · 3 / 3
           </Text>
           <ProgressBar value={1} className="mt-[10px]" />
 
           <View className="mt-[30px]">
             <Text variant="h1" className="text-[25px] leading-[33px]">
-              매칭에 쓸 정보를 골라주세요
+              마지막이에요
             </Text>
             <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-              지역은 필수이고 MBTI는 선택이에요. 나중에 마이프로필에서 다시 정리할 수 있어요.
+              비워둬도 괜찮아요. 나중에 채울 수 있어요.
             </Text>
           </View>
 
           <View className="mt-[30px]">
             <Text variant="eyebrow" tone="ink-3">
-              MBTI
+              MBTI <Text tone="ink-4">선택</Text>
             </Text>
             <Select
               value={mbti}
               placeholder="선택해주세요"
               className="mt-[8px]"
-              onPress={() => setMbti(mbti ? '' : 'ENFP')}
+              onPress={() => setPicker('mbti')}
             />
-            <OptionGrid options={MBTI_OPTIONS} selected={mbti} onSelect={setMbti} />
           </View>
 
           <View className="mt-[30px]">
             <Text variant="eyebrow" tone="ink-3">
-              활동 지역
+              지역 <Text tone="ink-4">선택</Text>
             </Text>
             <Select
               value={region}
-              placeholder="활동 지역 선택"
+              placeholder="활동 지역 선택 (예: 서울 · 강남구)"
               className="mt-[8px]"
-              onPress={() => setRegion(region || '서울')}
+              onPress={() => setPicker('region')}
             />
-            <OptionGrid options={REGION_OPTIONS} selected={region} onSelect={setRegion} />
+            <Text className="mt-[6px] text-[11.5px] font-semibold text-ink-3">
+              {isLocating
+                ? '동의한 위치정보로 지역을 확인하고 있어요.'
+                : '자동으로 채워지지 않으면 직접 선택해주세요.'}
+            </Text>
           </View>
-
-          <Banner tone="info" icon="i" title="지역 안내">
-            활동 지역은 가까운 일상 반경의 매칭을 돕는 데 사용돼요.
-          </Banner>
         </View>
       </ScrollView>
 
       <BottomActionBar fixed>
         <Button
           fullWidth
-          disabled={!region || isSaving}
+          disabled={isSaving}
           onPress={handleFinish}
           testID="onboarding-step3-finish"
         >
-          {isSaving ? '저장 중' : '프로필 완료'}
+          {isSaving ? '저장 중' : 'dei 시작하기'}
         </Button>
       </BottomActionBar>
 
@@ -167,6 +237,74 @@ export default function ProfilePreferenceStepScreen() {
         actions={[{ label: '확인', variant: 'ink', onPress: () => setSaveFailed(false) }]}
         onDismiss={() => setSaveFailed(false)}
       />
+
+      <BottomSheet
+        visible={picker === 'mbti'}
+        heightPct={72}
+        onClose={() => setPicker(null)}
+      >
+        <View className="flex-1 px-[24px] pb-[18px] pt-[12px]">
+          <Text variant="h2" className="mb-[14px] text-[20px] font-extrabold">
+            MBTI 선택
+          </Text>
+          <ScrollView className="flex-1">
+            <ChoiceList
+              tone="accent"
+              value={mbti}
+              onChange={(value) => {
+                setMbti(value);
+                setPicker(null);
+              }}
+              options={MBTI_OPTIONS.map((option) => ({ label: option, value: option }))}
+            />
+          </ScrollView>
+          <Button
+            variant="tertiary"
+            fullWidth
+            className="mt-[12px]"
+            onPress={() => {
+              setMbti('');
+              setPicker(null);
+            }}
+          >
+            선택 안 함
+          </Button>
+        </View>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={picker === 'region'}
+        heightPct={72}
+        onClose={() => setPicker(null)}
+      >
+        <View className="flex-1 px-[24px] pb-[18px] pt-[12px]">
+          <Text variant="h2" className="mb-[14px] text-[20px] font-extrabold">
+            활동 지역 선택
+          </Text>
+          <ScrollView className="flex-1">
+            <ChoiceList
+              tone="accent"
+              value={region}
+              onChange={(value) => {
+                setRegion(value);
+                setPicker(null);
+              }}
+              options={REGION_OPTIONS.map((option) => ({ label: option, value: option }))}
+            />
+          </ScrollView>
+          <Button
+            variant="tertiary"
+            fullWidth
+            className="mt-[12px]"
+            onPress={() => {
+              setRegion('');
+              setPicker(null);
+            }}
+          >
+            선택 안 함
+          </Button>
+        </View>
+      </BottomSheet>
     </SafeAreaView>
   );
 }

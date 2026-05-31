@@ -30,6 +30,7 @@ export const ANALYTICS_EVENTS = {
   match_cancel_confirm_shown: 'S3:match_cancel_confirm_shown',
   match_cancelled_by_user: 'S3:match_cancelled_by_user',
   rematch_restriction_evaluated: 'L2:rematch_restriction_evaluated',
+  payment_failure_alert_shown: 'S18:payment_failure_alert_shown',
 
   // 방·블러게이트
   room_preview_entered_blurred: 'S4:room_preview_entered_blurred',
@@ -51,6 +52,7 @@ export const ANALYTICS_EVENTS = {
   profile_hub_opened: 'S19:profile_hub_opened',
   nickname_change_throttled_30d: 'S19:nickname_change_throttled_30d',
   withdraw_screen_entered: 'S20:withdraw_screen_entered',
+  withdraw_confirmed: 'S20:withdraw_confirmed',
   report_category_entered: 'S21:report_category_entered',
   report_submitted: 'S21:report_submitted',
   notification_settings_opened: 'S22:notification_settings_opened',

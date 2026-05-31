@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,8 +24,17 @@ import { useAuth } from '@/providers/auth-provider';
 
 export default function SupportScreen() {
   const router = useRouter();
+  const { category: categoryParam } = useLocalSearchParams<{ category?: string }>();
   const { user } = useAuth();
-  const [category, setCategory] = useState<(typeof SUPPORT_CATEGORIES)[number]>('결제·환불');
+  const initialCategory = SUPPORT_CATEGORIES.includes(
+    categoryParam as (typeof SUPPORT_CATEGORIES)[number],
+  )
+    ? categoryParam as (typeof SUPPORT_CATEGORIES)[number]
+    : '기타';
+  const categoryLocked = SUPPORT_CATEGORIES.includes(
+    categoryParam as (typeof SUPPORT_CATEGORIES)[number],
+  );
+  const [category, setCategory] = useState<(typeof SUPPORT_CATEGORIES)[number]>(initialCategory);
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,7 +45,16 @@ export default function SupportScreen() {
     analytics.capture(ANALYTICS_EVENTS.support_form_opened);
   }, []);
 
-  const canSubmit = message.trim().length >= 10;
+  useEffect(() => {
+    if (!complete) {
+      return;
+    }
+
+    const timer = setTimeout(() => router.replace(ROUTES.myProfile), 900);
+    return () => clearTimeout(timer);
+  }, [complete, router]);
+
+  const canSubmit = message.trim().length > 0;
 
   const submit = () => {
     if (!canSubmit || isSubmitting) {
@@ -48,16 +66,31 @@ export default function SupportScreen() {
       async () => {
         setIsSubmitting(true);
 
-        if (user && category === '결제·환불') {
-          const { error } = await supabase.from('refund_ticket').insert({
-            reason: [message.trim(), email.trim() ? `reply:${email.trim()}` : null]
-              .filter(Boolean)
-              .join('\n'),
+        if (user) {
+          const trimmedEmail = email.trim() || null;
+          const trimmedMessage = message.trim();
+          const { error: ticketError } = await supabase.from('support_ticket').insert({
+            category,
+            message: trimmedMessage,
+            reply_email: trimmedEmail,
             user_id: user.id,
           });
 
-          if (error) {
-            throw error;
+          if (ticketError) {
+            throw ticketError;
+          }
+
+          if (category === '결제·환불') {
+            const { error: refundError } = await supabase.from('refund_ticket').insert({
+              reason: [trimmedMessage, trimmedEmail ? `reply:${trimmedEmail}` : null]
+                .filter(Boolean)
+                .join('\n'),
+              user_id: user.id,
+            });
+
+            if (refundError) {
+              throw refundError;
+            }
           }
         }
 
@@ -84,30 +117,50 @@ export default function SupportScreen() {
       <ScrollView className="flex-1 bg-bg">
         <View className="px-[24px] pb-[128px] pt-[22px]">
           <Text variant="h1" className="text-[25px] leading-[33px]">
-            문의 내용을 남겨주세요
+            무엇이 궁금하신가요?
           </Text>
           <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-            문의 유형에 맞게 접수하고 확인 후 답변드릴게요.
+            영업일 기준 2일 내 회신드려요.
           </Text>
 
           <View className="mt-[26px]">
             <Text variant="eyebrow" tone="ink-3">
-              문의 분류
+              분류
             </Text>
-            <Select value={category} placeholder="분류 선택" className="mt-[8px]" />
-            <View className="mt-[10px] flex-row flex-wrap gap-[8px]">
-              {SUPPORT_CATEGORIES.map((item) => (
-                <Button
-                  key={item}
-                  size="sm"
-                  variant={category === item ? 'ink' : 'secondary'}
-                  onPress={() => setCategory(item)}
-                  className="px-[12px] py-[10px]"
-                >
-                  {item}
-                </Button>
-              ))}
-            </View>
+            {categoryLocked ? (
+              <Input value={category} readonly className="mt-[8px]" />
+            ) : (
+              <>
+                <Select value={category} placeholder="분류 선택" className="mt-[8px]" />
+                <View className="mt-[10px] flex-row flex-wrap gap-[8px]">
+                  {SUPPORT_CATEGORIES.map((item) => (
+                    <Button
+                      key={item}
+                      size="sm"
+                      variant={category === item ? 'ink' : 'secondary'}
+                      onPress={() => setCategory(item)}
+                      className="px-[12px] py-[10px]"
+                    >
+                      {item}
+                    </Button>
+                  ))}
+                </View>
+              </>
+            )}
+          </View>
+
+          <View className="mt-[22px]">
+            <Text variant="eyebrow" tone="ink-3">
+              내용
+            </Text>
+            <Textarea
+              value={message}
+              onChangeText={setMessage}
+              maxLength={SUPPORT_MESSAGE_MAX_LENGTH}
+              showCount
+              placeholder="문의 내용을 자세히 적어주세요"
+              className="mt-[8px]"
+            />
           </View>
 
           <Input
@@ -115,47 +168,23 @@ export default function SupportScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
-            label="회신 이메일"
-            placeholder="name@example.com"
-            helper="선택 입력이에요. 앱 알림이 불안정할 때 이메일로 답변받을 수 있어요."
+            label="회신 이메일 (선택)"
+            placeholder="example@email.com"
+            helper="선택 입력이에요. 미입력 시 인앱 알림으로 회신해요."
             className="mt-[24px]"
           />
 
-          <View className="mt-[22px]">
-            <Text variant="eyebrow" tone="ink-3">
-              문의 내용
-            </Text>
-            <Textarea
-              value={message}
-              onChangeText={setMessage}
-              maxLength={SUPPORT_MESSAGE_MAX_LENGTH}
-              showCount
-              placeholder="상황을 자세히 적어주세요"
-              className="mt-[8px]"
-            />
-          </View>
-
-          <Banner tone="info" icon="i" title="운영 답변">
-            결제 환불은 결제 기록과 함께 확인해야 해서 처리 시간이 더 걸릴 수 있어요.
+          <Banner tone="info" icon="i" title="회신 안내">
+            이메일 미입력 시 앱 알림으로 회신드려요.
           </Banner>
         </View>
       </ScrollView>
 
       <BottomActionBar fixed>
         <Button fullWidth disabled={!canSubmit || isSubmitting} onPress={submit}>
-          {isSubmitting ? '접수 중' : '문의 접수'}
+          {isSubmitting ? '보내는 중' : '보내기'}
         </Button>
       </BottomActionBar>
-
-      <AlertDialog
-        visible={complete}
-        tone="info"
-        icon="i"
-        title="문의가 접수됐어요"
-        description="운영팀이 확인한 뒤 답변할게요."
-        actions={[{ label: '확인', variant: 'ink', onPress: () => router.replace(ROUTES.myProfile) }]}
-        onDismiss={() => router.replace(ROUTES.myProfile)}
-      />
 
       <AlertDialog
         visible={failed}
@@ -166,6 +195,16 @@ export default function SupportScreen() {
         actions={[{ label: '확인', variant: 'ink', onPress: () => setFailed(false) }]}
         onDismiss={() => setFailed(false)}
       />
+
+      {complete ? (
+        <View className="absolute bottom-[34px] left-0 right-0 items-center px-[24px]">
+          <View className="rounded-full bg-ink px-[16px] py-[10px]">
+            <Text className="text-center text-[12.5px] font-bold text-white">
+              문의를 받았어요
+            </Text>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

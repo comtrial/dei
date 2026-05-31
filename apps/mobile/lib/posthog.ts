@@ -36,7 +36,6 @@ export function initPostHog(): void {
 
   if (!apiKey) {
     if (__DEV__) {
-      // eslint-disable-next-line no-console
       console.warn(
         '[posthog] EXPO_PUBLIC_POSTHOG_KEY 가 설정되지 않아 원격 전송이 비활성화됩니다. 콘솔 transport 로 동작합니다.',
       );

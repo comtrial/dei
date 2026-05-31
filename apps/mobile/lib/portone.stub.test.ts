@@ -1,7 +1,14 @@
 import type { IdentityVerificationResponse } from '@portone/browser-sdk/v2';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const functionsInvoke = vi.fn();
+import {
+  confirmIdentityVerification,
+  IdentityVerificationError,
+  recordIdentityVerificationFailure,
+  startIdentityVerification,
+} from './portone.stub';
+
+const functionsInvoke = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -10,13 +17,6 @@ vi.mock('@/lib/supabase', () => ({
     },
   },
 }));
-
-import {
-  confirmIdentityVerification,
-  IdentityVerificationError,
-  recordIdentityVerificationFailure,
-  startIdentityVerification,
-} from './portone.stub';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -92,6 +92,39 @@ describe('PortOne identity verification client', () => {
         identityVerificationId: 'started-request-id',
         identityVerificationTxId: 'tx-id',
       },
+    });
+  });
+
+  it('returns the existing member session payload for duplicate CI login', async () => {
+    functionsInvoke.mockResolvedValueOnce({
+      data: {
+        authSession: {
+          accessToken: 'existing-access-token',
+          refreshToken: 'existing-refresh-token',
+          userId: 'existing-user-id',
+        },
+        birthYear: 1996,
+        existingMember: true,
+        gender: 'female',
+        identityVerifiedAt: '2026-05-30T02:00:00.000Z',
+        isAdult: true,
+      },
+      error: null,
+    });
+
+    await expect(
+      confirmIdentityVerification({
+        identityVerificationId: 'duplicate-ci-response-id',
+        identityVerificationTxId: 'duplicate-ci-tx-id',
+        transactionType: 'IDENTITY_VERIFICATION',
+      }),
+    ).resolves.toMatchObject({
+      authSession: {
+        accessToken: 'existing-access-token',
+        refreshToken: 'existing-refresh-token',
+        userId: 'existing-user-id',
+      },
+      existingMember: true,
     });
   });
 

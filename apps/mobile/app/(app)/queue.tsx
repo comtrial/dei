@@ -1,20 +1,41 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { logger, POLICY } from '@dei/shared';
-import { Badge, Banner, BottomActionBar, Button, Spinner, Text, TopNav } from '@dei/ui';
+import { logger } from '@dei/shared';
+import { Button, Card, PulseRing, Text } from '@dei/ui';
 
+import { expireMatchQueue, isQueueExpired } from '@/lib/matching';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 
+type QueueState = {
+  desiredSize: number;
+  enqueuedAt: string;
+  expiresAt: string | null;
+  id: string;
+} | null;
+
 export default function QueueScreen() {
   const router = useRouter();
+  const { notice } = useLocalSearchParams<{ notice?: string }>();
   const { user } = useAuth();
-  const [memberCount, setMemberCount] = useState(1);
-  const [region, setRegion] = useState<string | null>(null);
+  const [queue, setQueue] = useState<QueueState>(null);
+  const [showFreeRematchNotice, setShowFreeRematchNotice] = useState(
+    notice === 'free-rematch',
+  );
+
+  useEffect(() => {
+    if (notice !== 'free-rematch') {
+      return;
+    }
+
+    setShowFreeRematchNotice(true);
+    const timer = setTimeout(() => setShowFreeRematchNotice(false), 1400);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     if (!user) {
@@ -22,68 +43,110 @@ export default function QueueScreen() {
     }
 
     void logger.withErrorCapture(
-      'queue.load-context',
+      'queue.load',
       async () => {
+        const { data: teamMembers, error: teamError } = await supabase
+          .from('team_member')
+          .select('team_id')
+          .eq('user_id', user.id);
+
+        if (teamError) {
+          throw teamError;
+        }
+
+        const teamIds = teamMembers?.map((team) => team.team_id) ?? [];
+        if (teamIds.length === 0) {
+          router.replace(ROUTES.home);
+          return;
+        }
+
         const { data, error } = await supabase
-          .from('profile')
-          .select('region')
-          .eq('user_id', user.id)
+          .from('match_queue')
+          .select('desired_size, enqueued_at, expires_at, id')
+          .in('team_id', teamIds)
+          .eq('status', 'waiting')
+          .order('enqueued_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
 
         if (error) {
           throw error;
         }
 
-        setRegion(data?.region ?? null);
+        if (!data) {
+          router.replace(ROUTES.home);
+          return;
+        }
+
+        if (isQueueExpired(data.expires_at)) {
+          await expireMatchQueue().catch((error) => {
+            logger.captureException(error, {
+              tags: { screen: 'queue', action: 'expire-queue' },
+            });
+          });
+          router.replace(ROUTES.matchFailed);
+          return;
+        }
+
+        setQueue({
+          desiredSize: data.desired_size,
+          enqueuedAt: data.enqueued_at,
+          expiresAt: data.expires_at,
+          id: data.id,
+        });
       },
-      { tags: { screen: 'queue', action: 'load-context' } },
-    );
-  }, [user]);
+      { tags: { screen: 'queue', action: 'load' } },
+    ).catch((error) => {
+      logger.captureException(error, {
+        tags: { screen: 'queue', action: 'load-catch' },
+      });
+    });
+  }, [router, user]);
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <TopNav
-        title="매칭 대기"
-        left="close"
-        onLeftPress={() => router.push(ROUTES.matchCancelConfirm)}
-        rightActions={<Badge variant="count">{`${memberCount}명`}</Badge>}
-      />
-
-      <View className="flex-1 px-[24px] pb-[32px] pt-[54px]">
+      <View className="flex-1 px-[24px] pb-[36px] pt-[64px]">
         <View className="items-center">
-          <Spinner size={80} />
-          <Text variant="h1" className="mt-[28px] text-center text-[25px] leading-[33px]">
-            맞는 묶음을 찾고 있어요
+          <PulseRing
+            className="mb-[32px]"
+            core={<Text className="text-[24px] font-black text-white">dei</Text>}
+          />
+          <Text variant="h1" className="text-center text-[25px] leading-[33px]">
+            곧 만날 사람들을{'\n'}찾고 있어요
           </Text>
           <Text className="mt-[10px] text-center text-[13.5px] leading-[21px] text-ink-3">
-            상대 성별, 지역, 방 상태를 기준으로 확인합니다.
+            앱을 닫아도 매칭되면{'\n'}알림으로 알려드려요.
           </Text>
         </View>
 
-        <View className="mt-[34px] gap-[10px]">
-          <Banner tone="warn" icon="!" title="대기 중 앱을 닫아도 괜찮아요">
-            알림을 켜두면 매칭 완료 시 바로 알려드려요.
-          </Banner>
-          <Banner tone="info" icon="i" title="현재 매칭 조건">
-            {region ? `${region} 기준 · 반대 성별 · 최대 ${POLICY.matching.queueExpiryHours}시간 대기` : `반대 성별 · 최대 ${POLICY.matching.queueExpiryHours}시간 대기`}
-          </Banner>
-        </View>
+        <Card className="mt-[34px] items-center rounded-md border-0 bg-bg-2 px-[22px] py-[14px]">
+          <Text className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-3">
+            평균 대기 시간
+          </Text>
+          <Text className="mt-[4px] text-[19px] font-extrabold text-ink">
+            {queue ? '2 ~ 6 시간' : '확인 중'}
+          </Text>
+        </Card>
 
-        <View className="mt-auto gap-[10px]">
-          <Button variant="secondary" fullWidth onPress={() => setMemberCount((count) => Math.min(count + 1, POLICY.team.maxMembers))}>
-            묶음 인원 미리보기
-          </Button>
-          <Button variant="tertiary" fullWidth onPress={() => router.push(ROUTES.matchFailed)}>
-            매칭 실패 안내 보기
-          </Button>
-        </View>
+        <Button
+          variant="secondary"
+          className="mt-auto self-end rounded-full border border-line bg-paper px-[20px] py-[12px]"
+          textClassName="text-[13px] font-bold"
+          onPress={() => router.push(ROUTES.matchCancelConfirm)}
+        >
+          매칭 취소
+        </Button>
       </View>
 
-      <BottomActionBar fixed>
-        <Button variant="secondary" fullWidth onPress={() => router.push(ROUTES.matchCancelConfirm)}>
-          대기 취소
-        </Button>
-      </BottomActionBar>
+      {showFreeRematchNotice ? (
+        <View className="absolute bottom-[34px] left-0 right-0 items-center px-[24px]">
+          <View className="rounded-full bg-ink px-[16px] py-[10px]">
+            <Text className="text-center text-[12.5px] font-bold text-white">
+              바로 매칭 시작할게요
+            </Text>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

@@ -12,6 +12,7 @@ import {
   Button,
   PhotoUpload,
   ProgressBar,
+  Spinner,
   Text,
   Textarea,
   TopNav,
@@ -19,17 +20,49 @@ import {
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { PROFILE_BIO_MAX_LENGTH } from '@/lib/b-flow';
-import { requestPermission } from '@/lib/permissions';
+import { openSystemSettings, requestPermission } from '@/lib/permissions';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
+
+type PickedPhoto = {
+  mimeType: string;
+  uri: string;
+};
+
+function extensionForMimeType(mimeType: string) {
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/webp') return 'webp';
+  return 'jpg';
+}
+
+async function uploadProfilePhoto(userId: string, photo: PickedPhoto) {
+  const response = await fetch(photo.uri);
+  const body = await response.arrayBuffer();
+  const extension = extensionForMimeType(photo.mimeType);
+  const path = `${userId}/profile-${Date.now()}.${extension}`;
+  const { error } = await supabase.storage
+    .from('profile-photos')
+    .upload(path, body, {
+      contentType: photo.mimeType,
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return path;
+}
 
 export default function ProfilePhotoStepScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [bio, setBio] = useState('');
+  const [photo, setPhoto] = useState<PickedPhoto | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [cameraPermissionDenied, setCameraPermissionDenied] = useState(false);
   const [captureFailed, setCaptureFailed] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
@@ -39,7 +72,7 @@ export default function ProfilePhotoStepScreen() {
       async () => {
         const permission = await requestPermission('camera');
         if (permission !== 'granted') {
-          router.push(ROUTES.permissionCamera);
+          setCameraPermissionDenied(true);
           return;
         }
 
@@ -54,7 +87,12 @@ export default function ProfilePhotoStepScreen() {
           return;
         }
 
-        setPhotoUri(result.assets[0]?.uri ?? null);
+        const asset = result.assets[0];
+        setPhoto({
+          mimeType: asset?.mimeType ?? 'image/jpeg',
+          uri: asset?.uri ?? '',
+        });
+        setPhotoUri(asset?.uri ?? null);
         analytics.capture(ANALYTICS_EVENTS.profile_photo_uploaded, {
           source: 'camera',
         });
@@ -69,7 +107,7 @@ export default function ProfilePhotoStepScreen() {
   };
 
   const handleNext = () => {
-    if (!photoUri || isSaving) {
+    if (!photo || !photoUri || isSaving) {
       return;
     }
 
@@ -79,9 +117,10 @@ export default function ProfilePhotoStepScreen() {
         setIsSaving(true);
 
         if (user) {
+          const photoPath = await uploadProfilePhoto(user.id, photo);
           const { error } = await supabase
             .from('profile')
-            .update({ bio: bio.trim() || null })
+            .update({ bio: bio.trim() || null, photo_url: photoPath })
             .eq('user_id', user.id);
 
           if (error) {
@@ -108,7 +147,7 @@ export default function ProfilePhotoStepScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <TopNav title="프로필 작성" onLeftPress={() => router.back()} />
+      <TopNav className="border-b-0 bg-bg" onLeftPress={() => router.back()} />
 
       <ScrollView className="flex-1 bg-bg">
         <View className="px-[24px] pb-[128px] pt-[18px]">
@@ -119,10 +158,10 @@ export default function ProfilePhotoStepScreen() {
 
           <View className="mt-[30px]">
             <Text variant="h1" className="text-[25px] leading-[33px]">
-              오늘의 첫인상을 찍어주세요
+              당신을 보여줄{'\n'}사진을 올려주세요
             </Text>
             <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-              현장에서 촬영한 사진 1장이 매칭 카드 표지로 보여요.
+              본인 얼굴이 보이는 사진 1장
             </Text>
           </View>
 
@@ -135,33 +174,44 @@ export default function ProfilePhotoStepScreen() {
               onPress={handleCapture}
               testID="onboarding-photo-upload"
             />
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-[18px]"
-              onPress={handleCapture}
-            >
-              카메라 열기
-            </Button>
+            <Text className="mt-[18px] text-center text-[11.5px] leading-[17px] text-ink-3">
+              선정적이거나 타인의 사진은 신고 대상이에요
+            </Text>
+
+            {cameraPermissionDenied ? (
+              <Banner
+                tone="warn"
+                icon="!"
+                title="카메라 권한이 필요해요"
+                cta="설정"
+                onCtaPress={() => {
+                  setCameraPermissionDenied(false);
+                  void openSystemSettings().catch((error) => {
+                    logger.captureException(error, {
+                      tags: { screen: 'onboarding-step2', action: 'open-camera-settings' },
+                    });
+                  });
+                }}
+                className="mt-[18px] w-full"
+              >
+                프로필 사진은 지금 촬영한 사진만 사용할 수 있어요. 설정에서 카메라 권한을 켜주세요.
+              </Banner>
+            ) : null}
           </View>
 
           <View className="mt-[30px]">
             <Text variant="eyebrow" tone="ink-3">
-              한 줄 소개
+              한 줄 자기소개 <Text tone="ink-4">선택</Text>
             </Text>
             <Textarea
               value={bio}
               onChangeText={setBio}
               maxLength={PROFILE_BIO_MAX_LENGTH}
               showCount
-              placeholder="예: 오늘은 한강에서 산책 중이에요"
+              placeholder="자유롭게 적어주세요 (예: 카페 투어 좋아하는 사람 ☕)"
               className="mt-[8px]"
             />
           </View>
-
-          <Banner tone="info" icon="i" title="사진 안내">
-            촬영한 사진은 프로필 카드의 첫인상으로 사용돼요. 마음에 들지 않으면 다시 찍을 수 있어요.
-          </Banner>
         </View>
       </ScrollView>
 
@@ -197,6 +247,15 @@ export default function ProfilePhotoStepScreen() {
         actions={[{ label: '확인', variant: 'ink', onPress: () => setSaveFailed(false) }]}
         onDismiss={() => setSaveFailed(false)}
       />
+
+      {isSaving ? (
+        <View className="absolute inset-0 items-center justify-center bg-bg/80 px-[32px]">
+          <Spinner size={80} accessibilityLabel="프로필 사진 업로드 중" />
+          <Text variant="body" tone="ink-3" className="mt-[18px] text-center">
+            프로필 사진을 올리고 있어요
+          </Text>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

@@ -13,6 +13,7 @@ export type IdentityFailureCode =
   | 'MISSING_VERIFIED_CUSTOMER'
   | 'PORTONE_LOOKUP_FAILED'
   | 'PORTONE_NOT_VERIFIED'
+  | 'REJOIN_LOCKED'
   | 'SDK_CANCELLED'
   | 'SDK_ERROR'
   | 'UNDERAGE';

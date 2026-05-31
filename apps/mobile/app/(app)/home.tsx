@@ -1,13 +1,28 @@
 import { useRouter } from 'expo-router';
+import { ChevronRight, UserRound, Users } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { analytics, logger, POLICY } from '@dei/shared';
-import { Avatar, Badge, Banner, Button, Card, Text } from '@dei/ui';
+import {
+  analytics,
+  formatRematchCountdown,
+  getRematchRestriction,
+  logger,
+  POLICY,
+} from '@dei/shared';
+import { AlertDialog, Avatar, Banner, Card, Text, color } from '@dei/ui';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
-import { MOCK_SELF_PROFILE, profileMeta, toInitial } from '@/lib/b-flow';
+import { getAuthGateRoute } from '@/lib/auth-flow';
+import { toInitial } from '@/lib/b-flow';
+import {
+  repairProfileIdentityFromVerification,
+  VERIFIED_IDENTITY_SELECT,
+} from '@/lib/identity-profile';
+import { enqueueMatchQueue, isMatchQueueErrorCode } from '@/lib/matching';
+import { getAppNotificationEnabled, registerPushToken } from '@/lib/notifications.stub';
+import { requestPermission } from '@/lib/permissions';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
@@ -15,20 +30,32 @@ import { useAuth } from '@/providers/auth-provider';
 type HomeProfile = {
   birthYear: number | null;
   gender: string | null;
+  lastRoomLeaveAt: string | null;
   nickname: string | null;
   passCount: number;
+  photoDisplayUrl: string | null;
+  photoUrl: string | null;
   region: string | null;
 };
+
+function signedPhotoUrl(path: string) {
+  return supabase.storage.from('profile-photos').createSignedUrl(path, 60 * 60);
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const [queueFailed, setQueueFailed] = useState(false);
+  const [photoImageFailed, setPhotoImageFailed] = useState(false);
   const [profile, setProfile] = useState<HomeProfile>({
-    birthYear: MOCK_SELF_PROFILE.birthYear,
-    gender: MOCK_SELF_PROFILE.gender,
-    nickname: MOCK_SELF_PROFILE.nickname,
-    passCount: MOCK_SELF_PROFILE.passCount,
-    region: MOCK_SELF_PROFILE.region,
+    birthYear: null,
+    gender: null,
+    lastRoomLeaveAt: null,
+    nickname: null,
+    passCount: 0,
+    photoDisplayUrl: null,
+    photoUrl: null,
+    region: null,
   });
 
   useEffect(() => {
@@ -41,12 +68,25 @@ export default function HomeScreen() {
     void logger.withErrorCapture(
       'home.load-profile',
       async () => {
-        const [{ data: profileData, error: profileError }, { data: passes, error: passError }] =
+        const [
+          { data: profileData, error: profileError },
+          { data: verifiedIdentity, error: verifiedIdentityError },
+          { data: passes, error: passError },
+        ] =
           await Promise.all([
             supabase
               .from('profile')
-              .select('birth_year, gender, nickname, region')
+              .select('birth_year, gender, is_adult, last_room_leave_at, nickname, onboarding_completed_at, photo_url, region')
               .eq('user_id', user.id)
+              .maybeSingle(),
+            supabase
+              .from('auth_verification')
+              .select(VERIFIED_IDENTITY_SELECT)
+              .eq('user_id', user.id)
+              .eq('provider', 'portone')
+              .eq('status', 'verified')
+              .order('verified_at', { ascending: false })
+              .limit(1)
               .maybeSingle(),
             supabase
               .from('pass')
@@ -56,31 +96,165 @@ export default function HomeScreen() {
           ]);
 
         if (profileError) throw profileError;
+        if (verifiedIdentityError) throw verifiedIdentityError;
         if (passError) throw passError;
 
-        const passCount = passes?.reduce((sum, pass) => sum + pass.remaining, 0) ?? 0;
+        const routedProfile = await repairProfileIdentityFromVerification({
+          profile: profileData,
+          userId: user.id,
+          verification: verifiedIdentity,
+        });
+        const authGateRoute = getAuthGateRoute(routedProfile);
+        if (authGateRoute === 'terms') {
+          router.replace(ROUTES.terms);
+          return;
+        }
+
+        if (authGateRoute === 'profileStep1') {
+          router.replace(ROUTES.profileStep1);
+          return;
+        }
+
+        if (authGateRoute === 'profileStep2') {
+          router.replace(ROUTES.profileStep2);
+          return;
+        }
+
+        if (authGateRoute === 'profileStep3') {
+          router.replace(ROUTES.profileStep3);
+          return;
+        }
+
+        if (!routedProfile) {
+          router.replace(ROUTES.terms);
+          return;
+        }
+
+        let photoDisplayUrl: string | null = null;
+        if (routedProfile.photo_url) {
+          const { data: signedPhoto, error: signedPhotoError } = await signedPhotoUrl(
+            routedProfile.photo_url,
+          );
+
+          if (signedPhotoError) {
+            logger.captureException(signedPhotoError, {
+              tags: { screen: 'home', action: 'signed-photo' },
+            });
+          }
+
+          photoDisplayUrl = signedPhoto?.signedUrl ?? null;
+        }
 
         setProfile({
-          birthYear: profileData?.birth_year ?? MOCK_SELF_PROFILE.birthYear,
-          gender: profileData?.gender ?? MOCK_SELF_PROFILE.gender,
-          nickname: profileData?.nickname ?? MOCK_SELF_PROFILE.nickname,
-          passCount,
-          region: profileData?.region ?? MOCK_SELF_PROFILE.region,
+          birthYear: routedProfile.birth_year,
+          gender: routedProfile.gender ?? null,
+          lastRoomLeaveAt: routedProfile.last_room_leave_at,
+          nickname: routedProfile.nickname ?? null,
+          passCount: passes?.reduce((sum, pass) => sum + pass.remaining, 0) ?? 0,
+          photoDisplayUrl,
+          photoUrl: routedProfile.photo_url ?? null,
+          region: routedProfile.region ?? null,
         });
+        setPhotoImageFailed(false);
       },
       { tags: { screen: 'home', action: 'load-profile' } },
     );
-  }, [user]);
+  }, [router, user]);
+
+  const rematchRestriction = getRematchRestriction(profile.lastRoomLeaveAt);
+  const needsPaidRematch =
+    rematchRestriction.restricted && profile.gender === 'male' && profile.passCount <= 0;
+  const restrictionDescription =
+    profile.gender === 'female' && POLICY.payment.femaleInstantRematchFree
+      ? '여성은 바로 매치가 자동 면제돼요'
+      : profile.passCount > 0
+        ? `잔여 바로 매치 ${profile.passCount}회를 사용할 수 있어요`
+        : '바로 매칭하려면 "바로 매치" 사용';
+  const photoDisplayUrl = photoImageFailed ? null : profile.photoDisplayUrl;
 
   const startSolo = () => {
-    analytics.capture(ANALYTICS_EVENTS.team_queue_registered, {
-      mode: 'solo',
-      source: 'home',
+    if (!user?.id) {
+      setQueueFailed(true);
+      return;
+    }
+
+    if (needsPaidRematch) {
+      analytics.capture(ANALYTICS_EVENTS.rematch_restriction_evaluated, {
+        gender: profile.gender,
+        remaining_ms: rematchRestriction.remainingMs,
+        source: 'home',
+      });
+      router.push(ROUTES.booster);
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'home.start-solo',
+      async () => {
+        analytics.capture(ANALYTICS_EVENTS.team_queue_registered, {
+          mode: 'solo',
+          source: 'home',
+        });
+        const appNotificationEnabled = await getAppNotificationEnabled(user.id);
+        if (!appNotificationEnabled) {
+          router.push({
+            pathname: '/(app)/permission/notification',
+            params: { memberIds: user.id },
+          });
+          return;
+        }
+
+        const status = await requestPermission('notification');
+        if (status !== 'granted') {
+          router.push({
+            pathname: '/(app)/permission/notification',
+            params: { memberIds: user.id },
+          });
+          return;
+        }
+
+        await registerPushToken(user.id).catch((error) => {
+          logger.captureException(error, {
+            tags: { screen: 'home', action: 'register-push-token' },
+          });
+        });
+
+        const registration = await enqueueMatchQueue([user.id]);
+        if (registration.freeRematchWaived) {
+          router.push({
+            pathname: '/(app)/queue',
+            params: { notice: 'free-rematch' },
+          });
+          return;
+        }
+
+        router.push(ROUTES.queue);
+      },
+      { tags: { screen: 'home', action: 'start-solo' } },
+    ).catch((error) => {
+      if (isMatchQueueErrorCode(error, 'REMATCH_RESTRICTED')) {
+        router.push(ROUTES.booster);
+        return;
+      }
+
+      logger.captureException(error, {
+        tags: { screen: 'home', action: 'start-solo-catch' },
+      });
+      setQueueFailed(true);
     });
-    router.push(ROUTES.permissionNotification);
   };
 
   const startTeam = () => {
+    if (needsPaidRematch) {
+      analytics.capture(ANALYTICS_EVENTS.rematch_restriction_evaluated, {
+        gender: profile.gender,
+        remaining_ms: rematchRestriction.remainingMs,
+        source: 'home-team',
+      });
+      router.push(ROUTES.booster);
+      return;
+    }
+
     analytics.capture(ANALYTICS_EVENTS.join_team_selected, {
       source: 'home',
     });
@@ -99,81 +273,115 @@ export default function HomeScreen() {
             accessibilityLabel="마이프로필"
             onPress={() => router.push(ROUTES.myProfile)}
           >
-            <Avatar
-              initial={toInitial(profile.nickname)}
-              size={38}
-              presenceDot={profile.passCount > 0}
-            />
+            {photoDisplayUrl ? (
+              <View className="relative h-[38px] w-[38px] overflow-hidden rounded-full bg-bg-2">
+                <Image
+                  key={photoDisplayUrl}
+                  source={{ uri: photoDisplayUrl }}
+                  className="absolute inset-0 h-full w-full"
+                  resizeMode="cover"
+                  accessibilityLabel="프로필 사진"
+                  onError={(error) => {
+                    setPhotoImageFailed(true);
+                    logger.captureException(new Error('home profile photo image load failed'), {
+                      tags: { screen: 'home', action: 'photo-render' },
+                      extra: {
+                        renderError: error.nativeEvent.error,
+                        photoPath: profile.photoUrl,
+                      },
+                    });
+                  }}
+                />
+              </View>
+            ) : (
+              <Avatar
+                initial={toInitial(profile.nickname)}
+                size={38}
+                presenceDot={!profile.photoUrl}
+              />
+            )}
           </Pressable>
         </View>
 
         <View className="mt-[36px]">
           <Text variant="h1" className="text-[28px] leading-[36px]">
-            오늘은 어떻게 만날까요?
+            오늘은 어떤{'\n'}일상을 공유할까요?
           </Text>
           <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-            혼자도, 친구와도 같은 무게로 매칭을 시작할 수 있어요.
+            혼자 또는 친구와 함께 · 방은 마지막 1명이 남을 때까지 유지돼요
           </Text>
         </View>
 
-        <View className="mt-[22px] flex-row items-center gap-[8px]">
-          <Badge variant="count">{profile.passCount > 0 ? `잔여 ${profile.passCount}회` : '패스 없음'}</Badge>
-          <Text variant="meta" tone="ink-3">
-            {profileMeta(profile)}
-          </Text>
-        </View>
+        {rematchRestriction.restricted ? (
+          <Banner
+            tone="accent"
+            icon="⏱"
+            title={`다음 매칭까지 ${formatRematchCountdown(rematchRestriction.remainingMs)}`}
+            countdown={restrictionDescription}
+            cta={needsPaidRematch ? '바로 매치' : '매칭 시작'}
+            onCtaPress={startSolo}
+            className="mt-[22px]"
+          />
+        ) : null}
 
-        <Banner
-          tone="accent"
-          icon="!"
-          title="24시간 제한 중이라면"
-          countdown={`${POLICY.matching.queueExpiryHours}시간 제한은 바로 매치로 면제 가능`}
-          cta="바로 매치"
-          onCtaPress={() => router.push(ROUTES.booster)}
-          className="mt-[22px]"
-        >
-          방을 나간 뒤 바로 다시 매칭하고 싶을 때 사용하는 옵션이에요.
-        </Banner>
-
-        <View className="mt-[24px] gap-[12px]">
+        <View className={`${rematchRestriction.restricted ? 'mt-[24px]' : 'mt-[34px]'} gap-[12px]`}>
           <Pressable accessibilityRole="button" onPress={startSolo}>
             <Card variant="cta-entry">
               <View className="h-[42px] w-[42px] items-center justify-center rounded-full bg-accent-soft">
-                <Text className="text-[20px] font-extrabold text-accent">1</Text>
+                <UserRound color={color.accent} size={18} />
               </View>
               <View className="flex-1">
-                <Text className="text-[16px] font-extrabold text-ink">혼자 시작하기</Text>
+                <Text className="text-[16px] font-extrabold text-ink">혼자 참여</Text>
                 <Text className="mt-[3px] text-[12.5px] leading-[18px] text-ink-3">
-                  내 프로필만으로 바로 매칭 큐에 들어가요.
+                  바로 매칭 큐로 들어가요
                 </Text>
               </View>
+              <ChevronRight color={color['ink-4']} size={18} />
             </Card>
           </Pressable>
 
           <Pressable accessibilityRole="button" onPress={startTeam}>
             <Card variant="cta-entry">
               <View className="h-[42px] w-[42px] items-center justify-center rounded-full bg-info-soft">
-                <Text className="text-[20px] font-extrabold text-info">5</Text>
+                <Users color={color.info} size={18} />
               </View>
               <View className="flex-1">
                 <Text className="text-[16px] font-extrabold text-ink">친구와 함께</Text>
                 <Text className="mt-[3px] text-[12.5px] leading-[18px] text-ink-3">
-                  닉네임으로 친구를 추가해 최대 {POLICY.team.maxMembers}명까지 묶어요.
+                  닉네임으로 친구를 초대해요 (최대 {POLICY.team.maxMembers}명)
                 </Text>
               </View>
+              <ChevronRight color={color['ink-4']} size={18} />
             </Card>
           </Pressable>
         </View>
 
-        <View className="mt-auto gap-[10px]">
-          <Button variant="secondary" fullWidth onPress={() => router.push(ROUTES.queue)}>
-            진행 중인 큐 보기
-          </Button>
-          <Button variant="tertiary" fullWidth onPress={() => router.push(ROUTES.reportBlock)}>
-            신고·차단 플로우 확인
-          </Button>
+        <View className="mt-auto border-t border-line pt-[14px]">
+          <Text className="text-center text-[12.5px] leading-[19px] text-ink-3">
+            우상단 아바타 dot = <Text className="font-semibold text-ink-2">프로필 미완성</Text>. 탭 = 프로필 수정 진입.
+          </Text>
         </View>
       </View>
+
+      <AlertDialog
+        visible={queueFailed}
+        tone="warn"
+        icon="!"
+        title="매칭을 시작하지 못했어요"
+        description="프로필 상태와 네트워크를 확인한 뒤 다시 시도해주세요."
+        actions={[
+          { label: '확인', variant: 'secondary', onPress: () => setQueueFailed(false) },
+          {
+            label: '다시 시도',
+            variant: 'ink',
+            onPress: () => {
+              setQueueFailed(false);
+              startSolo();
+            },
+          },
+        ]}
+        onDismiss={() => setQueueFailed(false)}
+      />
     </SafeAreaView>
   );
 }

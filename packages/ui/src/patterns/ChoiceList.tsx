@@ -58,7 +58,7 @@ export interface ChoiceOption {
 
 export interface ChoiceListProps extends Omit<ViewProps, 'children'> {
   /** 선택 옵션 목록. */
-  options: ChoiceOption[];
+  options: readonly ChoiceOption[];
   /** 현재 선택된 옵션의 value. 미선택은 undefined/null. */
   value?: string | null;
   /** 옵션 선택 시 콜백(선택된 value 전달). */
@@ -122,6 +122,10 @@ function labelClass(selected: boolean): string {
   return cn('flex-1 text-sm font-semibold', selected ? 'text-ink' : 'text-ink-2');
 }
 
+function isPrimitiveLabel(label: ReactNode): label is string | number {
+  return typeof label === 'string' || typeof label === 'number';
+}
+
 export const ChoiceList = forwardRef<View, ChoiceListProps>(function ChoiceList(
   { options, value, onChange, tone = 'ink', className, ...rest },
   ref,
@@ -154,7 +158,11 @@ export const ChoiceList = forwardRef<View, ChoiceListProps>(function ChoiceList(
               >
                 <Radio selected={selected} tone={tone} />
               </View>
-              <Text className={labelClass(selected)}>{option.label}</Text>
+              {isPrimitiveLabel(option.label) ? (
+                <Text className={labelClass(selected)}>{option.label}</Text>
+              ) : (
+                <View className="flex-1">{option.label}</View>
+              )}
             </Pressable>
 
             {/* 조건부 입력 슬롯('기타' 등) — 해당 옵션 선택 시에만 노출(S20/S21). */}

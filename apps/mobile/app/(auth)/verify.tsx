@@ -8,13 +8,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { analytics, logger } from '@dei/shared';
 import {
+  AlertDialog,
   BrandTransitionFrame,
+  Button,
   IconButton,
   Spinner,
   Text,
 } from '@dei/ui';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { ensureLatestTermsAgreementForCurrentUser } from '@/lib/terms-agreement';
 import {
   confirmIdentityVerification,
   IdentityVerificationError,
@@ -22,7 +25,12 @@ import {
   startIdentityVerification,
 } from '@/lib/portone.stub';
 import { ROUTES } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
+
+const DEV_IDENTITY_BYPASS_ENABLED = ['1', 'true', 'TRUE', 'yes'].includes(
+  process.env.EXPO_PUBLIC_ENABLE_DEV_IDENTITY_BYPASS ?? '',
+);
 
 /**
  * S03 — 본인인증 진행 중 (PortOne)
@@ -46,8 +54,8 @@ import { useAuth } from '@/providers/auth-provider';
  *   불가(가입 시 1회)
  * 와이어프레임 참조: all-screens S03
  *
- * B-01 Auth UI shell — PortOne 전환/진행 상태의 시각 UI 만 구현.
- * SDK 호출, Edge Function 검증, auth 승격, 실패 카운터 정책은 후속 PR 범위다.
+ * 현재 구현: PortOne SDK 호출, Edge Function 검증, CI 중복 기존 계정 세션 전환,
+ * 19세 미만/연속 실패 잠금/재가입 제한 분기를 실제 경로로 처리한다.
  */
 export default function VerifyScreen() {
   const router = useRouter();
@@ -55,6 +63,8 @@ export default function VerifyScreen() {
   const [verificationRequest, setVerificationRequest] =
     useState<IdentityVerificationRequest | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [startAttempt, setStartAttempt] = useState(0);
+  const [startFailed, setStartFailed] = useState(false);
   const hasStartedRef = useRef(false);
   const verificationRequestRef = useRef<IdentityVerificationRequest | null>(null);
 
@@ -71,7 +81,7 @@ export default function VerifyScreen() {
     (error: unknown) => {
       if (error instanceof IdentityVerificationError) {
         if (error.code === 'IDENTITY_ALREADY_VERIFIED') {
-          router.replace(ROUTES.profileStep1);
+          router.replace(ROUTES.splash);
           return;
         }
 
@@ -83,8 +93,8 @@ export default function VerifyScreen() {
         }
 
         if (error.code === 'CI_DUPLICATE') {
-          Alert.alert('이미 가입된 번호예요', error.message, [
-            { text: '확인', onPress: leaveAuthFlow },
+          Alert.alert('이미 가입된 번호예요', '기존 계정 로그인 세션을 받지 못했어요. 잠시 후 다시 시도해주세요.', [
+            { text: '확인', onPress: () => router.replace(ROUTES.verifyFailed) },
           ]);
           return;
         }
@@ -92,6 +102,13 @@ export default function VerifyScreen() {
         if (error.code === 'IDENTITY_LOCKED') {
           Alert.alert('잠시 후 다시 시도해주세요', error.message, [
             { text: '확인', onPress: () => router.replace(ROUTES.terms) },
+          ]);
+          return;
+        }
+
+        if (error.code === 'REJOIN_LOCKED') {
+          Alert.alert('다시 가입할 수 없어요', error.message, [
+            { text: '확인', onPress: leaveAuthFlow },
           ]);
           return;
         }
@@ -107,29 +124,37 @@ export default function VerifyScreen() {
   );
 
   const handleCancel = useCallback(() => {
-    analytics.capture(ANALYTICS_EVENTS.phone_auth_cancelled_by_user);
-    const identityVerificationId = verificationRequestRef.current?.identityVerificationId;
+    void logger.withErrorCapture(
+      'identity.cancel',
+      async () => {
+        analytics.capture(ANALYTICS_EVENTS.phone_auth_cancelled_by_user);
+        const identityVerificationId = verificationRequestRef.current?.identityVerificationId;
 
-    if (identityVerificationId) {
-      void recordIdentityVerificationFailure({
-        failureCode: 'SDK_CANCELLED',
-        failureMessage: 'user cancelled identity verification',
-        identityVerificationId,
-      }).catch((error) => {
-        if (error instanceof IdentityVerificationError) {
-          if (error.code === 'IDENTITY_LOCKED') {
-            handleIdentityError(error);
+        if (identityVerificationId) {
+          try {
+            await recordIdentityVerificationFailure({
+              failureCode: 'SDK_CANCELLED',
+              failureMessage: 'user cancelled identity verification',
+              identityVerificationId,
+            });
+          } catch (error) {
+            if (error instanceof IdentityVerificationError) {
+              if (error.code === 'IDENTITY_LOCKED') {
+                handleIdentityError(error);
+                return;
+              }
+            } else {
+              logger.captureException(error, {
+                tags: { feature: 'identity-verification', action: 'record-cancel' },
+              });
+            }
           }
-          return;
         }
 
-        logger.captureException(error, {
-          tags: { feature: 'identity-verification', action: 'record-cancel' },
-        });
-      });
-    }
-
-    router.replace(ROUTES.terms);
+        router.replace(ROUTES.terms);
+      },
+      { tags: { feature: 'identity-verification', action: 'cancel' } },
+    ).catch(() => undefined);
   }, [handleIdentityError, router]);
 
   const handleComplete = useCallback(
@@ -145,6 +170,15 @@ export default function VerifyScreen() {
         await promoteWithIdentity(result);
         setVerificationRequest(null);
         verificationRequestRef.current = null;
+
+        if (result.existingMember) {
+          await ensureLatestTermsAgreementForCurrentUser();
+          Alert.alert('이미 가입된 번호예요', '그 계정으로 들어갈게요.', [
+            { text: '확인', onPress: () => router.replace(ROUTES.splash) },
+          ]);
+          return;
+        }
+
         router.replace(ROUTES.profileStep1);
       } catch (error) {
         setVerificationRequest(null);
@@ -170,9 +204,15 @@ export default function VerifyScreen() {
         failureCode: 'SDK_ERROR',
         failureMessage: sdkError.message,
         identityVerificationId,
-      }).catch(handleIdentityError);
+      })
+        .then(() => {
+          setVerificationRequest(null);
+          verificationRequestRef.current = null;
+          router.replace(ROUTES.verifyFailed);
+        })
+        .catch(handleIdentityError);
     },
-    [handleIdentityError],
+    [handleIdentityError, router],
   );
 
   useEffect(() => {
@@ -183,18 +223,71 @@ export default function VerifyScreen() {
     hasStartedRef.current = true;
 
     const start = async () => {
+      setStartFailed(false);
+
       try {
         await ensureAnonymousSession();
         const request = await startIdentityVerification();
         verificationRequestRef.current = request;
         setVerificationRequest(request);
       } catch (error) {
-        handleIdentityError(error);
+        if (error instanceof IdentityVerificationError) {
+          handleIdentityError(error);
+          return;
+        }
+
+        logger.captureException(error, {
+          tags: { feature: 'identity-verification', action: 'start-sdk' },
+        });
+        setStartFailed(true);
       }
     };
 
     void start();
-  }, [ensureAnonymousSession, handleIdentityError]);
+  }, [ensureAnonymousSession, handleIdentityError, startAttempt]);
+
+  const retryStart = () => {
+    setStartFailed(false);
+    hasStartedRef.current = false;
+    setStartAttempt((attempt) => attempt + 1);
+  };
+
+  const completeDevIdentityBypass = useCallback(() => {
+    if (!DEV_IDENTITY_BYPASS_ENABLED) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'identity.dev-bypass',
+      async () => {
+        const session = await ensureAnonymousSession();
+        const userId = session.user.id;
+        const { error } = await supabase
+          .from('profile')
+          .update({
+            birth_date: '2000-01-01',
+            birth_year: 2000,
+            gender: 'female',
+            is_adult: true,
+          })
+          .eq('user_id', userId);
+
+        if (error) {
+          throw error;
+        }
+
+        setVerificationRequest(null);
+        verificationRequestRef.current = null;
+        router.replace(ROUTES.profileStep1);
+      },
+      { tags: { feature: 'identity-verification', action: 'dev-bypass' } },
+    ).catch((error) => {
+      logger.captureException(error, {
+        tags: { feature: 'identity-verification', action: 'dev-bypass-catch' },
+      });
+      setStartFailed(true);
+    });
+  }, [ensureAnonymousSession, router]);
 
   if (verificationRequest) {
     return (
@@ -215,8 +308,18 @@ export default function VerifyScreen() {
             request={verificationRequest}
             onComplete={handleComplete}
             onError={handleSdkError}
+            javaScriptCanOpenWindowsAutomatically
+            setSupportMultipleWindows={false}
           />
         </View>
+
+        {DEV_IDENTITY_BYPASS_ENABLED ? (
+          <View className="absolute bottom-[28px] left-0 right-0 px-[24px]">
+            <Button fullWidth variant="secondary" onPress={completeDevIdentityBypass}>
+              개발용 본인인증 완료
+            </Button>
+          </View>
+        ) : null}
 
         {isConfirming ? (
           <View className="absolute inset-0 items-center justify-center bg-bg/80 px-[32px]">
@@ -272,7 +375,31 @@ export default function VerifyScreen() {
         >
           인증이 끝나면 자동으로 진행돼요
         </Text>
+
+        {DEV_IDENTITY_BYPASS_ENABLED ? (
+          <Button
+            fullWidth
+            variant="secondary"
+            className="mt-[18px]"
+            onPress={completeDevIdentityBypass}
+          >
+            개발용 본인인증 완료
+          </Button>
+        ) : null}
       </View>
+
+      <AlertDialog
+        visible={startFailed}
+        tone="warn"
+        icon="!"
+        title="본인인증을 시작하지 못했어요"
+        description="PortOne 본인인증을 시작하지 못했어요. 잠시 후 다시 시도해주세요."
+        actions={[
+          { label: '취소', variant: 'secondary', onPress: () => router.replace(ROUTES.terms) },
+          { label: '재시도', variant: 'ink', onPress: retryStart },
+        ]}
+        onDismiss={() => setStartFailed(false)}
+      />
     </SafeAreaView>
   );
 }

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { Tables } from '@dei/api';
 import { analytics, logger, POLICY } from '@dei/shared';
 import {
   AlertDialog,
@@ -19,12 +20,16 @@ import {
 } from '@dei/ui';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
-import { MOCK_SEARCH_RESULTS, MOCK_SELF_PROFILE, normalizeNickname, toInitial } from '@/lib/b-flow';
+import { isUuidLike, normalizeNickname, toInitial } from '@/lib/b-flow';
+import { enqueueMatchQueue, isMatchQueueErrorCode } from '@/lib/matching';
+import { getAppNotificationEnabled, registerPushToken } from '@/lib/notifications.stub';
+import { requestPermission } from '@/lib/permissions';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 
 type SearchMember = {
+  blocked: boolean;
   busy: boolean;
   id: string;
   initial: string;
@@ -32,11 +37,14 @@ type SearchMember = {
 };
 
 const SELF_MEMBER: SearchMember = {
+  blocked: false,
   busy: false,
   id: 'self',
-  initial: MOCK_SELF_PROFILE.initial,
-  nickname: MOCK_SELF_PROFILE.nickname,
+  initial: '나',
+  nickname: '나',
 };
+
+type SearchProfile = Pick<Tables<'profile'>, 'is_in_active_room' | 'nickname' | 'user_id'>;
 
 export default function TeamNewScreen() {
   const router = useRouter();
@@ -45,8 +53,44 @@ export default function TeamNewScreen() {
   const [members, setMembers] = useState<SearchMember[]>([SELF_MEMBER]);
   const [results, setResults] = useState<SearchMember[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchAttempt, setSearchAttempt] = useState(0);
   const [searchFailed, setSearchFailed] = useState(false);
   const [queueFailed, setQueueFailed] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'team.load-self',
+      async () => {
+        const { data, error } = await supabase
+          .from('profile')
+          .select('nickname')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          throw error;
+        }
+
+        setMembers((current) =>
+          current.map((member) =>
+            member.id === 'self'
+              ? {
+                  ...member,
+                  id: user.id,
+                  initial: toInitial(data?.nickname),
+                  nickname: data?.nickname ?? member.nickname,
+                }
+              : member,
+          ),
+        );
+      },
+      { tags: { screen: 'team-new', action: 'load-self' } },
+    );
+  }, [user]);
 
   useEffect(() => {
     const normalized = normalizeNickname(query);
@@ -74,22 +118,29 @@ export default function TeamNewScreen() {
             throw error;
           }
 
-          const next =
-            data && data.length > 0
-              ? data.map((profile) => ({
-                  busy: profile.is_in_active_room,
-                  id: profile.user_id,
-                  initial: toInitial(profile.nickname),
-                  nickname: profile.nickname ?? '이름 없음',
-                }))
-              : MOCK_SEARCH_RESULTS.filter((item) => item.nickname.includes(normalized)).map(
-                  (item) => ({
-                    busy: item.status === 'busy',
-                    id: item.id,
-                    initial: item.initial,
-                    nickname: item.nickname,
-                  }),
-                );
+          const profiles = (data ?? []) as SearchProfile[];
+          const next = await Promise.all(
+            profiles.map(async (profile) => {
+              const { data: blocked, error: blockedError } = user
+                ? await supabase.rpc('is_blocked_between', {
+                    a: user.id,
+                    b: profile.user_id,
+                  })
+                : { data: false, error: null };
+
+              if (blockedError) {
+                throw blockedError;
+              }
+
+              return {
+                blocked: Boolean(blocked),
+                busy: profile.is_in_active_room,
+                id: profile.user_id,
+                initial: toInitial(profile.nickname),
+                nickname: profile.nickname ?? '이름 없음',
+              };
+            }),
+          );
 
           setResults(next);
         },
@@ -105,14 +156,23 @@ export default function TeamNewScreen() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [query, user]);
+  }, [query, searchAttempt, user]);
 
   const addedIds = useMemo(() => new Set(members.map((member) => member.id)), [members]);
   const hasBusyMember = members.some((member) => member.busy);
-  const canStart = members.length >= POLICY.team.minMembers && !hasBusyMember;
+  const canStart =
+    Boolean(user)
+    && members.length >= POLICY.team.minMembers
+    && members.every((member) => isUuidLike(member.id))
+    && !hasBusyMember;
 
   const addMember = (member: SearchMember) => {
-    if (member.busy || addedIds.has(member.id) || members.length >= POLICY.team.maxMembers) {
+    if (
+      member.blocked
+      || member.busy
+      || addedIds.has(member.id)
+      || members.length >= POLICY.team.maxMembers
+    ) {
       return;
     }
     setMembers((current) => [...current, member]);
@@ -124,17 +184,76 @@ export default function TeamNewScreen() {
       return;
     }
 
-    analytics.capture(ANALYTICS_EVENTS.team_queue_registered, {
-      member_count: members.length,
-      mode: 'team',
+    void logger.withErrorCapture(
+      'team.start-queue',
+      async () => {
+        const memberIds = members.map((member) => member.id).filter(Boolean);
+        const appNotificationEnabled = user ? await getAppNotificationEnabled(user.id) : false;
+
+        if (!appNotificationEnabled) {
+          router.push({
+            pathname: '/(app)/permission/notification',
+            params: { memberIds: memberIds.join(',') },
+          });
+          return;
+        }
+
+        const status = await requestPermission('notification');
+
+        if (status !== 'granted') {
+          router.push({
+            pathname: '/(app)/permission/notification',
+            params: { memberIds: memberIds.join(',') },
+          });
+          return;
+        }
+
+        if (user?.id) {
+          await registerPushToken(user.id).catch((error) => {
+            logger.captureException(error, {
+              tags: { screen: 'team-new', action: 'register-push-token' },
+            });
+          });
+        }
+
+        const registration = await enqueueMatchQueue(memberIds);
+        analytics.capture(ANALYTICS_EVENTS.team_queue_registered, {
+          member_count: members.length,
+          mode: 'team',
+        });
+        if (registration.freeRematchWaived) {
+          router.push({
+            pathname: '/(app)/queue',
+            params: { notice: 'free-rematch' },
+          });
+          return;
+        }
+
+        router.push(ROUTES.queue);
+      },
+      { tags: { screen: 'team-new', action: 'start-queue' } },
+    ).catch((error) => {
+      if (isMatchQueueErrorCode(error, 'REMATCH_RESTRICTED')) {
+        router.push({
+          pathname: '/(app)/booster',
+          params: { memberIds: members.map((member) => member.id).join(',') },
+        });
+        return;
+      }
+
+      logger.captureException(error, {
+        tags: { screen: 'team-new', action: 'start-queue-catch' },
+      });
+      setQueueFailed(true);
     });
-    router.push(ROUTES.permissionNotification);
   };
+
+  const firstBusyMember = members.find((member) => member.busy);
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
       <TopNav
-        title="친구와 함께"
+        title="친구 초대"
         onLeftPress={() => router.back()}
         rightActions={<Badge variant="count">{`${members.length} / ${POLICY.team.maxMembers}`}</Badge>}
       />
@@ -142,45 +261,20 @@ export default function TeamNewScreen() {
       <ScrollView className="flex-1 bg-bg">
         <View className="px-[24px] pb-[128px] pt-[20px]">
           <Text variant="h1" className="text-[25px] leading-[33px]">
-            닉네임으로 친구를 추가해요
+            같이 갈 친구를{'\n'}닉네임으로 불러봐
           </Text>
           <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-            수락 절차 없이 바로 묶음에 포함돼요. 다른 방에 있는 친구는 큐 등록 전에 조정해야 해요.
+            수락 절차 없이 초대자가 바로 진행해요
           </Text>
-
-          <View className="mt-[24px]">
-            <Text variant="eyebrow" tone="ink-3">
-              내 묶음
-            </Text>
-            <View className="mt-[10px] flex-row flex-wrap gap-[8px]">
-              {members.map((member) => (
-                <Chip
-                  key={member.id}
-                  variant={member.id === 'self' ? 'me' : member.busy ? 'busy' : 'default'}
-                  label={member.nickname}
-                  badge={member.id === 'self' ? '나' : undefined}
-                  avatar={<Avatar initial={member.initial} size={24} />}
-                  removable={member.id !== 'self'}
-                  onRemove={() => setMembers((current) => current.filter((item) => item.id !== member.id))}
-                />
-              ))}
-            </View>
-          </View>
-
-          {hasBusyMember ? (
-            <Banner tone="warn" icon="!" title="큐 등록 전 확인">
-              다른 방에 있는 친구가 있어요. 자동 제외하지 않고 직접 조정해야 합니다.
-            </Banner>
-          ) : null}
 
           <Input
             prefixIcon
             value={query}
             onChangeText={setQuery}
             label="친구 검색"
-            placeholder="친구 닉네임"
+            placeholder="닉네임으로 검색"
             helper={isSearching ? '검색 중이에요.' : '닉네임은 정확히 공개 프로필 기준으로 검색돼요.'}
-            className="mt-[26px]"
+            className="mt-[24px]"
           />
 
           <View className="mt-[18px] gap-[10px]">
@@ -199,26 +293,62 @@ export default function TeamNewScreen() {
                 <View className="flex-1">
                   <Text className="text-[14px] font-bold text-ink">{member.nickname}</Text>
                   <Text className="mt-[2px] text-[11.5px] text-ink-3">
-                    {member.busy ? '다른 방에 있어요' : '초대 가능'}
+                    {member.blocked
+                      ? '초대할 수 없는 친구예요'
+                      : member.busy
+                        ? '다른 방 사용 중이에요'
+                        : '초대 가능'}
                   </Text>
                 </View>
                 <Button
                   size="sm"
-                  variant={member.busy || addedIds.has(member.id) ? 'secondary' : 'ink'}
-                  disabled={member.busy || addedIds.has(member.id)}
+                  variant={member.blocked || member.busy || addedIds.has(member.id) ? 'secondary' : 'ink'}
+                  disabled={member.blocked || member.busy || addedIds.has(member.id)}
                   onPress={() => addMember(member)}
                 >
-                  {addedIds.has(member.id) ? '추가됨' : '추가'}
+                  {addedIds.has(member.id) ? '추가됨' : '+ 추가'}
                 </Button>
               </Card>
             ))}
           </View>
+
+          <View className="mt-[24px]">
+            <Text variant="eyebrow" tone="ink-3">
+              내 묶음
+            </Text>
+            <View className="mt-[10px] flex-row flex-wrap gap-[8px]">
+              {members.map((member) => (
+                <Chip
+                  key={member.id}
+                  variant={member.id === user?.id ? 'me' : member.busy ? 'busy' : 'default'}
+                  label={member.nickname}
+                  badge={member.id === user?.id ? '초대한 사람' : undefined}
+                  avatar={<Avatar initial={member.initial} size={24} />}
+                  removable={member.id !== user?.id}
+                  onRemove={() => setMembers((current) => current.filter((item) => item.id !== member.id))}
+                />
+              ))}
+              {members.length < POLICY.team.maxMembers ? (
+                <Chip
+                  variant="add"
+                  label="+ 친구"
+                  accessibilityRole="text"
+                />
+              ) : null}
+            </View>
+          </View>
+
+          {hasBusyMember ? (
+            <Banner tone="warn" icon="!" title="큐 등록 전 확인">
+              {firstBusyMember?.nickname ?? '친구'}가 다른 방 사용 중이에요. 빼거나 다른 친구를 초대해주세요.
+            </Banner>
+          ) : null}
         </View>
       </ScrollView>
 
       <BottomActionBar fixed>
         <Button fullWidth disabled={!canStart} onPress={startQueue}>
-          {members.length}명으로 매칭 시작
+          {hasBusyMember ? '매칭 시작 (조정 필요)' : `${members.length}명으로 매칭 시작`}
         </Button>
       </BottomActionBar>
 
@@ -228,7 +358,17 @@ export default function TeamNewScreen() {
         icon="!"
         title="친구를 검색하지 못했어요"
         description="네트워크 상태를 확인한 뒤 다시 검색해주세요."
-        actions={[{ label: '확인', variant: 'ink', onPress: () => setSearchFailed(false) }]}
+        actions={[
+          { label: '확인', variant: 'secondary', onPress: () => setSearchFailed(false) },
+          {
+            label: '다시 시도',
+            variant: 'ink',
+            onPress: () => {
+              setSearchFailed(false);
+              setSearchAttempt((attempt) => attempt + 1);
+            },
+          },
+        ]}
         onDismiss={() => setSearchFailed(false)}
       />
 
@@ -238,7 +378,17 @@ export default function TeamNewScreen() {
         icon="!"
         title="큐에 들어갈 수 없어요"
         description="묶음 인원과 busy 상태를 다시 확인해주세요."
-        actions={[{ label: '확인', variant: 'ink', onPress: () => setQueueFailed(false) }]}
+        actions={[
+          { label: '확인', variant: 'secondary', onPress: () => setQueueFailed(false) },
+          {
+            label: '다시 시도',
+            variant: 'ink',
+            onPress: () => {
+              setQueueFailed(false);
+              startQueue();
+            },
+          },
+        ]}
         onDismiss={() => setQueueFailed(false)}
       />
     </SafeAreaView>
