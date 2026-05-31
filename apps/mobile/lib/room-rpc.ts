@@ -112,3 +112,62 @@ export async function getBlockedUserIds(selfUserId: string): Promise<Set<string>
     return new Set();
   }
 }
+
+export async function getVideoById(videoId: string): Promise<VideoRow | null> {
+  try {
+    const { data, error } = await supabase
+      .from('video')
+      .select('*')
+      .eq('id', videoId)
+      .single();
+    if (error) throw error;
+    return data ?? null;
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'room_rpc', rpc: 'get_video_by_id', video_id: videoId },
+    });
+    return null;
+  }
+}
+
+export async function getSiblingVideos(
+  roomId: string,
+  hourSlot: number,
+): Promise<VideoRow[]> {
+  try {
+    const { data, error } = await supabase
+      .from('video')
+      .select('*')
+      .eq('room_id', roomId)
+      .eq('hour_slot', hourSlot)
+      .eq('status', 'ready')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data ?? [];
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'room_rpc', rpc: 'get_sibling_videos', room_id: roomId },
+      extra: { hourSlot },
+    });
+    return [];
+  }
+}
+
+export async function isBlockedBetween(
+  userA: string,
+  userB: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc('is_blocked_between', {
+      a: userA,
+      b: userB,
+    });
+    if (error) throw error;
+    return data === true;
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'room_rpc', rpc: 'is_blocked_between' },
+    });
+    return false;
+  }
+}

@@ -1,31 +1,51 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEvent } from 'expo';
 import { Image } from 'expo-image';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Play } from 'lucide-react-native';
 
-import { FullscreenVideo } from '@dei/ui';
-import { analytics, logger } from '@dei/shared';
+import { Avatar, Chip, FullscreenVideo, IconButton, StateView } from '@dei/ui';
+import { analytics, logger, POLICY } from '@dei/shared';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { supabase } from '@/lib/supabase';
+import {
+  getVideoById,
+  getSiblingVideos,
+  isBlockedBetween,
+  getRoomMembersWithProfile,
+} from '@/lib/room-rpc';
+
+type FetchState = 'loading' | 'error' | 'ready';
 
 export default function VideoFullscreenScreen() {
   const router = useRouter();
-  const { videoId, roomId, videoUrl, thumbnailUrl } = useLocalSearchParams<{
+  const { videoId, roomId } = useLocalSearchParams<{
     videoId: string;
     roomId: string;
-    videoUrl?: string;
-    thumbnailUrl?: string;
   }>();
 
+  const [fetchState, setFetchState] = useState<FetchState>('loading');
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [memberNickname, setMemberNickname] = useState<string>('');
+  const [memberUserId, setMemberUserId] = useState<string>('');
+  const [siblings, setSiblings] = useState<{ id: string; url: string; thumbnail: string | null }[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [firstFrameRendered, setFirstFrameRendered] = useState(false);
+  const [uiVisible, setUiVisible] = useState(true);
   const [loadStartMs] = useState(() => performance.now());
+
+  const prefetchCount = POLICY.video.prefetchSiblingCount;
 
   const player = useVideoPlayer(
     videoUrl ? { uri: videoUrl } : null,
     (p) => {
       p.loop = true;
+      p.muted = true;
       p.bufferOptions = { preferredForwardBufferDuration: 1 };
       p.play();
     },
@@ -39,22 +59,141 @@ export default function VideoFullscreenScreen() {
     isPlaying: player.playing,
   });
 
-  useEffect(() => {
-    analytics.capture(ANALYTICS_EVENTS.video_load_started, {
-      videoId,
-      roomId,
-    });
-  }, [videoId, roomId]);
+  const loadVideo = useCallback(async () => {
+    if (!videoId || !roomId) return;
+    setFetchState('loading');
+    setFirstFrameRendered(false);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const selfUserId = user?.id ?? '';
+
+      const video = await getVideoById(videoId);
+      if (!video || !video.storage_path) {
+        setFetchState('error');
+        return;
+      }
+
+      if (selfUserId && video.user_id) {
+        const blocked = await isBlockedBetween(selfUserId, video.user_id);
+        if (blocked) {
+          router.back();
+          return;
+        }
+      }
+
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from('room-videos')
+        .createSignedUrl(video.storage_path, 60);
+      if (signedError || !signedData?.signedUrl) {
+        logger.captureException(signedError ?? new Error('signed URL empty'), {
+          tags: { screen: 'VideoFullscreen', videoId: videoId ?? '' },
+          extra: { roomId, storagePath: video.storage_path },
+        });
+        setFetchState('error');
+        return;
+      }
+
+      let thumbSignedUrl: string | null = null;
+      if (video.thumbnail_path) {
+        const { data: thumbData } = await supabase.storage
+          .from('room-videos')
+          .createSignedUrl(video.thumbnail_path, 60);
+        thumbSignedUrl = thumbData?.signedUrl ?? null;
+      }
+
+      setVideoUrl(signedData.signedUrl);
+      setThumbnailUrl(thumbSignedUrl);
+      setMemberUserId(video.user_id ?? '');
+
+      const members = await getRoomMembersWithProfile(roomId);
+      const member = members.find((m) => m.user_id === video.user_id);
+      setMemberNickname(member?.profile?.nickname ?? '');
+
+      if (video.hour_slot != null) {
+        const siblingRows = await getSiblingVideos(roomId, video.hour_slot);
+        const blockedIds = selfUserId
+          ? new Set(
+              (
+                await supabase
+                  .from('block')
+                  .select('blocked_user_id, blocker_user_id')
+                  .or(
+                    `blocker_user_id.eq.${selfUserId},blocked_user_id.eq.${selfUserId}`,
+                  )
+                  .is('unblocked_at', null)
+              ).data?.flatMap((r) =>
+                r.blocker_user_id === selfUserId
+                  ? [r.blocked_user_id]
+                  : [r.blocker_user_id],
+              ) ?? [],
+            )
+          : new Set<string>();
+
+        const filtered = siblingRows.filter(
+          (s) => !blockedIds.has(s.user_id ?? ''),
+        );
+
+        const resolved = await Promise.all(
+          filtered.map(async (s) => {
+            if (!s.storage_path) return null;
+            const { data: sd } = await supabase.storage
+              .from('room-videos')
+              .createSignedUrl(s.storage_path, 60);
+            if (!sd?.signedUrl) return null;
+            let thumb: string | null = null;
+            if (s.thumbnail_path) {
+              const { data: td } = await supabase.storage
+                .from('room-videos')
+                .createSignedUrl(s.thumbnail_path, 60);
+              thumb = td?.signedUrl ?? null;
+            }
+            return { id: s.id, url: sd.signedUrl, thumbnail: thumb };
+          }),
+        );
+
+        const validSiblings = resolved.filter(
+          (s): s is { id: string; url: string; thumbnail: string | null } =>
+            s !== null,
+        );
+        setSiblings(validSiblings);
+
+        const idx = validSiblings.findIndex((s) => s.id === videoId);
+        setCurrentIndex(idx >= 0 ? idx : 0);
+
+        for (
+          let i = Math.max(0, idx - prefetchCount);
+          i <= Math.min(validSiblings.length - 1, idx + prefetchCount);
+          i++
+        ) {
+          if (i === idx) continue;
+          const sibling = validSiblings[i];
+          if (sibling?.thumbnail) {
+            Image.prefetch(sibling.thumbnail);
+          }
+        }
+      }
+
+      analytics.capture(ANALYTICS_EVENTS.video_load_started, {
+        videoId,
+        roomId,
+      });
+
+      setFetchState('ready');
+    } catch (err) {
+      logger.captureException(err, {
+        tags: { screen: 'VideoFullscreen', videoId: videoId ?? '' },
+        extra: { roomId },
+      });
+      setFetchState('error');
+    }
+  }, [videoId, roomId, prefetchCount, router]);
 
   useEffect(() => {
-    if (!isPlaying && status === 'readyToPlay' && firstFrameRendered) {
-      analytics.capture(ANALYTICS_EVENTS.video_stalled, {
-        videoId,
-        position_ms: Math.round(player.currentTime * 1000),
-        reason: 'buffering',
-      });
-    }
-  }, [isPlaying, status, firstFrameRendered, videoId, player]);
+    loadVideo();
+  }, [loadVideo]);
 
   useEffect(() => {
     if (status === 'readyToPlay' && !firstFrameRendered) {
@@ -76,8 +215,76 @@ export default function VideoFullscreenScreen() {
     }
   }, [status, error, firstFrameRendered, videoId, roomId, videoUrl, loadStartMs]);
 
-  const progress =
-    player.duration > 0 ? player.currentTime / player.duration : 0;
+  useEffect(() => {
+    if (!isPlaying && status === 'readyToPlay' && firstFrameRendered) {
+      analytics.capture(ANALYTICS_EVENTS.video_stalled, {
+        videoId,
+        position_ms: Math.round(player.currentTime * 1000),
+        reason: 'buffering',
+      });
+    }
+  }, [isPlaying, status, firstFrameRendered, videoId, player]);
+
+  const swipeToIndex = useCallback(
+    async (nextIndex: number) => {
+      if (nextIndex < 0 || nextIndex >= siblings.length) return;
+      const next = siblings[nextIndex];
+      if (!next) return;
+      setCurrentIndex(nextIndex);
+      setFirstFrameRendered(false);
+      try {
+        await player.replaceAsync({ uri: next.url });
+        player.play();
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { screen: 'VideoFullscreen', action: 'swipe_replace' },
+        });
+      }
+
+      for (
+        let i = Math.max(0, nextIndex - prefetchCount);
+        i <= Math.min(siblings.length - 1, nextIndex + prefetchCount);
+        i++
+      ) {
+        if (i === nextIndex) continue;
+        const sibling = siblings[i];
+        if (sibling?.thumbnail) {
+          Image.prefetch(sibling.thumbnail);
+        }
+      }
+    },
+    [siblings, player, prefetchCount],
+  );
+
+  const swipeStartX = useRef(0);
+
+  const panGesture = Gesture.Pan()
+    .onStart((e) => {
+      swipeStartX.current = e.translationX;
+    })
+    .onEnd((e) => {
+      const dx = e.translationX;
+      if (dx < -50) {
+        swipeToIndex(currentIndex + 1);
+      } else if (dx > 50) {
+        swipeToIndex(currentIndex - 1);
+      }
+    })
+    .runOnJS(true);
+
+  const longPressGesture = Gesture.LongPress()
+    .minDuration(400)
+    .onStart(() => {
+      setUiVisible(false);
+      player.pause();
+    })
+    .onEnd(() => {
+      setUiVisible(true);
+      player.play();
+    })
+    .runOnJS(true);
+
+  const combinedGesture = Gesture.Simultaneous(panGesture, longPressGesture);
 
   function handleVideoPress() {
     if (player.playing) {
@@ -87,35 +294,85 @@ export default function VideoFullscreenScreen() {
     }
   }
 
-  return (
-    <FullscreenVideo
-      mode="playback"
-      onClose={() => router.back()}
-      onVideoPress={handleVideoPress}
-      progress={progress}
-      swipeHint="‹ 다른 멤버 영상 ›"
-    >
-      <VideoView
-        player={player}
-        contentFit="cover"
-        nativeControls={false}
-        className="absolute inset-0"
-        onFirstFrameRender={() => {
-          if (!firstFrameRendered) {
-            setFirstFrameRendered(true);
-          }
-        }}
+  const progress =
+    player.duration > 0 ? player.currentTime / player.duration : 0;
+
+  const memberInitial = memberNickname ? memberNickname.charAt(0) : '?';
+
+  const metaSlot = memberUserId ? (
+    <Chip
+      testID="member-chip"
+      variant="default"
+      label={memberNickname || '멤버'}
+      avatar={<Avatar initial={memberInitial} size={24} bg="bg-[#7A8DB8]" />}
+      onStartShouldSetResponder={() => true}
+      onResponderRelease={() => {
+        router.push(
+          `/(app)/room/${roomId}/members?userId=${memberUserId}` as never,
+        );
+      }}
+    />
+  ) : null;
+
+  if (fetchState === 'loading') {
+    return <StateView kind="loading" />;
+  }
+
+  if (fetchState === 'error') {
+    return (
+      <StateView
+        kind="error"
+        icon="!"
+        title="영상을 불러오지 못했어요"
+        desc="잠시 후 다시 시도해 주세요."
+        action={{ label: '다시 시도', onPress: loadVideo }}
       />
-      {!firstFrameRendered && thumbnailUrl ? (
-        <View className="absolute inset-0">
-          <Image
-            source={{ uri: thumbnailUrl }}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            className="absolute inset-0"
-          />
-        </View>
-      ) : null}
-    </FullscreenVideo>
+    );
+  }
+
+  return (
+    <GestureDetector gesture={combinedGesture}>
+      <FullscreenVideo
+        mode="playback"
+        onClose={uiVisible ? () => router.back() : undefined}
+        onVideoPress={handleVideoPress}
+        progress={uiVisible ? progress : undefined}
+        metaSlot={uiVisible ? metaSlot : null}
+        swipeHint={uiVisible ? '‹ 다른 멤버 영상 ›' : undefined}
+      >
+        <VideoView
+          player={player}
+          contentFit="contain"
+          nativeControls={false}
+          className="absolute inset-0"
+          onFirstFrameRender={() => {
+            if (!firstFrameRendered) {
+              setFirstFrameRendered(true);
+            }
+          }}
+        />
+        {!firstFrameRendered && thumbnailUrl ? (
+          <View className="absolute inset-0">
+            <Image
+              source={{ uri: thumbnailUrl }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              className="absolute inset-0"
+            />
+          </View>
+        ) : null}
+        {!isPlaying && firstFrameRendered ? (
+          <View className="absolute inset-0 items-center justify-center">
+            <IconButton
+              glyph={Play}
+              variant="glass"
+              size={36}
+              accessibilityLabel="재생"
+              onPress={handleVideoPress}
+            />
+          </View>
+        ) : null}
+      </FullscreenVideo>
+    </GestureDetector>
   );
 }
