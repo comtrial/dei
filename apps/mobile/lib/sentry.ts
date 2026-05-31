@@ -15,7 +15,6 @@ export function initSentry(): void {
 
   if (!dsn) {
     if (__DEV__) {
-      // eslint-disable-next-line no-console
       console.warn(
         '[sentry] EXPO_PUBLIC_SENTRY_DSN 가 설정되지 않아 원격 전송이 비활성화됩니다. 콘솔 transport 로 동작합니다.',
       );

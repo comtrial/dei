@@ -15,12 +15,12 @@
 
 /** 신고 사유 카테고리 (D10). reports.reason_code CHECK 와 1:1. */
 export const REPORT_CATEGORIES = [
-  { code: 'verbal_abuse', label: '욕설/비방' },
-  { code: 'spam', label: '스팸/광고' },
-  { code: 'fake_profile', label: '허위 프로필 (사진/정보 부정확)' },
-  { code: 'inappropriate_video', label: '부적절한 영상 (음란/혐오/폭력)' },
-  { code: 'harassment', label: '괴롭힘/스토킹' },
-  { code: 'other', label: '기타 (자유 입력 필수)' },
+  { code: 'verbal_abuse', label: '욕설·비방' },
+  { code: 'sexual_content', label: '성적·선정적 콘텐츠' },
+  { code: 'fake_profile', label: '사칭·가짜 프로필' },
+  { code: 'spam', label: '광고·스팸' },
+  { code: 'violence_threat', label: '폭력·위협' },
+  { code: 'other', label: '기타 (자유 입력)' },
 ] as const;
 
 export type ReportCategoryCode = (typeof REPORT_CATEGORIES)[number]['code'];
@@ -36,6 +36,8 @@ export const POLICY = {
     preferredAgeBandYears: 3,
     /** 큐 만료. 초과 시 S09(매칭 실패/만료). */
     queueExpiryHours: 24,
+    /** 방 이탈 후 재매칭 제한. 여성은 결제 없이 자동 면제된다. */
+    rematchCooldownHours: 24,
   },
 
   // ── 팀(묶음) 구성 (D4 · S06) ───────────────────────────────────
@@ -139,6 +141,8 @@ export const POLICY = {
     /** 본인인증 연속 실패 잠금(S03 결정). */
     maxConsecutiveFailures: 5,
     lockoutHours: 24,
+    /** 탈퇴 후 동일 CI 재가입 제한(S20 결정). */
+    rejoinLockDays: 30,
     /** 닉네임 변경 throttle(S04 결정). */
     nicknameChangeThrottleDays: 30,
   },

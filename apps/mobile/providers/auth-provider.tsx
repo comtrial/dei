@@ -4,13 +4,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { analytics, logger } from '@dei/shared';
 
 import { supabase } from '@/lib/supabase';
+import type { ConfirmIdentityVerificationResponse } from '@/lib/portone.stub';
 
 /**
  * 인증 골격 (spec §3.3 · A-4)
  * ------------------------------------------------------------------
  * Supabase Auth 익명 세션으로 시작 → PortOne 본인인증 통과 시 "검증된 신원"
- * 으로 승격한다(S03). 승격(CI 검증·auth_verification 기록)은 B 담당이며,
- * 여기서는 `promoteWithIdentity` 경계만 placeholder 로 둔다(D-12).
+ * 으로 승격한다(S03). `promoteWithIdentity` 는 신규 가입 사용자의 검증 세션
+ * 유지와 CI 중복 기존 계정 자동 로그인 세션 전환을 모두 처리한다.
  *
  * 세션이 잡히면 `logger.setUser({ id })` 로 Sentry 사용자 컨텍스트를 연결한다
  * (PII 인 email 은 넣지 않는다 — CLAUDE.md 규칙 4).
@@ -21,8 +22,8 @@ type AuthContextValue = {
   user: User | null;
   /** 익명 세션 보장(없으면 생성). 본인인증 진입 전 임시 세션. */
   ensureAnonymousSession: () => Promise<Session>;
-  /** ⚠️ handoff: PortOne 본인인증 결과로 익명→검증 신원 승격 (B 구현 예정). */
-  promoteWithIdentity: () => Promise<void>;
+  /** PortOne 본인인증 결과로 익명 세션을 검증된 앱 사용자 상태로 확정. */
+  promoteWithIdentity: (identity: ConfirmIdentityVerificationResponse) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -120,12 +121,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data.session;
   }, [session]);
 
-  const promoteWithIdentity = useCallback(async () => {
-    // handoff: PortOne 본인인증(portone.stub.startIdentityVerification) → 서버
-    // 콜백 검증 → auth_verification 기록 → 동일 계정에 본인인증 메타 반영.
-    // B 담당. 익명 사용자를 영구 계정으로 승격하는 경로도 여기서 잇는다.
-    throw new Error('handoff: PortOne 본인인증 승격(B) 구현 예정');
-  }, []);
+  const promoteWithIdentity = useCallback(
+    async (identity: ConfirmIdentityVerificationResponse) => {
+      if (identity.authSession) {
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: identity.authSession.accessToken,
+          refresh_token: identity.authSession.refreshToken,
+        });
+
+        if (sessionError) {
+          throw sessionError;
+        }
+
+        const nextSession = sessionData.session;
+        setSession(nextSession);
+
+        const existingUserId = nextSession?.user.id ?? identity.authSession.userId;
+        logger.setUser({ id: existingUserId });
+        analytics.identify(existingUserId, {
+          birth_date: identity.birthDate ?? null,
+          birth_year: identity.birthYear,
+          existing_member: Boolean(identity.existingMember),
+          gender: identity.gender,
+          identity_verified: true,
+          is_adult: identity.isAdult,
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        throw error;
+      }
+
+      const nextSession = data.session ?? session;
+      setSession(nextSession);
+
+      const userId = nextSession?.user.id;
+
+      if (userId) {
+        logger.setUser({ id: userId });
+        analytics.identify(userId, {
+          birth_date: identity.birthDate ?? null,
+          birth_year: identity.birthYear,
+          gender: identity.gender,
+          identity_verified: true,
+          is_adult: identity.isAdult,
+        });
+      }
+    },
+    [session],
+  );
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();

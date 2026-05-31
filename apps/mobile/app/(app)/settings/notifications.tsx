@@ -1,41 +1,139 @@
-import { View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import { analytics, logger, POLICY } from '@dei/shared';
+import { AlertDialog, Banner, SettingsRow, Text, TopNav } from '@dei/ui';
 
-/**
- * S22 — 알림 설정
- * ==================================================================
- * 담당자: B
- * 화면 목적: S19 '알림' row → 진입. 마스터 토글 1개로 단순. 항목별 분리·수면시간
- *           설정 모두 MVP 제외. 새벽 발송은 서버단에서 자동 차단.
- * 의존 DS 컴포넌트: TopNav(뒤로가기 + 타이틀 '알림') · SettingsRow(마스터 토글 row
- *   '알림 받기') · Toggle(44x26 알약 토글, accent ON / ink-4 OFF) · Text(설명 sub
- *   'OFF 시 매칭 결과·메시지를 받지 못해요') · Card(InfoCard '새벽 0~7시는 자동으로
- *   알림이 가지 않아요')  [@dei/ui]
- * 의존 데이터: 본인 알림 수신 설정 (master ON/OFF — notification_settings/profiles
- *   flag, 테이블명 HTML 미명시)
- * 발생 이벤트(PostHog): S22:notification_settings_opened ·
- *   S22:notification_master_toggled
- * 서버 의존(L1): 알림 마스터 토글 저장 엔드포인트(HTML 미명시) /
- *   새벽 0~7시 발송 자동 차단(서버단 스케줄·푸시 게이트 — 사용자 설정 불필요)
- * 정책 의존(L2): 마스터 토글 1개 단순화(항목별 토글 MVP 제외) / 새벽 0~7시 발송
- *   차단(서버단 자동) / OFF 시 매칭·업로드·멘션 미수신(S07a 정신) /
- *   앱 토글 vs OS 권한 구분 안내
- * 와이어프레임 참조: all-screens S22
- *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(마스터 토글 row·설명 sub·새벽 차단 InfoCard)은 owner 가 채운다.
- */
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { useAuth } from '@/providers/auth-provider';
+import { supabase } from '@/lib/supabase';
+
+type NotificationSettings = {
+  push_enabled: boolean;
+};
+
+const DEFAULT_SETTINGS: NotificationSettings = {
+  push_enabled: true,
+};
+
 export default function NotificationSettingsScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_SETTINGS);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    analytics.capture(ANALYTICS_EVENTS.notification_settings_opened);
+
+    if (!user) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'notifications.load-settings',
+      async () => {
+        const { data, error } = await supabase
+          .from('notification_setting')
+          .select('push_enabled')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          throw error;
+        }
+
+        if (data) {
+          setSettings(data);
+        }
+      },
+      { tags: { screen: 'settings-notifications', action: 'load' } },
+    );
+  }, [user]);
+
+  const updateMasterSetting = (value: boolean) => {
+    setSettings({ push_enabled: value });
+
+    void logger.withErrorCapture(
+      'notifications.update-setting',
+      async () => {
+        if (!user) {
+          return;
+        }
+
+        const { error } = await supabase
+          .from('notification_setting')
+          .upsert({
+            chat_mention: value,
+            match_alert: value,
+            push_enabled: value,
+            upload_reminder: value,
+            user_id: user.id,
+          }, { onConflict: 'user_id' });
+
+        if (error) {
+          throw error;
+        }
+
+        analytics.capture(ANALYTICS_EVENTS.notification_master_toggled, {
+          value,
+        });
+      },
+      { tags: { screen: 'settings-notifications', action: 'update' } },
+    ).catch((error) => {
+      logger.captureException(error, {
+        tags: { screen: 'settings-notifications', action: 'update-catch' },
+      });
+      setSettings({ push_enabled: !value });
+      setFailed(true);
+    });
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">알림 설정</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S22
-        </Text>
-      </View>
+      <TopNav title="알림" onLeftPress={() => router.back()} />
+
+      <ScrollView className="flex-1 bg-bg">
+        <View className="pb-[42px] pt-[18px]">
+          <SettingsRow
+            variant="master"
+            label="알림 받기"
+            value="OFF 시 매칭 결과·메시지·멘션을 받지 못해요"
+            toggleValue={settings.push_enabled}
+            onToggleChange={updateMasterSetting}
+          />
+          <Text className="px-[24px] pt-[10px] text-[11.5px] leading-[17px] text-ink-3">
+            앱 안 알림 설정이에요. OS 권한이 꺼져 있으면 시스템 설정에서 켜야 해요.
+          </Text>
+
+          <View className="px-[24px] pt-[22px]">
+            {!settings.push_enabled ? (
+              <Banner tone="warn" icon="!" title="매칭을 시작할 수 없어요">
+                알림 받기를 켜야 매칭 성사와 방 알림을 받을 수 있어요.
+              </Banner>
+            ) : null}
+            <Banner
+              tone="info"
+              icon="🌙"
+              title="새벽 알림 자동 차단"
+              className={!settings.push_enabled ? 'mt-[12px]' : undefined}
+            >
+              {POLICY.notifications.quietHours.startHourKst}~{POLICY.notifications.quietHours.endHourKst}시에는 알림이 자동으로 가지 않아요. 별도 설정 불필요.
+            </Banner>
+          </View>
+        </View>
+      </ScrollView>
+
+      <AlertDialog
+        visible={failed}
+        tone="warn"
+        icon="!"
+        title="알림 설정을 저장하지 못했어요"
+        description="잠시 후 다시 시도해주세요."
+        actions={[{ label: '확인', variant: 'ink', onPress: () => setFailed(false) }]}
+        onDismiss={() => setFailed(false)}
+      />
     </SafeAreaView>
   );
 }

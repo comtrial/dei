@@ -1,45 +1,113 @@
-/**
- * ⚠️ HANDOFF STUB — 푸시/로컬 알림 (D-12, 이번 셋팅에서 미구현)
- * ==================================================================
- * 담당: 인프라·디스패처 = A / 설정 표면(S22·S07a) = B / 트리거 = 각 도메인.
- * 이 파일은 *인터페이스 경계* 만 고정한다. 실제 구현(expo-notifications 도입,
- * 토큰 등록, APNs/FCM, 새벽 0~7 KST 차단 정책 — policy.ts `quietHours` 참조)은
- * 후속 담당이 채운다.
- *
- * 규칙:
- *   - 상태 *조회* 함수는 게이트 UI 가 런타임에 호출하므로 throw 하지 않고
- *     안전한 placeholder('undetermined')를 돌려준다(앱이 죽지 않게).
- *   - 실제 *발송/등록* 함수는 호출되면 명확히 throw 해서 미구현을 드러낸다.
- *   - expo-notifications 는 *아직 미설치*. 도입 시 이 stub 을 실제 구현으로 교체.
- */
+import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
 import { logger } from '@dei/shared';
 
 import type { PermissionState } from '@/lib/permissions';
+import { supabase } from '@/lib/supabase';
 
-const HANDOFF = 'handoff: 알림(A 인프라/B 설정표면) 구현 예정';
+const PUSH_DISPATCH_HANDOFF = 'handoff: 서버 푸시 발송(A 인프라) 구현 예정';
 
-/** 알림 권한 상태. 미구현이므로 항상 undetermined(게이트가 안내를 띄우도록). */
+function normalizeNotificationStatus(status: Notifications.PermissionStatus): PermissionState {
+  if (status === Notifications.PermissionStatus.GRANTED) {
+    return 'granted';
+  }
+
+  if (status === Notifications.PermissionStatus.DENIED) {
+    return 'denied';
+  }
+
+  return 'undetermined';
+}
+
+/** 알림 권한 상태를 OS 권한 API로 조회한다. */
 export async function getNotificationPermissionState(): Promise<PermissionState> {
-  logger.captureMessage('notifications.stub: getPermissionState 호출(미구현)', 'debug', {
-    tags: { feature: 'notifications', stub: 'true' },
-  });
-  return 'undetermined';
+  const permission = await Notifications.getPermissionsAsync();
+  return normalizeNotificationStatus(permission.status);
 }
 
-/** 알림 권한 요청. 미구현 — 게이트는 결과 undetermined 로 시스템설정 유도. */
+/** 알림 권한을 OS 다이얼로그로 요청한다. */
 export async function requestNotificationPermission(): Promise<PermissionState> {
-  logger.captureMessage('notifications.stub: requestPermission 호출(미구현)', 'debug', {
-    tags: { feature: 'notifications', stub: 'true' },
+  const permission = await Notifications.requestPermissionsAsync({
+    ios: {
+      allowAlert: true,
+      allowBadge: true,
+      allowSound: true,
+    },
   });
-  return 'undetermined';
+  return normalizeNotificationStatus(permission.status);
 }
 
-/** 디바이스 푸시 토큰 등록. 구현 시 Supabase `notification_setting`/토큰 테이블 연동. */
-export async function registerPushToken(_userId: string): Promise<void> {
-  throw new Error(HANDOFF);
+function getExpoProjectId() {
+  return (
+    Constants.easConfig?.projectId
+    ?? Constants.expoConfig?.extra?.eas?.projectId
+    ?? null
+  );
+}
+
+/** 디바이스 Expo push token 을 Supabase push_token 테이블에 저장한다. */
+export async function registerPushToken(userId: string): Promise<void> {
+  const permission = await getNotificationPermissionState();
+  if (permission !== 'granted') {
+    throw new Error('알림 권한이 필요해요.');
+  }
+
+  const projectId = getExpoProjectId();
+  const token = await Notifications.getExpoPushTokenAsync(
+    projectId ? { projectId } : undefined,
+  );
+
+  const { error } = await supabase.from('push_token').upsert(
+    {
+      platform: Platform.OS,
+      token: token.data,
+      updated_at: new Date().toISOString(),
+      user_id: userId,
+    },
+    { onConflict: 'user_id,token' },
+  );
+
+  if (error) {
+    logger.captureException(error, {
+      tags: { feature: 'notifications', action: 'register-push-token' },
+    });
+    throw error;
+  }
+}
+
+export async function getAppNotificationEnabled(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('notification_setting')
+    .select('push_enabled')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data?.push_enabled ?? true;
+}
+
+export async function setAppNotificationEnabled(userId: string, enabled: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('notification_setting')
+    .upsert({
+      chat_mention: enabled,
+      match_alert: enabled,
+      push_enabled: enabled,
+      upload_reminder: enabled,
+      user_id: userId,
+    }, { onConflict: 'user_id' });
+
+  if (error) {
+    throw error;
+  }
 }
 
 /** 푸시 발송(서버 디스패처 경로). 새벽 0~7 KST 차단은 서버 정책으로 적용. */
 export async function sendPush(_payload: { userId: string; title: string; body: string }): Promise<void> {
-  throw new Error(HANDOFF);
+  throw new Error(PUSH_DISPATCH_HANDOFF);
 }

@@ -7,9 +7,8 @@
  *
  * 담당 경계(D-12):
  *   - 카메라: expo-camera 가 설치돼 있어 실제 요청 가능(C 영상 담당이 확장).
- *   - 알림: expo-notifications 는 이번 범위에서 *미설치*. 알림 권한 흐름은
- *     `notifications.stub.ts` 를 통해 후속 담당(푸시=A 인프라 / 설정표면 B)이
- *     채운다. 여기서는 시스템설정 deeplink 와 게이트 형태만 제공한다.
+ *   - 알림: expo-notifications 권한 조회/요청을 사용한다. 푸시 토큰 저장은
+ *     notifications.stub.ts 에서 push_token 테이블로 연결한다.
  */
 import { Camera } from 'expo-camera';
 import * as Linking from 'expo-linking';
@@ -34,7 +33,7 @@ export async function openSystemSettings(): Promise<void> {
  * 권한 상태를 조회한다.
  *
  * - camera: expo-camera 의 권한 API 로 실제 조회.
- * - notification: 미설치 모듈이라 stub 으로 위임 → 항상 'undetermined'.
+ * - notification: expo-notifications 권한 API 로 실제 조회.
  */
 export async function getPermissionState(kind: PermissionKind): Promise<PermissionState> {
   if (kind === 'camera') {

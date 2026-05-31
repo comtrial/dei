@@ -1,31 +1,311 @@
-/**
- * ⚠️ HANDOFF STUB — PortOne 본인인증/결제 (D-12, 이번 셋팅에서 미구현)
- * ==================================================================
- * 담당: 본인인증 흐름(S03/S03f) = B / 결제(S17/S18 부스터) = B.
- * `@portone/react-native-sdk` 는 package.json 에 *참고용* 으로만 남아있고
- * (다른 개발자가 붙임), 이 셋팅에서는 호출부를 묶지 않는다.
- *
- * 인증 결과(실명·생년월일·성별·CI)는 프로필 root of trust 이며(S03 → S04
- * 성별·생년월일 lock), 서버 측 콜백 검증 Edge Function 으로 CI 해시를 저장한다
- * (auth_verification 테이블). 이 stub 은 그 경계 시그니처만 고정한다.
- */
-const HANDOFF = 'handoff: PortOne 본인인증/결제(B) 구현 예정';
+import type {
+  IdentityVerificationRequest,
+  IdentityVerificationResponse,
+  PaymentRequest,
+  PaymentResponse,
+} from '@portone/browser-sdk/v2';
 
-/** PortOne 본인인증 결과(서버 검증 후 신뢰). */
-export interface IdentityVerificationResult {
-  realName: string;
-  birthDate: string; // YYYY-MM-DD
-  gender: 'male' | 'female';
-  ci: string; // 연계정보(중복 가입 판별 키) — 서버에서 해시 저장
+import { supabase } from '@/lib/supabase';
+
+export type IdentityVerificationFailureCode =
+  | 'CI_DUPLICATE'
+  | 'IDENTITY_ALREADY_VERIFIED'
+  | 'IDENTITY_LOCKED'
+  | 'MISSING_VERIFIED_CUSTOMER'
+  | 'PORTONE_LOOKUP_FAILED'
+  | 'PORTONE_NOT_VERIFIED'
+  | 'REJOIN_LOCKED'
+  | 'SDK_CANCELLED'
+  | 'SDK_ERROR'
+  | 'UNDERAGE';
+
+type StartIdentityVerificationResponse = {
+  channelKey: string;
+  customData?: string;
+  identityVerificationId: string;
+  storeId: string;
+};
+
+export type ConfirmIdentityVerificationResponse = {
+  authSession?: {
+    accessToken: string;
+    expiresAt?: number | null;
+    refreshToken: string;
+    userId: string;
+  };
+  birthDate?: string | null;
+  birthYear: number;
+  existingMember?: boolean;
+  gender: 'male' | 'female' | null;
+  identityVerifiedAt: string;
   isAdult: boolean;
+};
+
+type FunctionInvokeError = {
+  context?: Response;
+  message?: string;
+};
+
+type FunctionErrorPayload = {
+  code?: IdentityVerificationFailureCode;
+  error?: string;
+  existingMember?: boolean;
+  failureCount?: number;
+  lockUntil?: string | null;
+  message?: string;
+};
+
+export class IdentityVerificationError extends Error {
+  code?: IdentityVerificationFailureCode;
+  existingMember?: boolean;
+  failureCount?: number;
+  lockUntil?: string | null;
+
+  constructor(message: string, payload: Partial<FunctionErrorPayload> = {}) {
+    super(message);
+    this.name = 'IdentityVerificationError';
+    this.code = payload.code;
+    this.existingMember = payload.existingMember;
+    this.failureCount = payload.failureCount;
+    this.lockUntil = payload.lockUntil;
+  }
 }
 
-/** 본인인증 SDK 호출 → 인증기관 이탈 → 콜백. 결과는 서버 재검증 필수. */
-export async function startIdentityVerification(): Promise<IdentityVerificationResult> {
-  throw new Error(HANDOFF);
+const toFriendlyMessage = (payload: Partial<FunctionErrorPayload>, fallback: string) => {
+  if (payload.code === 'IDENTITY_LOCKED') {
+    return '본인인증을 너무 많이 시도했어요. 24시간 뒤 다시 시도해주세요.';
+  }
+
+  if (payload.code === 'UNDERAGE') {
+    return payload.error ?? payload.message ?? '만 19세 이상만 이용할 수 있어요.';
+  }
+
+  if (payload.code === 'CI_DUPLICATE') {
+    return payload.error ?? payload.message ?? '이미 가입된 번호예요. 그 계정으로 들어갈게요.';
+  }
+
+  if (payload.code === 'REJOIN_LOCKED') {
+    return payload.error ?? payload.message ?? '탈퇴한 번호는 30일 동안 다시 가입할 수 없어요.';
+  }
+
+  if (payload.error || payload.message) {
+    return payload.error ?? payload.message ?? fallback;
+  }
+
+  return fallback;
+};
+
+const getFunctionError = async (fallback: string, error?: FunctionInvokeError | null) => {
+  if (!error) {
+    return new IdentityVerificationError(fallback);
+  }
+
+  if (error.context) {
+    try {
+      const payload = await error.context.clone().json() as FunctionErrorPayload;
+      return new IdentityVerificationError(toFriendlyMessage(payload, fallback), payload);
+    } catch {
+      // Fall back to the SDK/client message below when the body is not JSON.
+    }
+  }
+
+  return new IdentityVerificationError(error.message || fallback);
+};
+
+export async function startIdentityVerification(): Promise<IdentityVerificationRequest> {
+  const { data, error } = await supabase.functions.invoke<StartIdentityVerificationResponse>(
+    'start-identity-verification',
+  );
+
+  if (error || !data) {
+    throw await getFunctionError('본인확인을 시작할 수 없어요.', error);
+  }
+
+  return {
+    channelKey: data.channelKey,
+    customData: data.customData,
+    identityVerificationId: data.identityVerificationId,
+    storeId: data.storeId,
+  };
 }
 
-/** 부스터(바로매치) 결제 시작. 가격은 하드코딩 금지(스토어/RevenueCat 콘솔). */
-export async function purchaseInstantRematch(_userId: string): Promise<{ ok: boolean }> {
-  throw new Error(HANDOFF);
+export async function startWithdrawIdentityVerification(): Promise<IdentityVerificationRequest> {
+  const { data, error } = await supabase.functions.invoke<StartIdentityVerificationResponse>(
+    'start-withdraw-identity-verification',
+  );
+
+  if (error || !data) {
+    throw await getFunctionError('본인인증 재확인을 시작할 수 없어요.', error);
+  }
+
+  return {
+    channelKey: data.channelKey,
+    customData: data.customData,
+    identityVerificationId: data.identityVerificationId,
+    storeId: data.storeId,
+  };
+}
+
+export async function confirmIdentityVerification(
+  response: IdentityVerificationResponse,
+  fallbackIdentityVerificationId?: string,
+): Promise<ConfirmIdentityVerificationResponse> {
+  const identityVerificationId =
+    response.identityVerificationId?.trim() || fallbackIdentityVerificationId?.trim();
+
+  if (!identityVerificationId) {
+    throw new IdentityVerificationError('본인확인 결과 식별자를 확인할 수 없어요. 다시 시도해 주세요.');
+  }
+
+  if (response.code) {
+    await recordIdentityVerificationFailure({
+      failureCode: 'SDK_ERROR',
+      failureMessage: response.message || response.code,
+      identityVerificationId,
+      identityVerificationTxId: response.identityVerificationTxId,
+    });
+  }
+
+  const { data, error } = await supabase.functions.invoke<ConfirmIdentityVerificationResponse>(
+    'confirm-identity-verification',
+    {
+      body: {
+        identityVerificationId,
+        identityVerificationTxId: response.identityVerificationTxId,
+      },
+    },
+  );
+
+  if (error || !data) {
+    throw await getFunctionError('본인확인 결과를 저장할 수 없어요.', error);
+  }
+
+  return data;
+}
+
+export async function confirmWithdrawIdentityVerification(
+  response: IdentityVerificationResponse,
+  fallbackIdentityVerificationId?: string,
+): Promise<{ identityVerifiedAt: string; ok: true }> {
+  const identityVerificationId =
+    response.identityVerificationId?.trim() || fallbackIdentityVerificationId?.trim();
+
+  if (!identityVerificationId) {
+    throw new IdentityVerificationError('본인확인 결과 식별자를 확인할 수 없어요. 다시 시도해 주세요.');
+  }
+
+  const { data, error } = await supabase.functions.invoke<{ identityVerifiedAt: string; ok: true }>(
+    'confirm-withdraw-identity-verification',
+    {
+      body: {
+        identityVerificationId,
+        identityVerificationTxId: response.identityVerificationTxId,
+      },
+    },
+  );
+
+  if (error || !data) {
+    throw await getFunctionError('본인인증 재확인을 완료할 수 없어요.', error);
+  }
+
+  return data;
+}
+
+export async function recordIdentityVerificationFailure({
+  failureCode,
+  failureMessage,
+  identityVerificationId,
+  identityVerificationTxId,
+}: {
+  failureCode: IdentityVerificationFailureCode;
+  failureMessage?: string;
+  identityVerificationId: string;
+  identityVerificationTxId?: string;
+}) {
+  const { error } = await supabase.functions.invoke('confirm-identity-verification', {
+    body: {
+      failureCode,
+      failureMessage,
+      identityVerificationId,
+      identityVerificationTxId,
+    },
+  });
+
+  if (error) {
+    throw await getFunctionError('본인확인이 완료되지 않았어요.', error);
+  }
+
+  throw new IdentityVerificationError(failureMessage || '본인확인이 완료되지 않았어요.', {
+    code: failureCode,
+  });
+}
+
+export async function withdrawAccount({
+  detail,
+  reason,
+}: {
+  detail?: string;
+  reason: string;
+}): Promise<{ ok: true }> {
+  const { data, error } = await supabase.functions.invoke<{ ok: true }>(
+    'withdraw-account',
+    {
+      body: {
+        detail,
+        reason,
+      },
+    },
+  );
+
+  if (error || !data) {
+    throw await getFunctionError('탈퇴 처리에 실패했어요.', error);
+  }
+
+  return data;
+}
+
+export async function startInstantRematchPayment(productId: string): Promise<PaymentRequest> {
+  const { data, error } = await supabase.functions.invoke<{ request: PaymentRequest }>(
+    'start-instant-rematch-payment',
+    {
+      body: {
+        productId,
+      },
+    },
+  );
+
+  if (error || !data?.request) {
+    throw await getFunctionError('결제를 시작할 수 없어요.', error);
+  }
+
+  return data.request;
+}
+
+export async function confirmInstantRematchPayment(
+  response: PaymentResponse,
+  productId: string,
+): Promise<{ granted: number; ok: true; paymentId: string }> {
+  if (!response.paymentId) {
+    throw new Error('결제 결과 식별자를 확인할 수 없어요.');
+  }
+
+  const { data, error } = await supabase.functions.invoke<{
+    granted: number;
+    ok: true;
+    paymentId: string;
+  }>('confirm-instant-rematch-payment', {
+    body: {
+      code: response.code,
+      message: response.message,
+      paymentId: response.paymentId,
+      productId,
+      txId: response.txId,
+    },
+  });
+
+  if (error || !data) {
+    throw await getFunctionError('결제를 확인할 수 없어요.', error);
+  }
+
+  return data;
 }
