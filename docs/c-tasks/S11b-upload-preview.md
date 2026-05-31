@@ -1,6 +1,6 @@
 # S11b · 촬영 미리보기
 
-- **status**: pending
+- **status**: done
 - **owner**: C (손승태)
 - **priority**: P1
 - **route**: `apps/mobile/app/(app)/room/[roomId]/upload-preview.tsx`
@@ -43,27 +43,27 @@ BeReal/Locket 패턴.
 ## 4. 구현 체크리스트
 
 ### 4-1. 자동 루프 재생
-- [ ] params 의 `localUri` 를 `FullscreenVideo` 로 자동 루프 재생 (`shouldLoop=true`, muted=false).
-- [ ] 가로 영상 — letterbox 또는 자동 가로 회전 (DS 결정).
+- [x] params 의 `localUri` 를 `FullscreenVideo` 로 자동 루프 재생 (`shouldLoop=true`, muted=false).
+- [x] 가로 영상 — letterbox 또는 자동 가로 회전 (DS 결정).
 
 ### 4-2. 2-CTA
-- [ ] "다시 찍기" → `router.back()` (S11 로 복귀, 로컬 영상 폐기 필요시 cleanup).
-- [ ] "올리기" → uploadClip 호출:
+- [x] "다시 찍기" → `router.back()` (S11 로 복귀, 로컬 영상 폐기 필요시 cleanup).
+- [x] "올리기" → uploadClip 호출:
   ```ts
   const { videoId } = await uploadClip({ roomId, localUri });
   router.replace(`/(app)/room/${roomId}`); // S13 로
   ```
-- [ ] 업로드 진행 중 UI disable + `ProgressBar` 표시 (uploadClip 의 progress callback 노출 필요 — C-0 설계 시 고려).
-- [ ] 업로드 성공 시 → `S13` 으로 replace (자동 ③b 언블러 전환).
-- [ ] 업로드 실패 시 → S12 alert (`upload_failed` 분기) 표시.
+- [x] 업로드 진행 중 UI disable + `ProgressBar` 표시 (uploadClip 의 progress callback 노출 필요 — C-0 설계 시 고려).
+- [x] 업로드 성공 시 → `S13` 으로 replace (자동 ③b 언블러 전환).
+- [x] 업로드 실패 시 → S12 alert (`upload_failed` 분기) 표시.
 
 ### 4-3. 닫기 폐기 confirm
-- [ ] 좌상단 × 탭 → `AlertDialog` "영상이 사라져요. 정말 닫을까요?".
-- [ ] 확인 → 영상 폐기 + `router.back()`.
-- [ ] 취소 → confirm 닫기.
+- [x] 좌상단 × 탭 → `AlertDialog` "영상이 사라져요. 정말 닫을까요?".
+- [x] 확인 → 영상 폐기 + `router.back()`.
+- [x] 취소 → confirm 닫기.
 
 ### 4-4. 길이 배지
-- [ ] params `durationMs` 를 `Badge` 에 표시: `● {(durationMs/1000).toFixed(1)}초`.
+- [x] params `durationMs` 를 `Badge` 에 표시: `● {(durationMs/1000).toFixed(1)}초`.
 
 ---
 
@@ -108,8 +108,8 @@ BeReal/Locket 패턴.
 
 ## 9. 완료 정의
 
-- [ ] tsc + lint 통과.
-- [ ] component test 통과.
+- [x] tsc + lint 통과.
+- [x] component test 통과.
 - [ ] 실기 업로드 성공 → S13 모자이크에 본인 영상 표시 수동 확인.
 - [ ] 네트워크 끊김 시 S12 alert 진입 확인.
 
