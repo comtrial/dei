@@ -1,6 +1,6 @@
 # S12 · 촬영 실패 차등 alert (2종)
 
-- **status**: pending
+- **status**: done
 - **owner**: C (손승태)
 - **priority**: P2
 - **route**: `apps/mobile/app/(app)/room/[roomId]/capture-failed.tsx`
@@ -36,24 +36,24 @@ S11 촬영 중 발생하는 **2종 실패** 차등 alert. 권한 거부는 S11a 
 ## 3. 구현 체크리스트
 
 ### 3-1. 라우팅 / 분기
-- [ ] 이 화면은 보통 **modal/route param** 으로 진입 — query param `reason=hardware|upload` 받는다.
-- [ ] 또는 S11/S11b 안에서 `AlertDialog` 인라인 렌더 — DS `AlertDialog` 가 modal 지원하면 인라인이 더 자연스러움. **선택**: 라우트 분리 (별도 화면) vs 인라인 modal. 핸드오프 가이드는 별도 route 로 만들었으므로 그대로 유지.
+- [x] 이 화면은 보통 **modal/route param** 으로 진입 — query param `reason=hardware|upload` 받는다.
+- [x] 또는 S11/S11b 안에서 `AlertDialog` 인라인 렌더 — DS `AlertDialog` 가 modal 지원하면 인라인이 더 자연스러움. **선택**: 라우트 분리 (별도 화면) vs 인라인 modal. 핸드오프 가이드는 별도 route 로 만들었으므로 그대로 유지.
 
 ### 3-2. 하드웨어 오류 alert
-- [ ] 헤딩 — "카메라를 사용할 수 없어요"
-- [ ] 설명 — "다른 앱이 카메라를 점유 중이거나 기기 문제일 수 있어요."
-- [ ] CTA: secondary "취소" / primary "다시 시도" → S11 으로 router.replace.
-- [ ] 상단 danger 보더 (DS 토큰).
+- [x] 헤딩 — "카메라를 사용할 수 없어요"
+- [x] 설명 — "다른 앱이 카메라를 점유 중이거나 기기 문제일 수 있어요."
+- [x] CTA: secondary "취소" / primary "다시 시도" → S11 으로 router.replace.
+- [x] 상단 danger 보더 (DS 토큰).
 
 ### 3-3. 업로드 실패 alert
-- [ ] 헤딩 — "네트워크가 약해요"
-- [ ] 설명 — "영상은 저장됐어요. 연결되면 자동으로 올려드려요."
-- [ ] CTA: secondary "확인" → router.back / primary "지금 재시도" → `uploadClip` 재호출.
-- [ ] 상단 info 보더.
+- [x] 헤딩 — "네트워크가 약해요"
+- [x] 설명 — "영상은 저장됐어요. 연결되면 자동으로 올려드려요."
+- [x] CTA: secondary "확인" → router.back / primary "지금 재시도" → `uploadClip` 재호출.
+- [x] 상단 info 보더.
 
 ### 3-4. 백그라운드 자동 재시도
-- [ ] `uploadClip` 자체에 retry queue 있음 (C-0 구현). 이 화면은 그저 첫 알림.
-- [ ] 재시도 성공 시 알림 X (조용히 — D8 정책).
+- [x] `uploadClip` 자체에 retry queue 있음 (C-0 구현). 이 화면은 그저 첫 알림.
+- [x] 재시도 성공 시 알림 X (조용히 — D8 정책).
 
 ---
 
@@ -102,9 +102,9 @@ S11 촬영 중 발생하는 **2종 실패** 차등 alert. 권한 거부는 S11a 
 
 ## 8. 완료 정의
 
-- [ ] tsc + lint 통과.
-- [ ] component test 통과 (2 분기).
-- [ ] 실기에서 강제 네트워크 OFF → 업로드 실패 alert 표시 확인.
+- [x] tsc + lint 통과.
+- [x] component test 통과 (2 분기).
+- [ ] 실기에서 강제 네트워크 OFF → 업로드 실패 alert 표시 확인. ← 수동 검증 필요
 
 ---
 
