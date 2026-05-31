@@ -34,3 +34,6 @@ test-results/
 coverage/
 .claude/settings.local.json
 apps/mobile/e2e/screenshots/
+
+# dev env backup (local supabase 전환 시 백업)
+apps/mobile/.env.remote.bak
