@@ -1,6 +1,6 @@
 # S10 · blur 미리보기 (매칭 후 첫 진입)
 
-- **status**: pending
+- **status**: done
 - **owner**: C (손승태)
 - **priority**: P1
 - **route**: `apps/mobile/app/(app)/room/[roomId]/preview.tsx`
@@ -118,8 +118,8 @@
 
 ## 9. 완료 정의
 
-- [ ] tsc + lint 통과.
-- [ ] component test 4 케이스 통과.
+- [x] tsc + lint 통과.
+- [x] component test 4 케이스 통과.
 - [ ] 매칭 푸시 mock → splash → S10 직행 흐름 수동 확인.
 
 ---
