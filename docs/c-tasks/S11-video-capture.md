@@ -1,6 +1,6 @@
 # S11 · 3초 영상 촬영
 
-- **status**: pending
+- **status**: done
 - **owner**: C (손승태)
 - **priority**: P1
 - **route**: `apps/mobile/app/(app)/room/[roomId]/upload.tsx`
@@ -111,8 +111,8 @@ PRD §4 핵심 메커니즘 — 최대 3초 일상 영상. dei 의 가장 자주
 
 ## 9. 완료 정의
 
-- [ ] tsc + lint 통과.
-- [ ] component test 통과.
+- [x] tsc + lint 통과.
+- [x] component test 통과.
 - [ ] 실기 녹화 → S11b 전이 수동 확인.
 - [ ] S04b 프로필 사진 카메라 모듈 재사용 가능한지 B 와 인터페이스 확인 (recordPhoto 분리 필요 시).
 
