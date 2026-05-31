@@ -1,6 +1,6 @@
 # S11a · 카메라 권한 필요 안내
 
-- **status**: pending
+- **status**: done
 - **owner**: C (손승태)
 - **priority**: P1
 - **route**: `apps/mobile/app/(app)/permission/camera.tsx`
@@ -39,15 +39,15 @@ dei 모든 영상이 카메라 의존이므로 권한 없으면 핵심 기능 �
 
 ## 4. 구현 체크리스트
 
-- [ ] 마운트 시 `getPermissionState('camera')` 호출 → 'granted' 이면 즉시 `router.back()` (이 화면 안 보일 것).
-- [ ] 'undetermined' 이면 `requestPermission('camera')` 자동 호출 (OS 다이얼로그) → 결과에 따라 분기:
+- [x] 마운트 시 `getPermissionState('camera')` 호출 → 'granted' 이면 즉시 `router.back()` (이 화면 안 보일 것).
+- [x] 'undetermined' 이면 `requestPermission('camera')` 자동 호출 (OS 다이얼로그) → 결과에 따라 분기:
   - granted → `router.back()` + S11 으로 (직전 화면이 S10/S13 이면 그대로 복귀).
   - denied → 이 화면 본문 표시 (게이트 안내 UI).
-- [ ] "설정에서 카메라 켜기" 탭 → `openSystemSettings()`.
-- [ ] "나중에 하기" 탭 → `router.back()`.
-- [ ] 화면 포커스 복귀 시 (`useFocusEffect`) 권한 재조회 → granted 면 자동 진행.
-- [ ] 우상단 × 탭 → `router.back()`.
-- [ ] `PermissionGate` 의 props 가 부족하면 A 에게 추가 요청 (자체 스타일링 금지).
+- [x] "설정에서 카메라 켜기" 탭 → `openSystemSettings()`.
+- [x] "나중에 하기" 탭 → `router.back()`.
+- [x] 화면 포커스 복귀 시 (`useFocusEffect`) 권한 재조회 → granted 면 자동 진행.
+- [x] 우상단 × 탭 → `router.back()`.
+- [x] `PermissionGate` 의 props 가 부족하면 A 에게 추가 요청 (자체 스타일링 금지). — props 충분, 추가 요청 없음.
 
 ---
 
@@ -94,9 +94,9 @@ dei 모든 영상이 카메라 의존이므로 권한 없으면 핵심 기능 �
 
 ## 9. 완료 정의
 
-- [ ] `pnpm -F mobile exec tsc --noEmit` 통과.
-- [ ] `pnpm -F mobile lint` 통과.
-- [ ] component test 통과.
+- [x] `pnpm -F mobile exec tsc --noEmit` 통과.
+- [x] `pnpm -F mobile lint` 통과 (0 errors).
+- [x] component test 통과 (3/3).
 - [ ] 실기기 권한 거부 후 자동 진행 흐름 수동 확인.
 
 ---
