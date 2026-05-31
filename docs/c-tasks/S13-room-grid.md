@@ -1,6 +1,6 @@
 # S13 · 일상 공유 방 (8셀 분할 ★시그니처)
 
-- **status**: pending
+- **status**: done
 - **owner**: C (손승태)
 - **priority**: P0 ★ — dei 유일 시그니처. 가장 무겁고 가장 중요.
 - **route**: `apps/mobile/app/(app)/room/[roomId]/index.tsx`
@@ -74,52 +74,52 @@ C-0b 의 hook 3개 사용:
 ## 6. 구현 체크리스트
 
 ### 6-1. 진입 가드 (블러 게이트 — ③a/③b 결정)
-- [ ] 마운트 시 본인 24h 내 `video` count 조회.
+- [x] 마운트 시 본인 24h 내 `video` count 조회.
   - 0건 → `router.replace('/(app)/room/' + roomId + '/preview')` (S10 으로).
   - ≥1건 → 본 화면 본문 표시.
-- [ ] 24h 경계는 realtime 으로 정확히 감지 어려움 → focus 시 재평가 + 24h 임박 1시간 전부터 Banner.
+- [x] 24h 경계는 realtime 으로 정확히 감지 어려움 → focus 시 재평가 + 24h 임박 1시간 전부터 Banner.
 
 ### 6-2. Header (TopNav)
-- [ ] 중앙 dei 로고 + back 숨김.
-- [ ] 💬 IconButton + 미읽음 Badge dot — 탭 시 S13a route 로 (A 가 채울 화면).
-- [ ] ⋯ IconButton — 탭 시 BottomSheet "방 정보 / 방 나가기" — 방 나가기 → S16 route (B 담당).
+- [x] 중앙 dei 로고 + back 숨김.
+- [x] 💬 IconButton + 미읽음 Badge dot — 탭 시 S13a route 로 (A 가 채울 화면).
+- [x] ⋯ IconButton — 탭 시 BottomSheet "방 정보 / 방 나가기" — 방 나가기 → S16 route (B 담당).
 
 ### 6-3. TimeStrip
-- [ ] 과거 1~7 시간대 pill row (스와이프 가능).
-- [ ] 현재 시간 pill 강조 (now). `packages/shared/timeOfDay` 로 KST 고정.
-- [ ] 새벽 시간대 (0~7시 KST) 는 'zzz' 표시.
-- [ ] **시간대 변경 시 cache hit 우선** (C-2 §2-2) — 데이터 swap, mount 새로 X.
-- [ ] **매시 정각 자동 갱신** (C-2 §5-3) — setInterval(60s) 로 분 체크, 시 변경 시 trigger.
-- [ ] 선택된 시간대 → GridRoom 의 video 쿼리 hour_slot filter 변경.
+- [x] 과거 1~7 시간대 pill row (스와이프 가능).
+- [x] 현재 시간 pill 강조 (now). `packages/shared/timeOfDay` 로 KST 고정.
+- [x] 새벽 시간대 (0~7시 KST) 는 'zzz' 표시.
+- [x] **시간대 변경 시 cache hit 우선** (C-2 §2-2) — 데이터 swap, mount 새로 X.
+- [x] **매시 정각 자동 갱신** (C-2 §5-3) — setInterval(60s) 로 분 체크, 시 변경 시 trigger.
+- [x] 선택된 시간대 → GridRoom 의 video 쿼리 hour_slot filter 변경.
 - [ ] 초기 fetch = 현재 ± 3시간 7시간치를 1 RPC 로 (`get_room_signed_urls_batch` — L1 §4-1b).
 
 ### 6-4. GridRoom (8셀)
-- [ ] 2×4 그리드. 행 우선 배치 (좌 1행 → 우 1행 → 좌 2행 ...).
-- [ ] 좌측 = 본인 성별 멤버 / 우측 = 반대 성별. `profile.gender` 기준.
-- [ ] **셀 배경 = C-1 §1 결정 사항**:
+- [x] 2×4 그리드. 행 우선 배치 (좌 1행 → 우 1행 → 좌 2행 ...).
+- [x] 좌측 = 본인 성별 멤버 / 우측 = 반대 성별. `profile.gender` 기준.
+- [x] **셀 배경 = C-1 §1 결정 사항**:
   - 옵션 A (권장): `expo-image` 썸네일 jpg (`thumbnail_path` 의 signed URL) + transition 250ms cross-fade.
   - 옵션 B: muted autoplay loop 영상 (디코더 한계 ≤ 4, viewport 밖 release).
-- [ ] 셀 위 overlay: `Avatar` + 닉네임 + 업로드 시간 + (옵션 A 면) 우상단 ▶ 아이콘.
-- [ ] 빈 셀 = `EmptyBlob` ("[닉네임] · 안 올림" 또는 'zzz').
-- [ ] **차단 멤버 셀** = 본인 화면에서 빈 칸 (다른 멤버는 정상). `block` join 으로 결정.
-- [ ] **auto_kicked / left 멤버** = 빈 칸 + 토스트로 알림 (1회).
+- [x] 셀 위 overlay: `Avatar` + 닉네임 + 업로드 시간 + (옵션 A 면) 우상단 ▶ 아이콘.
+- [x] 빈 셀 = `EmptyBlob` ("[닉네임] · 안 올림" 또는 'zzz').
+- [x] **차단 멤버 셀** = 본인 화면에서 빈 칸 (다른 멤버는 정상). `block` join 으로 결정.
+- [x] **auto_kicked / left 멤버** = 빈 칸 + 토스트로 알림 (1회).
 - [ ] **셀 컴포넌트 `React.memo`** + `videoId + uploadTime` 만 비교 (C-2 §1-1).
 - [ ] **presence dot, 닉네임, 시간 라벨 각각 분리** — leaf 단위 re-render (C-2 §1-1).
 
 ### 6-5. 셀 탭 액션
-- [ ] 셀 본체 탭 → `/(app)/room/[roomId]/video/[videoId]` (S13b 풀스크린).
-- [ ] 셀 아바타 탭 → `/(app)/room/[roomId]/members?userId=...` (S14 프로필).
+- [x] 셀 본체 탭 → `/(app)/room/[roomId]/video/[videoId]` (S13b 풀스크린).
+- [x] 셀 아바타 탭 → `/(app)/room/[roomId]/members?userId=...` (S14 프로필).
 
 ### 6-6. Realtime 갱신 (C-2 §1-3 정합)
 - [ ] `useRoomVideos` → 새 영상 INSERT 시 **debounce 100ms** 후 단일 셀만 patch (전체 re-render X).
-- [ ] `useRoomMembers` → status='auto_kicked'/'left' 감지 시 셀 fade-out 200ms 후 EmptyBlob 으로 swap + Toast Banner.
+- [x] `useRoomMembers` → status='auto_kicked'/'left' 감지 시 셀 fade-out 200ms 후 EmptyBlob 으로 swap + Toast Banner.
 - [ ] `useRoomPresence` → online 집합 변화 시 **각 셀이 자기 user_id 만 구독** (전체 grid re-render X).
-- [ ] 끊김 시 pull-to-refresh (ScrollView refreshControl) 노출 + 자동 backoff 재구독.
-- [ ] AppState 'active' 전환 시 5분+ 백그라운드면 `invalidateQueries` 강제 refetch (C-2 §2-4).
+- [x] 끊김 시 pull-to-refresh (ScrollView refreshControl) 노출 + 자동 backoff 재구독.
+- [x] AppState 'active' 전환 시 5분+ 백그라운드면 `invalidateQueries` 강제 refetch (C-2 §2-4).
 
 ### 6-7. 24h 경과 임박 / 방 자동 종료
-- [ ] 본인 마지막 영상 + 23h 시점부터 Banner "곧 영상이 잠겨요" 토스트.
-- [ ] `room.status='ended'` realtime 감지 → S05 로 router.replace + "방이 종료됐어요" 토스트.
+- [x] 본인 마지막 영상 + 23h 시점부터 Banner "곧 영상이 잠겨요" 토스트.
+- [x] `room.status='ended'` realtime 감지 → S05 로 router.replace + "방이 종료됐어요" 토스트.
 
 ---
 
@@ -181,8 +181,8 @@ C-0b 의 hook 3개 사용:
 
 ## 12. 완료 정의 (DoD)
 
-- [ ] tsc + lint + ds-enforce 통과.
-- [ ] 모든 component test 통과.
+- [x] tsc + lint + ds-enforce 통과.
+- [x] 모든 component test 통과.
 - [ ] integration realtime 시나리오 통과.
 - [ ] e2e-realdb 1개 이상 통과 (영상 INSERT → 다른 클라 grid 갱신).
 - [ ] 실기 2대 동시 접속 수동 검증.

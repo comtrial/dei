@@ -1,23 +1,25 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react-native';
-
-import { useHourSlot } from '../useHourSlot';
-
-vi.mock('@dei/shared', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@dei/shared')>();
+jest.mock('@dei/shared', () => {
+  const actual = jest.requireActual<typeof import('@dei/shared')>('@dei/shared');
   return {
     ...actual,
-    getCurrentHourSlotKst: vi.fn(() => 14),
+    getCurrentHourSlotKst: jest.fn(() => 14),
   };
 });
 
+import { renderHook, act } from '@testing-library/react-native';
+import { getCurrentHourSlotKst } from '@dei/shared';
+import { useHourSlot } from '../useHourSlot';
+
+const mockGetCurrentHourSlotKst = getCurrentHourSlotKst as jest.MockedFunction<typeof getCurrentHourSlotKst>;
+
 describe('useHourSlot', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
+    mockGetCurrentHourSlotKst.mockReturnValue(14);
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
   });
 
   it('초기값 = getCurrentHourSlotKst() 반환값', () => {
@@ -33,17 +35,15 @@ describe('useHourSlot', () => {
     expect(result.current.currentHour).toBe(18);
   });
 
-  it('60초 interval 후 KST 시 변경 시 자동 갱신', async () => {
-    const { getCurrentHourSlotKst } = await import('@dei/shared');
-    const mockFn = getCurrentHourSlotKst as ReturnType<typeof vi.fn>;
-    mockFn.mockReturnValue(14);
+  it('60초 interval 후 KST 시 변경 시 자동 갱신', () => {
+    mockGetCurrentHourSlotKst.mockReturnValue(14);
 
     const { result } = renderHook(() => useHourSlot());
     expect(result.current.currentHour).toBe(14);
 
-    mockFn.mockReturnValue(15);
+    mockGetCurrentHourSlotKst.mockReturnValue(15);
     act(() => {
-      vi.advanceTimersByTime(60_000);
+      jest.advanceTimersByTime(60_000);
     });
     expect(result.current.currentHour).toBe(15);
   });
