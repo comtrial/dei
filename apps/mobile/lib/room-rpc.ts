@@ -153,6 +153,50 @@ export async function getSiblingVideos(
   }
 }
 
+export type MemberProfileResult = {
+  memberStatus: string;
+  profile: Pick<
+    ProfileRow,
+    'nickname' | 'gender' | 'birth_year' | 'region' | 'photo_url' | 'bio'
+  > | null;
+};
+
+export async function getMemberProfile(
+  userId: string,
+  roomId: string,
+): Promise<MemberProfileResult | null> {
+  try {
+    const { data: member, error: memberError } = await supabase
+      .from('room_member')
+      .select('status')
+      .eq('room_id', roomId)
+      .eq('user_id', userId)
+      .single();
+
+    if (memberError) throw memberError;
+    if (!member) return null;
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profile')
+      .select('nickname, gender, birth_year, region, photo_url, bio')
+      .eq('user_id', userId)
+      .single();
+
+    if (profileError) throw profileError;
+
+    return {
+      memberStatus: member.status,
+      profile: profile ?? null,
+    };
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'room_rpc', rpc: 'get_member_profile', room_id: roomId },
+      extra: { userId },
+    });
+    return null;
+  }
+}
+
 export async function isBlockedBetween(
   userA: string,
   userB: string,

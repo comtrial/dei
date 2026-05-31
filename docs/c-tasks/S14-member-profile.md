@@ -1,6 +1,6 @@
 # S14 · 멤버 프로필
 
-- **status**: pending
+- **status**: done
 - **owner**: C (손승태)
 - **priority**: P2
 - **route**: `apps/mobile/app/(app)/room/[roomId]/members.tsx` (단일 멤버 = query `?userId=...`)
@@ -45,23 +45,23 @@ PRD §7 "프로필 상세 MVP 최소만" — 단순 정보 카드. 키·직업·
 ## 4. 구현 체크리스트
 
 ### 4-1. 진입 가드
-- [ ] query `userId` param.
-- [ ] `room_member` status 조회 → 'left'/'auto_kicked' 이면 `AlertDialog` "방을 나간 친구예요" → 확인 시 router.back.
-- [ ] `profile` fetch — 실패 시 `AlertDialog` "다시 시도".
+- [x] query `userId` param.
+- [x] `room_member` status 조회 → 'left'/'auto_kicked' 이면 `AlertDialog` "방을 나간 친구예요" → 확인 시 router.back.
+- [x] `profile` fetch — 실패 시 `AlertDialog` "다시 시도".
 
 ### 4-2. ProfileHero
-- [ ] HeroAvatar (120px) — `profile.avatar_url` 있으면 이미지, 없으면 닉네임 첫 글자.
-- [ ] 닉네임 + "{age}세 · {gender}" 메타.
-- [ ] 한 줄 자기소개 (BioCard, bg-2).
+- [x] HeroAvatar (120px) — `profile.avatar_url` 있으면 이미지, 없으면 닉네임 첫 글자.
+- [x] 닉네임 + "{age}세 · {gender}" 메타.
+- [x] 한 줄 자기소개 (BioCard, bg-2).
 
 ### 4-3. InfoRows
-- [ ] MBTI 정보 (비어있으면 row 숨김).
-- [ ] 지역 정보 (비어있으면 row 숨김).
-- [ ] 선택 필드 빈 값은 row 자체 X.
+- [x] MBTI 정보 (비어있으면 row 숨김).
+- [x] 지역 정보 (비어있으면 row 숨김).
+- [x] 선택 필드 빈 값은 row 자체 X.
 
 ### 4-4. TopNav
-- [ ] back ‹ → `router.back()`.
-- [ ] more ⋯ → S15 `/(app)/report/block-report?targetId=...&roomId=...` 로 push (B 가 만든 화면).
+- [x] back ‹ → `router.back()`.
+- [x] more ⋯ → S15 `/(app)/report/block-report?targetId=...&roomId=...` 로 push (B 가 만든 화면).
 
 ---
 
@@ -110,8 +110,8 @@ PRD §7 "프로필 상세 MVP 최소만" — 단순 정보 카드. 키·직업·
 
 ## 9. 완료 정의
 
-- [ ] tsc + lint 통과.
-- [ ] component test 통과.
+- [x] tsc + lint 통과.
+- [x] component test 통과.
 - [ ] 실기에서 S13 아바타 탭 → S14 진입 수동 확인.
 - [ ] B 의 S15 시트 entry 정합 확인 (route param 명세 합의).
 
