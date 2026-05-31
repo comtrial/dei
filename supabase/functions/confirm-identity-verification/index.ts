@@ -22,6 +22,8 @@ type ConfirmBody = {
   identityVerificationTxId?: string;
 };
 
+type SupabaseAdminClient = Awaited<ReturnType<typeof getAuthenticatedUser>>['supabase'];
+
 type PortOneIdentityVerification = {
   id?: string;
   status?: string;
@@ -39,9 +41,19 @@ type PortOneIdentityVerification = {
   };
 };
 
+type TermsAgreementRow = {
+  agreed_at: string;
+  location_collection: boolean;
+  marketing_opt_in: boolean;
+  privacy_policy: boolean;
+  service_terms: boolean;
+  terms_version: string;
+};
+
 const LOCK_EXCLUDED_FAILURES = new Set<IdentityFailureCode>([
   'CI_DUPLICATE',
   'IDENTITY_ALREADY_VERIFIED',
+  'REJOIN_LOCKED',
   'UNDERAGE',
 ]);
 
@@ -85,6 +97,7 @@ const toSafeProviderMetadata = (
     portoneId: identityVerification.id ?? null,
     status: identityVerification.status ?? null,
     verifiedCustomer: {
+      birthDate,
       birthYear,
       gender: toGender(customer?.gender),
       hasCi: Boolean(customer?.ci),
@@ -93,6 +106,151 @@ const toSafeProviderMetadata = (
       hasPhoneNumber: Boolean(customer?.phoneNumber),
     },
   };
+};
+
+const toInternalIdentityEmail = (ciHash: string) => {
+  return `ci-${ciHash.slice(0, 32)}@identity.dei.local`;
+};
+
+const ensureExistingUserLoginEmail = async (
+  supabase: SupabaseAdminClient,
+  userId: string,
+  ciHash: string,
+) => {
+  const { data, error } = await supabase.auth.admin.getUserById(userId);
+
+  if (error || !data.user) {
+    throw error ?? new Error('existing member account was not found');
+  }
+
+  const existingEmail = data.user.email?.trim();
+  if (existingEmail) {
+    return existingEmail;
+  }
+
+  const email = toInternalIdentityEmail(ciHash);
+  const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+    email,
+    email_confirm: true,
+  });
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  return email;
+};
+
+const issueSessionForExistingUser = async (
+  supabase: SupabaseAdminClient,
+  email: string,
+) => {
+  const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+  });
+
+  if (linkError || !linkData.properties?.hashed_token) {
+    throw linkError ?? new Error('existing member login token was not issued');
+  }
+
+  const { data: authData, error: verifyError } = await supabase.auth.verifyOtp({
+    token_hash: linkData.properties.hashed_token,
+    type: 'email',
+  });
+
+  if (verifyError || !authData.session) {
+    throw verifyError ?? new Error('existing member session was not issued');
+  }
+
+  return authData.session;
+};
+
+const transferLatestTermsAgreement = async (
+  supabase: SupabaseAdminClient,
+  fromUserId: string,
+  toUserId: string,
+) => {
+  const { data: latestTerms, error: latestTermsError } = await supabase
+    .from('terms_agreement')
+    .select(
+      'agreed_at, location_collection, marketing_opt_in, privacy_policy, service_terms, terms_version',
+    )
+    .eq('user_id', fromUserId)
+    .order('agreed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle<TermsAgreementRow>();
+
+  if (latestTermsError) {
+    throw latestTermsError;
+  }
+
+  if (!latestTerms) {
+    return;
+  }
+
+  const { error: upsertError } = await supabase.from('terms_agreement').upsert(
+    {
+      agreed_at: latestTerms.agreed_at,
+      location_collection: latestTerms.location_collection,
+      marketing_opt_in: latestTerms.marketing_opt_in,
+      privacy_policy: latestTerms.privacy_policy,
+      service_terms: latestTerms.service_terms,
+      terms_version: latestTerms.terms_version,
+      user_id: toUserId,
+    },
+    { onConflict: 'user_id,terms_version' },
+  );
+
+  if (upsertError) {
+    throw upsertError;
+  }
+};
+
+const toClientAuthSession = (session: {
+  access_token: string;
+  expires_at?: number;
+  refresh_token: string;
+  user: { id: string };
+}) => ({
+  accessToken: session.access_token,
+  expiresAt: session.expires_at ?? null,
+  refreshToken: session.refresh_token,
+  userId: session.user.id,
+});
+
+const upsertVerifiedProfileIdentity = async (
+  supabase: SupabaseAdminClient,
+  {
+    birthDate,
+    birthYear,
+    gender,
+    userId,
+  }: {
+    birthDate: string | null;
+    birthYear: number;
+    gender: 'male' | 'female' | null;
+    userId: string;
+  },
+) => {
+  const profileIdentity = {
+    birth_date: birthDate,
+    birth_year: birthYear,
+    is_adult: true,
+    user_id: userId,
+    ...(gender ? { gender } : {}),
+  };
+
+  const { error } = await supabase
+    .from('profile')
+    .upsert(
+      profileIdentity,
+      { onConflict: 'user_id' },
+    );
+
+  if (error) {
+    throw error;
+  }
 };
 
 Deno.serve(async (req) => {
@@ -315,10 +473,43 @@ Deno.serve(async (req) => {
       throw new Error('CI hash is required');
     }
 
+    stage = 'check_rejoin_lock';
+    const now = new Date().toISOString();
+    const { data: rejoinLock, error: rejoinLockError } = await supabase
+      .from('identity_rejoin_lock')
+      .select('locked_until')
+      .eq('ci_hash', ciHash)
+      .gt('locked_until', now)
+      .order('locked_until', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (rejoinLockError) {
+      throw rejoinLockError;
+    }
+
+    if (rejoinLock?.locked_until) {
+      await markFailure(
+        'REJOIN_LOCKED',
+        '탈퇴한 번호는 30일 동안 다시 가입할 수 없어요.',
+        {
+          ...toSafeProviderMetadata(identityVerification, body.identityVerificationTxId),
+          rejoinLockedUntil: rejoinLock.locked_until,
+        },
+      );
+
+      return codedErrorResponse(
+        'REJOIN_LOCKED',
+        '탈퇴한 번호는 30일 동안 다시 가입할 수 없어요.',
+        423,
+        { lockUntil: rejoinLock.locked_until },
+      );
+    }
+
     stage = 'find_duplicate_ci';
     const { data: duplicate, error: duplicateError } = await supabase
       .from('auth_verification')
-      .select('user_id')
+      .select('user_id, verified_at')
       .eq('provider', IDENTITY_PROVIDER)
       .eq('status', 'verified')
       .eq('ci_hash', ciHash)
@@ -340,12 +531,52 @@ Deno.serve(async (req) => {
         },
       );
 
-      return codedErrorResponse(
-        'CI_DUPLICATE',
-        '이미 가입된 번호예요. 그 계정으로 들어갈게요.',
-        409,
-        { existingMember: true },
+      stage = 'issue_existing_member_session';
+      const existingEmail = await ensureExistingUserLoginEmail(
+        supabase,
+        duplicate.user_id,
+        ciHash,
       );
+      const authSession = await issueSessionForExistingUser(supabase, existingEmail);
+
+      const { data: existingProfile, error: existingProfileError } = await supabase
+        .from('profile')
+        .select('birth_date, birth_year, gender, is_adult')
+        .eq('user_id', duplicate.user_id)
+        .maybeSingle();
+
+      if (existingProfileError) {
+        throw existingProfileError;
+      }
+
+      const existingBirthDate = existingProfile?.birth_date ?? birthDate;
+      const existingBirthYear = existingProfile?.birth_year ?? birthYear;
+      const existingGender = existingProfile?.gender ?? gender;
+
+      await upsertVerifiedProfileIdentity(supabase, {
+        birthDate: existingBirthDate,
+        birthYear: existingBirthYear,
+        gender: existingGender,
+        userId: duplicate.user_id,
+      });
+
+      if (user.id !== duplicate.user_id) {
+        stage = 'transfer_terms_agreement';
+        await transferLatestTermsAgreement(supabase, user.id, duplicate.user_id);
+
+        stage = 'delete_duplicate_anonymous_user';
+        await supabase.auth.admin.deleteUser(user.id, true);
+      }
+
+      return jsonResponse({
+        authSession: toClientAuthSession(authSession),
+        birthDate: existingBirthDate,
+        birthYear: existingBirthYear,
+        existingMember: true,
+        gender: existingGender,
+        identityVerifiedAt: duplicate.verified_at ?? new Date().toISOString(),
+        isAdult: true,
+      });
     }
 
     const verifiedAt = identityVerification.verifiedAt ?? new Date().toISOString();
@@ -377,23 +608,15 @@ Deno.serve(async (req) => {
     }
 
     stage = 'update_profile';
-    const { error: profileUpdateError } = await supabase
-      .from('profile')
-      .upsert(
-        {
-          birth_year: birthYear,
-          gender,
-          is_adult: true,
-          user_id: user.id,
-        },
-        { onConflict: 'user_id' },
-      );
-
-    if (profileUpdateError) {
-      throw profileUpdateError;
-    }
+    await upsertVerifiedProfileIdentity(supabase, {
+      birthDate,
+      birthYear,
+      gender,
+      userId: user.id,
+    });
 
     return jsonResponse({
+      birthDate,
       birthYear,
       gender,
       identityVerifiedAt: verifiedAt,

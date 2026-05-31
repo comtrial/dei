@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       audit: {
@@ -210,6 +185,36 @@ export type Database = {
           },
         ]
       }
+      identity_rejoin_lock: {
+        Row: {
+          ci_hash: string
+          created_at: string
+          id: string
+          locked_until: string
+          reason: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          ci_hash: string
+          created_at?: string
+          id?: string
+          locked_until: string
+          reason?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          ci_hash?: string
+          created_at?: string
+          id?: string
+          locked_until?: string
+          reason?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       match_member: {
         Row: {
           match_id: string
@@ -283,6 +288,7 @@ export type Database = {
       message: {
         Row: {
           body: string
+          client_msg_id: string | null
           created_at: string
           id: string
           room_id: string
@@ -292,6 +298,7 @@ export type Database = {
         }
         Insert: {
           body: string
+          client_msg_id?: string | null
           created_at?: string
           id?: string
           room_id: string
@@ -301,6 +308,7 @@ export type Database = {
         }
         Update: {
           body?: string
+          client_msg_id?: string | null
           created_at?: string
           id?: string
           room_id?: string
@@ -434,14 +442,18 @@ export type Database = {
       profile: {
         Row: {
           bio: string | null
+          birth_date: string | null
           birth_year: number | null
           created_at: string
           gender: string | null
           is_adult: boolean
           is_in_active_room: boolean
           last_room_leave_at: string | null
+          mbti: string | null
           nickname: string | null
+          nickname_changed_at: string | null
           nickname_lower: string | null
+          onboarding_completed_at: string | null
           photo_url: string | null
           quiet_hours_end: number
           quiet_hours_start: number
@@ -451,14 +463,18 @@ export type Database = {
         }
         Insert: {
           bio?: string | null
+          birth_date?: string | null
           birth_year?: number | null
           created_at?: string
           gender?: string | null
           is_adult?: boolean
           is_in_active_room?: boolean
           last_room_leave_at?: string | null
+          mbti?: string | null
           nickname?: string | null
+          nickname_changed_at?: string | null
           nickname_lower?: string | null
+          onboarding_completed_at?: string | null
           photo_url?: string | null
           quiet_hours_end?: number
           quiet_hours_start?: number
@@ -468,18 +484,43 @@ export type Database = {
         }
         Update: {
           bio?: string | null
+          birth_date?: string | null
           birth_year?: number | null
           created_at?: string
           gender?: string | null
           is_adult?: boolean
           is_in_active_room?: boolean
           last_room_leave_at?: string | null
+          mbti?: string | null
           nickname?: string | null
+          nickname_changed_at?: string | null
           nickname_lower?: string | null
+          onboarding_completed_at?: string | null
           photo_url?: string | null
           quiet_hours_end?: number
           quiet_hours_start?: number
           region?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      push_token: {
+        Row: {
+          platform: string
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          platform: string
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          platform?: string
+          token?: string
           updated_at?: string
           user_id?: string
         }
@@ -664,6 +705,36 @@ export type Database = {
           },
         ]
       }
+      support_ticket: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          message: string
+          reply_email: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          message: string
+          reply_email?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          message?: string
+          reply_email?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       team: {
         Row: {
           created_at: string
@@ -766,6 +837,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      terms_agreement: {
+        Row: {
+          agreed_at: string
+          created_at: string
+          id: string
+          location_collection: boolean
+          marketing_opt_in: boolean
+          privacy_policy: boolean
+          service_terms: boolean
+          terms_version: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agreed_at?: string
+          created_at?: string
+          id?: string
+          location_collection?: boolean
+          marketing_opt_in?: boolean
+          privacy_policy?: boolean
+          service_terms?: boolean
+          terms_version: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agreed_at?: string
+          created_at?: string
+          id?: string
+          location_collection?: boolean
+          marketing_opt_in?: boolean
+          privacy_policy?: boolean
+          service_terms?: boolean
+          terms_version?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       video: {
         Row: {
@@ -976,6 +1086,30 @@ export type Database = {
           status: string
         }[]
       }
+      send_room_message: {
+        Args: {
+          p_body: string
+          p_client_msg_id?: string
+          p_room_id: string
+          p_whisper_to_user_id?: string
+        }
+        Returns: {
+          body: string
+          client_msg_id: string | null
+          created_at: string
+          id: string
+          room_id: string
+          status: string
+          user_id: string
+          whisper_to_user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "message"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       account_state: "active" | "suspended" | "banned" | "deleted"
@@ -1140,9 +1274,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       account_state: ["active", "suspended", "banned", "deleted"],

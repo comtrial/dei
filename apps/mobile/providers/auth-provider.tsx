@@ -10,8 +10,8 @@ import type { ConfirmIdentityVerificationResponse } from '@/lib/portone.stub';
  * 인증 골격 (spec §3.3 · A-4)
  * ------------------------------------------------------------------
  * Supabase Auth 익명 세션으로 시작 → PortOne 본인인증 통과 시 "검증된 신원"
- * 으로 승격한다(S03). 승격(CI 검증·auth_verification 기록)은 B 담당이며,
- * 여기서는 `promoteWithIdentity` 경계만 placeholder 로 둔다(D-12).
+ * 으로 승격한다(S03). `promoteWithIdentity` 는 신규 가입 사용자의 검증 세션
+ * 유지와 CI 중복 기존 계정 자동 로그인 세션 전환을 모두 처리한다.
  *
  * 세션이 잡히면 `logger.setUser({ id })` 로 Sentry 사용자 컨텍스트를 연결한다
  * (PII 인 email 은 넣지 않는다 — CLAUDE.md 규칙 4).
@@ -123,6 +123,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const promoteWithIdentity = useCallback(
     async (identity: ConfirmIdentityVerificationResponse) => {
+      if (identity.authSession) {
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: identity.authSession.accessToken,
+          refresh_token: identity.authSession.refreshToken,
+        });
+
+        if (sessionError) {
+          throw sessionError;
+        }
+
+        const nextSession = sessionData.session;
+        setSession(nextSession);
+
+        const existingUserId = nextSession?.user.id ?? identity.authSession.userId;
+        logger.setUser({ id: existingUserId });
+        analytics.identify(existingUserId, {
+          birth_date: identity.birthDate ?? null,
+          birth_year: identity.birthYear,
+          existing_member: Boolean(identity.existingMember),
+          gender: identity.gender,
+          identity_verified: true,
+          is_adult: identity.isAdult,
+        });
+        return;
+      }
+
       const { data, error } = await supabase.auth.getSession();
 
       if (error) {
@@ -137,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (userId) {
         logger.setUser({ id: userId });
         analytics.identify(userId, {
+          birth_date: identity.birthDate ?? null,
           birth_year: identity.birthYear,
           gender: identity.gender,
           identity_verified: true,

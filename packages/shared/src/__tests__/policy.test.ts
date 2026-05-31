@@ -18,6 +18,14 @@ describe('policy (L2 config SSOT)', () => {
   it('신고 카테고리 6종 + other 포함 (D10)', () => {
     expect(REPORT_CATEGORIES).toHaveLength(6);
     expect(REPORT_CATEGORIES.map((c) => c.code)).toContain('other');
+    expect(REPORT_CATEGORIES.map((c) => c.label)).toEqual([
+      '욕설·비방',
+      '성적·선정적 콘텐츠',
+      '사칭·가짜 프로필',
+      '광고·스팸',
+      '폭력·위협',
+      '기타 (자유 입력)',
+    ]);
   });
 
   it('새벽 알림 차단 0~7 KST (D3)', () => {
@@ -26,10 +34,11 @@ describe('policy (L2 config SSOT)', () => {
     expect(POLICY.notifications.quietHoursExempt).toContain('whisper_mention');
   });
 
-  it('방 수명 7일 · 블러게이트 24h · 큐 만료 24h (D6/D8/D5)', () => {
+  it('방 수명 7일 · 블러게이트 24h · 큐 만료/재매칭 제한 24h (D6/D8/D5)', () => {
     expect(POLICY.room.autoExpireDays).toBe(7);
     expect(POLICY.blurGate.visibilityWindowHours).toBe(24);
     expect(POLICY.matching.queueExpiryHours).toBe(24);
+    expect(POLICY.matching.rematchCooldownHours).toBe(24);
   });
 
   it('가격은 product id 만(하드코딩 가격 금지, D11)', () => {

@@ -32,11 +32,15 @@ export const ROUTES = {
   permissionNotification: '/(app)/permission/notification', // S07a
   permissionCamera: '/(app)/permission/camera', // S11a
   queue: '/(app)/queue', // S07 / S09
+  matchCancelConfirm: '/(app)/match/cancel-confirm', // S08
+  matchFailed: '/(app)/match/failed', // S09
   booster: '/(app)/booster', // S17
+  boosterFailed: '/(app)/booster-failed', // S18
   myProfile: '/(app)/my-profile', // S19
   settingsNotifications: '/(app)/settings/notifications', // S22
   settingsWithdraw: '/(app)/settings/withdraw', // S20
   support: '/(app)/support', // S23
+  reportBlock: '/(app)/report/block-report', // S15
   // 값은 Href 로 노출한다. Phase 6 에서 화면 파일이 모두 생기면 typedRoutes 가
   // 이 경로들을 실제 라우트로 인식한다(런타임상 항상 유효한 경로).
 } as unknown as Record<RouteKey, Href>;
@@ -54,11 +58,15 @@ type RouteKey =
   | 'permissionNotification'
   | 'permissionCamera'
   | 'queue'
+  | 'matchCancelConfirm'
+  | 'matchFailed'
   | 'booster'
+  | 'boosterFailed'
   | 'myProfile'
   | 'settingsNotifications'
   | 'settingsWithdraw'
-  | 'support';
+  | 'support'
+  | 'reportBlock';
 
 /** 동적 방 라우트(roomId 주입). 반환값은 Href(typedRoutes 와 호환). */
 export const roomRoutes = {
@@ -69,6 +77,10 @@ export const roomRoutes = {
   video: (roomId: string, videoId: string): Href =>
     `/(app)/room/${roomId}/video/${videoId}` as Href, // S13b
   leaveConfirm: (roomId: string): Href => `/(app)/room/${roomId}/leave-confirm` as Href, // S16
+};
+
+export const reportRoutes = {
+  category: (targetId: string): Href => `/(app)/report/${targetId}` as Href, // S21
 };
 
 export type RouteGroup = 'auth' | 'onboarding' | 'app';

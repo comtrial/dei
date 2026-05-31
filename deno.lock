@@ -1,0 +1,31 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@supabase/functions-js@^0.0.0-automated": "0.0.0-jsr-test.1",
+    "jsr:@supabase/supabase-js@2": "2.105.4"
+  },
+  "jsr": {
+    "@supabase/functions-js@0.0.0-jsr-test.1": {
+      "integrity": "b1b37924af1f0011b4753201e1585a37b030e996c6682492e02575eb27d902b2"
+    },
+    "@supabase/supabase-js@2.105.4": {
+      "integrity": "9917385444fbb10ed75652c01e7f5b3beda999caffcbc3e93f4f40c087a325a7",
+      "dependencies": [
+        "jsr:@supabase/functions-js"
+      ]
+    }
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@sentry/node@^8.45.0",
+        "npm:@vitest/coverage-v8@^2.1.8",
+        "npm:supabase@^2.98.2",
+        "npm:tsx@^4.19.2",
+        "npm:turbo@^2.9.6",
+        "npm:typescript@^5.9.3",
+        "npm:vitest@^2.1.8"
+      ]
+    }
+  }
+}

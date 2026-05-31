@@ -34,6 +34,7 @@ export const SendHorizontal = StubIcon;
 export const MoreVertical = StubIcon;
 export const LogOut = StubIcon;
 export const UserRound = StubIcon;
+export const Users = StubIcon;
 export const AlertCircle = StubIcon;
 export const ChevronDown = StubIcon;
 export const ChevronLeft = StubIcon;

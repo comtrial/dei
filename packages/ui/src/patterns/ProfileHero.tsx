@@ -83,6 +83,18 @@ export interface ProfileHeroProps extends ViewProps {
   className?: string;
 }
 
+function hasRenderableChildren(children: ReactNode): boolean {
+  if (children == null || typeof children === 'boolean') {
+    return false;
+  }
+
+  if (Array.isArray(children)) {
+    return children.some(hasRenderableChildren);
+  }
+
+  return true;
+}
+
 export const ProfileHero = forwardRef<View, ProfileHeroProps>(function ProfileHero(
   {
     name,
@@ -101,6 +113,8 @@ export const ProfileHero = forwardRef<View, ProfileHeroProps>(function ProfileHe
   },
   ref,
 ) {
+  const hasAvatarContent = hasRenderableChildren(children);
+
   return (
     <View
       ref={ref}
@@ -124,8 +138,7 @@ export const ProfileHero = forwardRef<View, ProfileHeroProps>(function ProfileHe
             seedClassName ?? 'bg-bg-2',
           )}
         >
-          {children ??
-            (initial ? (
+          {hasAvatarContent ? children : initial ? (
               <Text
                 className={cn(
                   'font-extrabold',
@@ -136,7 +149,7 @@ export const ProfileHero = forwardRef<View, ProfileHeroProps>(function ProfileHe
               >
                 {initial}
               </Text>
-            ) : null)}
+            ) : null}
         </View>
 
         {/* 편집 앵커 — IconButton 오버레이(매트릭스 X16 ← IconButton). */}

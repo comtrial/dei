@@ -1,0 +1,304 @@
+import { POLICY } from '../../../packages/shared/src/policy.ts';
+import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
+import { getAuthenticatedUser } from '../_shared/auth.ts';
+
+type EnqueueBody = {
+  memberIds?: unknown;
+};
+
+type ProfileRow = {
+  gender: string | null;
+  is_adult: boolean;
+  is_in_active_room: boolean;
+  last_room_leave_at: string | null;
+  nickname: string | null;
+  onboarding_completed_at: string | null;
+  photo_url: string | null;
+  region: string | null;
+  user_id: string;
+};
+
+type PassRow = {
+  id: string;
+  remaining: number;
+};
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+
+function toMemberIds(body: EnqueueBody, currentUserId: string) {
+  const rawIds = Array.isArray(body.memberIds)
+    ? body.memberIds
+    : typeof body.memberIds === 'string'
+      ? body.memberIds.split(',')
+      : [];
+  const ids = [currentUserId, ...rawIds]
+    .filter((id): id is string => typeof id === 'string')
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  return [...new Set(ids)];
+}
+
+function getRematchRestriction(lastRoomLeaveAt?: string | null) {
+  if (!lastRoomLeaveAt) {
+    return { availableAt: null, remainingMs: 0, restricted: false };
+  }
+
+  const leaveTime = new Date(lastRoomLeaveAt).getTime();
+  if (!Number.isFinite(leaveTime)) {
+    return { availableAt: null, remainingMs: 0, restricted: false };
+  }
+
+  const availableAtMs = leaveTime + POLICY.matching.rematchCooldownHours * 60 * 60 * 1000;
+  const remainingMs = Math.max(availableAtMs - Date.now(), 0);
+
+  return {
+    availableAt: new Date(availableAtMs).toISOString(),
+    remainingMs,
+    restricted: remainingMs > 0,
+  };
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  if (req.method !== 'POST') {
+    return errorResponse('method not allowed', 405, { code: 'METHOD_NOT_ALLOWED' });
+  }
+
+  try {
+    const { supabase, user } = await getAuthenticatedUser(req);
+    const body = await req.json().catch(() => ({})) as EnqueueBody;
+    const memberIds = toMemberIds(body, user.id);
+
+    if (
+      memberIds.length < POLICY.team.minMembers
+      || memberIds.length > POLICY.team.maxMembers
+      || memberIds.some((id) => !UUID_PATTERN.test(id))
+    ) {
+      return errorResponse('묶음 인원을 다시 확인해주세요.', 400, { code: 'INVALID_MEMBERS' });
+    }
+
+    const { data: existingTeams, error: existingTeamsError } = await supabase
+      .from('team_member')
+      .select('team_id')
+      .eq('user_id', user.id);
+
+    if (existingTeamsError) {
+      throw existingTeamsError;
+    }
+
+    const existingTeamIds = existingTeams?.map((row) => row.team_id) ?? [];
+    if (existingTeamIds.length > 0) {
+      const now = new Date().toISOString();
+      const { data: existingQueue, error: existingQueueError } = await supabase
+        .from('match_queue')
+        .select('id, team_id, enqueued_at, expires_at')
+        .in('team_id', existingTeamIds)
+        .eq('status', 'waiting')
+        .order('enqueued_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingQueueError) {
+        throw existingQueueError;
+      }
+
+      if (existingQueue) {
+        if (!existingQueue.expires_at || existingQueue.expires_at > now) {
+          return jsonResponse({
+            enqueuedAt: existingQueue.enqueued_at,
+            expiresAt: existingQueue.expires_at,
+            memberCount: null,
+            queueId: existingQueue.id,
+            reused: true,
+            teamId: existingQueue.team_id,
+          });
+        }
+
+        const { error: expireQueueError } = await supabase
+          .from('match_queue')
+          .update({ status: 'expired' })
+          .eq('id', existingQueue.id);
+
+        if (expireQueueError) {
+          throw expireQueueError;
+        }
+
+        const { error: expireTeamError } = await supabase
+          .from('team')
+          .update({ disbanded_at: now, status: 'disbanded' })
+          .eq('id', existingQueue.team_id);
+
+        if (expireTeamError) {
+          throw expireTeamError;
+        }
+      }
+    }
+
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profile')
+      .select('gender, is_adult, is_in_active_room, last_room_leave_at, nickname, onboarding_completed_at, photo_url, region, user_id')
+      .in('user_id', memberIds);
+
+    if (profilesError) {
+      throw profilesError;
+    }
+
+    const profileRows = (profiles ?? []) as ProfileRow[];
+    if (profileRows.length !== memberIds.length) {
+      return errorResponse('초대할 수 없는 친구예요.', 400, { code: 'MEMBER_NOT_FOUND' });
+    }
+
+    const ownerProfile = profileRows.find((profile) => profile.user_id === user.id);
+    if (!ownerProfile?.is_adult || !ownerProfile.gender || !ownerProfile.nickname || !ownerProfile.photo_url || !ownerProfile.onboarding_completed_at) {
+      return errorResponse('프로필을 먼저 완성해주세요.', 403, { code: 'PROFILE_INCOMPLETE' });
+    }
+
+    if (profileRows.some((profile) => !profile.nickname || !profile.photo_url || !profile.onboarding_completed_at)) {
+      return errorResponse('프로필을 먼저 완성해주세요.', 403, { code: 'PROFILE_INCOMPLETE' });
+    }
+
+    if (profileRows.some((profile) => profile.is_in_active_room)) {
+      return errorResponse('초대할 수 없는 친구예요.', 409, { code: 'MEMBER_BUSY' });
+    }
+
+    if (profileRows.some((profile) => profile.gender !== ownerProfile.gender)) {
+      return errorResponse('같은 성별 친구만 묶음에 포함할 수 있어요.', 400, { code: 'GENDER_MISMATCH' });
+    }
+
+    const rematchRestriction = getRematchRestriction(ownerProfile.last_room_leave_at);
+    let passToConsume: PassRow | null = null;
+
+    if (rematchRestriction.restricted) {
+      if (ownerProfile.gender === 'female' && POLICY.payment.femaleInstantRematchFree) {
+        // 여성 사용자는 PRD §13에 따라 방 이탈 후 24h 제한을 자동 면제한다.
+      } else {
+        const { data: activePass, error: passError } = await supabase
+          .from('pass')
+          .select('id, remaining')
+          .eq('user_id', user.id)
+          .eq('kind', 'booster')
+          .eq('status', 'active')
+          .gt('remaining', 0)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (passError) {
+          throw passError;
+        }
+
+        if (!activePass) {
+          return errorResponse('다음 매칭은 24시간 후부터 가능해요.', 402, {
+            availableAt: rematchRestriction.availableAt,
+            code: 'REMATCH_RESTRICTED',
+            remainingMs: rematchRestriction.remainingMs,
+          });
+        }
+
+        passToConsume = activePass;
+      }
+    }
+
+    for (const memberId of memberIds) {
+      if (memberId === user.id) continue;
+      const { data: isBlocked, error: blockError } = await supabase.rpc('is_blocked_between', {
+        a: user.id,
+        b: memberId,
+      });
+
+      if (blockError) {
+        throw blockError;
+      }
+
+      if (isBlocked) {
+        return errorResponse('초대할 수 없는 친구예요.', 409, { code: 'BLOCKED_MEMBER' });
+      }
+    }
+
+    const { data: team, error: teamError } = await supabase
+      .from('team')
+      .insert({
+        gender: ownerProfile.gender,
+        owner_user_id: user.id,
+        status: 'matching',
+        target_size: memberIds.length,
+      })
+      .select('id')
+      .single();
+
+    if (teamError || !team) {
+      throw teamError ?? new Error('team was not created');
+    }
+
+    const { error: memberInsertError } = await supabase.from('team_member').insert(
+      memberIds.map((memberId) => ({
+        role: memberId === user.id ? 'owner' : 'member',
+        team_id: team.id,
+        user_id: memberId,
+      })),
+    );
+
+    if (memberInsertError) {
+      throw memberInsertError;
+    }
+
+    const expiresAt = new Date(
+      Date.now() + POLICY.matching.queueExpiryHours * 60 * 60 * 1000,
+    ).toISOString();
+
+    const { data: queue, error: queueError } = await supabase
+      .from('match_queue')
+      .insert({
+        desired_size: memberIds.length,
+        expires_at: expiresAt,
+        gender: ownerProfile.gender,
+        region: ownerProfile.region,
+        status: 'waiting',
+        team_id: team.id,
+      })
+      .select('id, enqueued_at, expires_at')
+      .single();
+
+    if (queueError || !queue) {
+      throw queueError ?? new Error('queue was not created');
+    }
+
+    if (passToConsume) {
+      const remaining = Math.max(passToConsume.remaining - 1, 0);
+      const { error: passConsumeError } = await supabase
+        .from('pass')
+        .update({
+          remaining,
+          status: remaining > 0 ? 'active' : 'consumed',
+        })
+        .eq('id', passToConsume.id)
+        .eq('user_id', user.id);
+
+      if (passConsumeError) {
+        throw passConsumeError;
+      }
+    }
+
+    return jsonResponse({
+      enqueuedAt: queue.enqueued_at,
+      expiresAt: queue.expires_at,
+      freeRematchWaived:
+        rematchRestriction.restricted
+        && ownerProfile.gender === 'female'
+        && POLICY.payment.femaleInstantRematchFree,
+      memberCount: memberIds.length,
+      passConsumed: Boolean(passToConsume),
+      queueId: queue.id,
+      reused: false,
+      teamId: team.id,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'failed to enqueue match queue';
+    return errorResponse(message, 400, { code: 'BAD_REQUEST' });
+  }
+});

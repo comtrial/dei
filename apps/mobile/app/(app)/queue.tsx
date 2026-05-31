@@ -1,39 +1,152 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import { logger } from '@dei/shared';
+import { Button, Card, PulseRing, Text } from '@dei/ui';
 
-/**
- * S07 — 매칭 큐 대기 (홈 ② 매칭 중)
- * ==================================================================
- * 담당자: B
- * 화면 목적: 홈 3-state 중 ② 매칭 중 상태. 대기 시간이 2~6시간이라 사용자는
- *           앱을 닫고 일상을 보냄 — 매칭 성사 신호는 푸시 알림이 사실상 유일한
- *           채널. 이 화면은 큐에 들어가 있다는 상태 확인 + 취소 진입점일 뿐.
- * 의존 DS 컴포넌트: Text · PulseRing(대기 펄스 + dei 코어 마크) ·
- *   Card(EstimateBox '2~6 시간' bg-2 박스) · IconButton(우하단 fab 매칭 취소) ·
- *   AlertDialog(큐 등록 실패 alert + S05 복귀)  [@dei/ui]
- * 의존 데이터: match_queue(현재 큐 등록 상태·큐 깊이) · 푸시 알림 토큰(매칭 성사
- *   신호 채널)
- * 발생 이벤트(PostHog): 없음
- * 서버 의존(L1): 매칭 워커 B1(match_succeeded_push_sent 푸시 발송) /
- *   큐 상태·평균 대기시간 조회(실시간 동적) / 큐 등록 실패 핸들링
- * 정책 의존(L2): 대기 시간 = 서버단 동적 산출(큐 깊이·매칭 속도) /
- *   큐 위치·단계 비노출 / 큐 만료 24h(S09 트리거)
- * 와이어프레임 참조: all-screens S07
- *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(펄스 대기 표시·EstimateBox·취소 fab·등록 실패 alert)은 owner 가 채운다.
- */
+import { expireMatchQueue, isQueueExpired } from '@/lib/matching';
+import { ROUTES } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/auth-provider';
+
+type QueueState = {
+  desiredSize: number;
+  enqueuedAt: string;
+  expiresAt: string | null;
+  id: string;
+} | null;
+
 export default function QueueScreen() {
+  const router = useRouter();
+  const { notice } = useLocalSearchParams<{ notice?: string }>();
+  const { user } = useAuth();
+  const [queue, setQueue] = useState<QueueState>(null);
+  const [showFreeRematchNotice, setShowFreeRematchNotice] = useState(
+    notice === 'free-rematch',
+  );
+
+  useEffect(() => {
+    if (notice !== 'free-rematch') {
+      return;
+    }
+
+    setShowFreeRematchNotice(true);
+    const timer = setTimeout(() => setShowFreeRematchNotice(false), 1400);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'queue.load',
+      async () => {
+        const { data: teamMembers, error: teamError } = await supabase
+          .from('team_member')
+          .select('team_id')
+          .eq('user_id', user.id);
+
+        if (teamError) {
+          throw teamError;
+        }
+
+        const teamIds = teamMembers?.map((team) => team.team_id) ?? [];
+        if (teamIds.length === 0) {
+          router.replace(ROUTES.home);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('match_queue')
+          .select('desired_size, enqueued_at, expires_at, id')
+          .in('team_id', teamIds)
+          .eq('status', 'waiting')
+          .order('enqueued_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          throw error;
+        }
+
+        if (!data) {
+          router.replace(ROUTES.home);
+          return;
+        }
+
+        if (isQueueExpired(data.expires_at)) {
+          await expireMatchQueue().catch((error) => {
+            logger.captureException(error, {
+              tags: { screen: 'queue', action: 'expire-queue' },
+            });
+          });
+          router.replace(ROUTES.matchFailed);
+          return;
+        }
+
+        setQueue({
+          desiredSize: data.desired_size,
+          enqueuedAt: data.enqueued_at,
+          expiresAt: data.expires_at,
+          id: data.id,
+        });
+      },
+      { tags: { screen: 'queue', action: 'load' } },
+    ).catch((error) => {
+      logger.captureException(error, {
+        tags: { screen: 'queue', action: 'load-catch' },
+      });
+    });
+  }, [router, user]);
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">매칭 큐 대기 (매칭 중)</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S07
-        </Text>
+      <View className="flex-1 px-[24px] pb-[36px] pt-[64px]">
+        <View className="items-center">
+          <PulseRing
+            className="mb-[32px]"
+            core={<Text className="text-[24px] font-black text-white">dei</Text>}
+          />
+          <Text variant="h1" className="text-center text-[25px] leading-[33px]">
+            곧 만날 사람들을{'\n'}찾고 있어요
+          </Text>
+          <Text className="mt-[10px] text-center text-[13.5px] leading-[21px] text-ink-3">
+            앱을 닫아도 매칭되면{'\n'}알림으로 알려드려요.
+          </Text>
+        </View>
+
+        <Card className="mt-[34px] items-center rounded-md border-0 bg-bg-2 px-[22px] py-[14px]">
+          <Text className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-3">
+            평균 대기 시간
+          </Text>
+          <Text className="mt-[4px] text-[19px] font-extrabold text-ink">
+            {queue ? '2 ~ 6 시간' : '확인 중'}
+          </Text>
+        </Card>
+
+        <Button
+          variant="secondary"
+          className="mt-auto self-end rounded-full border border-line bg-paper px-[20px] py-[12px]"
+          textClassName="text-[13px] font-bold"
+          onPress={() => router.push(ROUTES.matchCancelConfirm)}
+        >
+          매칭 취소
+        </Button>
       </View>
+
+      {showFreeRematchNotice ? (
+        <View className="absolute bottom-[34px] left-0 right-0 items-center px-[24px]">
+          <View className="rounded-full bg-ink px-[16px] py-[10px]">
+            <Text className="text-center text-[12.5px] font-bold text-white">
+              바로 매칭 시작할게요
+            </Text>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

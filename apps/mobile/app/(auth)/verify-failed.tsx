@@ -28,8 +28,8 @@ import { ROUTES } from '@/lib/routes';
  *   19세 미만 거부는 이 화면 아님(별도 alert + splash 강제 복귀)
  * 와이어프레임 참조: all-screens S03f
  *
- * B-01 Auth UI shell — 실패 안내와 재시도/취소 라우팅만 구현.
- * 실패 사유 기록, 연속 실패/24h 잠금 alert 는 후속 PR 범위다.
+ * 현재 구현: 실패 안내와 재시도/취소 라우팅을 제공한다. 실패 사유 기록과
+ * 24h 잠금 판정은 S03 Edge Function 경로에서 처리된다.
  */
 export default function VerifyFailedScreen() {
   const router = useRouter();

@@ -1,11 +1,11 @@
 import type {
   IdentityVerificationRequest,
   IdentityVerificationResponse,
+  PaymentRequest,
+  PaymentResponse,
 } from '@portone/browser-sdk/v2';
 
 import { supabase } from '@/lib/supabase';
-
-const PAYMENT_HANDOFF = 'handoff: PortOne 결제(B) 구현 예정';
 
 export type IdentityVerificationFailureCode =
   | 'CI_DUPLICATE'
@@ -14,6 +14,7 @@ export type IdentityVerificationFailureCode =
   | 'MISSING_VERIFIED_CUSTOMER'
   | 'PORTONE_LOOKUP_FAILED'
   | 'PORTONE_NOT_VERIFIED'
+  | 'REJOIN_LOCKED'
   | 'SDK_CANCELLED'
   | 'SDK_ERROR'
   | 'UNDERAGE';
@@ -26,7 +27,15 @@ type StartIdentityVerificationResponse = {
 };
 
 export type ConfirmIdentityVerificationResponse = {
+  authSession?: {
+    accessToken: string;
+    expiresAt?: number | null;
+    refreshToken: string;
+    userId: string;
+  };
+  birthDate?: string | null;
   birthYear: number;
+  existingMember?: boolean;
   gender: 'male' | 'female' | null;
   identityVerifiedAt: string;
   isAdult: boolean;
@@ -75,6 +84,10 @@ const toFriendlyMessage = (payload: Partial<FunctionErrorPayload>, fallback: str
     return payload.error ?? payload.message ?? '이미 가입된 번호예요. 그 계정으로 들어갈게요.';
   }
 
+  if (payload.code === 'REJOIN_LOCKED') {
+    return payload.error ?? payload.message ?? '탈퇴한 번호는 30일 동안 다시 가입할 수 없어요.';
+  }
+
   if (payload.error || payload.message) {
     return payload.error ?? payload.message ?? fallback;
   }
@@ -106,6 +119,23 @@ export async function startIdentityVerification(): Promise<IdentityVerificationR
 
   if (error || !data) {
     throw await getFunctionError('본인확인을 시작할 수 없어요.', error);
+  }
+
+  return {
+    channelKey: data.channelKey,
+    customData: data.customData,
+    identityVerificationId: data.identityVerificationId,
+    storeId: data.storeId,
+  };
+}
+
+export async function startWithdrawIdentityVerification(): Promise<IdentityVerificationRequest> {
+  const { data, error } = await supabase.functions.invoke<StartIdentityVerificationResponse>(
+    'start-withdraw-identity-verification',
+  );
+
+  if (error || !data) {
+    throw await getFunctionError('본인인증 재확인을 시작할 수 없어요.', error);
   }
 
   return {
@@ -153,6 +183,34 @@ export async function confirmIdentityVerification(
   return data;
 }
 
+export async function confirmWithdrawIdentityVerification(
+  response: IdentityVerificationResponse,
+  fallbackIdentityVerificationId?: string,
+): Promise<{ identityVerifiedAt: string; ok: true }> {
+  const identityVerificationId =
+    response.identityVerificationId?.trim() || fallbackIdentityVerificationId?.trim();
+
+  if (!identityVerificationId) {
+    throw new IdentityVerificationError('본인확인 결과 식별자를 확인할 수 없어요. 다시 시도해 주세요.');
+  }
+
+  const { data, error } = await supabase.functions.invoke<{ identityVerifiedAt: string; ok: true }>(
+    'confirm-withdraw-identity-verification',
+    {
+      body: {
+        identityVerificationId,
+        identityVerificationTxId: response.identityVerificationTxId,
+      },
+    },
+  );
+
+  if (error || !data) {
+    throw await getFunctionError('본인인증 재확인을 완료할 수 없어요.', error);
+  }
+
+  return data;
+}
+
 export async function recordIdentityVerificationFailure({
   failureCode,
   failureMessage,
@@ -182,7 +240,72 @@ export async function recordIdentityVerificationFailure({
   });
 }
 
-/** 부스터(바로매치) 결제 시작. 가격은 하드코딩 금지(스토어/RevenueCat 콘솔). */
-export async function purchaseInstantRematch(_userId: string): Promise<{ ok: boolean }> {
-  throw new Error(PAYMENT_HANDOFF);
+export async function withdrawAccount({
+  detail,
+  reason,
+}: {
+  detail?: string;
+  reason: string;
+}): Promise<{ ok: true }> {
+  const { data, error } = await supabase.functions.invoke<{ ok: true }>(
+    'withdraw-account',
+    {
+      body: {
+        detail,
+        reason,
+      },
+    },
+  );
+
+  if (error || !data) {
+    throw await getFunctionError('탈퇴 처리에 실패했어요.', error);
+  }
+
+  return data;
+}
+
+export async function startInstantRematchPayment(productId: string): Promise<PaymentRequest> {
+  const { data, error } = await supabase.functions.invoke<{ request: PaymentRequest }>(
+    'start-instant-rematch-payment',
+    {
+      body: {
+        productId,
+      },
+    },
+  );
+
+  if (error || !data?.request) {
+    throw await getFunctionError('결제를 시작할 수 없어요.', error);
+  }
+
+  return data.request;
+}
+
+export async function confirmInstantRematchPayment(
+  response: PaymentResponse,
+  productId: string,
+): Promise<{ granted: number; ok: true; paymentId: string }> {
+  if (!response.paymentId) {
+    throw new Error('결제 결과 식별자를 확인할 수 없어요.');
+  }
+
+  const { data, error } = await supabase.functions.invoke<{
+    granted: number;
+    ok: true;
+    paymentId: string;
+  }>('confirm-instant-rematch-payment', {
+    body: {
+      code: response.code,
+      message: response.message,
+      paymentId: response.paymentId,
+      productId,
+      txId: response.txId,
+    },
+  });
+
+  if (error || !data) {
+    throw await getFunctionError('결제를 확인할 수 없어요.', error);
+  }
+
+  return data;
 }

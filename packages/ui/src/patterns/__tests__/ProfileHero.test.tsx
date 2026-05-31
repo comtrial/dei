@@ -13,6 +13,15 @@ describe('ProfileHero (X16)', () => {
     expect(screen.getByText('도')).toBeTruthy();
   });
 
+  it('renders the initial fallback when children are null', () => {
+    render(
+      <ProfileHero name="도현" initial="도">
+        {null}
+      </ProfileHero>,
+    );
+    expect(screen.getByText('도')).toBeTruthy();
+  });
+
   it('xl (default) avatar is 120px; lg is 90px (HTML .hero-av / .hero .av)', () => {
     const { rerender } = render(<ProfileHero initial="도" />);
     // 아바타 surface = accessibilityRole image View (testID 로 직접 조회).
