@@ -90,7 +90,7 @@ export default function RoomScreen() {
     hourRange,
   );
   const { members, refetch: refetchMembers } = useRoomMembers(roomId);
-  const { onlineUserIds } = useRoomPresence(roomId, user?.id ?? null);
+  const { onlineUserIds } = useRoomPresence(roomId, { selfUserId: user?.id ?? null });
 
   useAppStateRefetch(() => {
     refetchVideos();

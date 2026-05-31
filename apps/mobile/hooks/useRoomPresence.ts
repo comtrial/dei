@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { subscribeRoomPresence } from '@/lib/realtime';
 
 export function useRoomPresence(
   roomId: string,
-  selfUserId: string | null,
+  options?: { selfUserId?: string | null },
 ): {
   onlineUserIds: Set<string>;
   useIsUserOnline: (userId: string) => boolean;
+  iAmOnline: boolean;
 } {
+  const selfUserId = options?.selfUserId ?? null;
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -35,5 +37,10 @@ export function useRoomPresence(
     [],
   );
 
-  return { onlineUserIds, useIsUserOnline };
+  const iAmOnline = useMemo(
+    () => (selfUserId != null ? onlineUserIds.has(selfUserId) : false),
+    [onlineUserIds, selfUserId],
+  );
+
+  return { onlineUserIds, useIsUserOnline, iAmOnline };
 }

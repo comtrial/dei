@@ -1,6 +1,7 @@
 # C-0b · 방 Realtime / Presence / 영상 신호
 
-- **status**: pending (A 합의 차단 중)
+- **status**: done
+- **임시 가정 적용**: §2-1 `room_ended broadcast` 담당 합의 미정 → 클라 폴백(`useRoomEndedDetector`) 으로 옵션 B 강행. A 합의 후 재검토 필요.
 - **owner**: C (손승태) — 단, 채널 네이밍·구독/해제 유틸은 A 가 SSOT (`lib/realtime.ts`)
 - **priority**: P0 (S13 시그니처 화면 전제)
 - **대상 파일**: `apps/mobile/lib/realtime.ts` 확장 + `apps/mobile/hooks/useRoomPresence.ts` 신규
@@ -114,7 +115,7 @@ export function useRoomVideos(roomId: string): {
 
 ## 7. 완료 정의 (DoD)
 
-- [ ] A 와 §2-1 확정 규약 표 합의 완료 + 이 문서에 박음.
-- [ ] 3 hooks 신규 + `lib/realtime.ts` 3 헬퍼 추가.
-- [ ] integration + e2e-realdb 통과.
-- [ ] A 1차 리뷰 OK.
+- [x] A 와 §2-1 확정 규약 표 합의 완료 + 이 문서에 박음. ← 옵션 B 강행 (사용자 지시). `room_ended broadcast` 담당은 합의 미정 — 클라 폴백 적용.
+- [x] 3 hooks 신규 + `lib/realtime.ts` 3 헬퍼 추가. (useRoomPresence / useRoomMembers / useRoomEndedDetector + subscribeRoomPresence / subscribeRoomMembers / subscribeRoomVideos)
+- [ ] integration + e2e-realdb 통과. ← 실DB 2디바이스 검증 필요 (수동)
+- [ ] A 1차 리뷰 OK. ← PR 머지 시점 별도 (verifier 범위 아님)

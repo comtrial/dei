@@ -60,6 +60,12 @@ export const POLICY = {
     hardDeleteAfterDays: 30,
     /** 한 사람당 활성 방 1개 원칙(splash 라우팅·busy 판정 근거). */
     maxActiveRoomsPerUser: 1,
+    /**
+     * 마지막 active 멤버 이탈 감지 후 room_ended 콜백 발화까지 대기 ms.
+     * 네트워크 순간 끊김으로 인한 오판 완화용 grace period.
+     * TODO(C-0b §2-1 broadcast 합의 후 제거): 클라 폴백 로직 — broadcast 채택 시 이 값 불필요.
+     */
+    roomEndedGraceMs: 5000,
   },
 
   // ── 자동 퇴장(auto-kick) (D9) ──────────────────────────────────

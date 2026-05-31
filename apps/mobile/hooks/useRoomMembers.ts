@@ -8,7 +8,14 @@ import { subscribeRoomMembers } from '@/lib/realtime';
 
 type RoomMemberRow = Database['public']['Tables']['room_member']['Row'];
 
-export function useRoomMembers(roomId: string): {
+type MemberLeftStatus = 'left' | 'auto_kicked';
+
+export function useRoomMembers(
+  roomId: string,
+  options?: {
+    onMemberLeft?: (userId: string, status: MemberLeftStatus) => void;
+  },
+): {
   members: RoomMemberRow[];
   loading: boolean;
   refetch: () => void;
@@ -17,6 +24,8 @@ export function useRoomMembers(roomId: string): {
   const [loading, setLoading] = useState(true);
   const roomIdRef = useRef(roomId);
   roomIdRef.current = roomId;
+  const onMemberLeftRef = useRef(options?.onMemberLeft);
+  onMemberLeftRef.current = options?.onMemberLeft;
 
   const fetchMembers = useCallback(async () => {
     try {
@@ -44,6 +53,15 @@ export function useRoomMembers(roomId: string): {
         const idx = prev.findIndex(
           (m) => m.user_id === updated.user_id && m.room_id === updated.room_id,
         );
+        const prevMember = idx !== -1 ? prev[idx] : null;
+
+        if (
+          prevMember?.status === 'active' &&
+          (updated.status === 'left' || updated.status === 'auto_kicked')
+        ) {
+          onMemberLeftRef.current?.(updated.user_id, updated.status as MemberLeftStatus);
+        }
+
         if (idx === -1) return [...prev, updated];
         const next = [...prev];
         next[idx] = updated;
