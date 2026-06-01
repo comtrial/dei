@@ -16,27 +16,57 @@ export function roomChannel(roomId: string, selfUserId?: string): RealtimeChanne
   });
 }
 
+function uniqueChannelName(base: string): string {
+  return `${base}:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function subscribeRoomMessages(
   roomId: string,
   onInsert: (row: Record<string, unknown>) => void,
 ): () => void {
-  const channel = roomChannel(roomId)
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'message', filter: `room_id=eq.${roomId}` },
-      (payload) => onInsert(payload.new as Record<string, unknown>),
-    )
-    .subscribe((status) => {
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        logger.captureMessage(`realtime: room ${roomId} message 구독 ${status}`, 'warning', {
-          tags: { feature: 'realtime', room_id: roomId },
+  try {
+    const channelName = uniqueChannelName(`room:${roomId}:messages`);
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'message', filter: `room_id=eq.${roomId}` },
+        (payload) => {
+          try {
+            onInsert(payload.new as Record<string, unknown>);
+          } catch (err) {
+            logger.captureException(err, {
+              tags: { feature: 'realtime', sub_feature: 'messages', step: 'on-insert' },
+              extra: { roomId },
+            });
+          }
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          logger.captureMessage(`realtime: room ${roomId} message 구독 ${status}`, 'warning', {
+            tags: { feature: 'realtime', room_id: roomId },
+          });
+        }
+      });
+
+    return () => {
+      try {
+        void supabase.removeChannel(channel);
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { feature: 'realtime', sub_feature: 'messages', step: 'cleanup' },
+          extra: { roomId },
         });
       }
+    };
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'realtime', sub_feature: 'messages', step: 'subscribe' },
+      extra: { roomId },
     });
-
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+    return () => {};
+  }
 }
 
 const BACKOFF_STEPS_MS = [1000, 2000, 5000, 30000] as const;
@@ -79,30 +109,80 @@ export function subscribeRoomVideos(
   roomId: string,
   onInsert: (row: Record<string, unknown>) => void,
 ): () => void {
-  const channel = roomChannel(roomId).on(
-    'postgres_changes',
-    { event: 'INSERT', schema: 'public', table: 'video', filter: `room_id=eq.${roomId}` },
-    (payload) => onInsert(payload.new as Record<string, unknown>),
-  );
-  withBackoffSubscribe(channel, roomId, 'videos');
-  return () => {
-    (channel as RealtimeChannel & { _deiCleanup?: () => void })._deiCleanup?.();
-  };
+  try {
+    const channelName = uniqueChannelName(`room:${roomId}:videos`);
+    const channel = supabase.channel(channelName).on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'video', filter: `room_id=eq.${roomId}` },
+      (payload) => {
+        try {
+          onInsert(payload.new as Record<string, unknown>);
+        } catch (err) {
+          logger.captureException(err, {
+            tags: { feature: 'realtime', sub_feature: 'videos', step: 'on-insert' },
+            extra: { roomId },
+          });
+        }
+      },
+    );
+    withBackoffSubscribe(channel, roomId, 'videos');
+    return () => {
+      try {
+        (channel as RealtimeChannel & { _deiCleanup?: () => void })._deiCleanup?.();
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { feature: 'realtime', sub_feature: 'videos', step: 'cleanup' },
+          extra: { roomId },
+        });
+      }
+    };
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'realtime', sub_feature: 'videos', step: 'subscribe' },
+      extra: { roomId },
+    });
+    return () => {};
+  }
 }
 
 export function subscribeRoomMembers(
   roomId: string,
   onUpdate: (row: Record<string, unknown>) => void,
 ): () => void {
-  const channel = roomChannel(roomId).on(
-    'postgres_changes',
-    { event: 'UPDATE', schema: 'public', table: 'room_member', filter: `room_id=eq.${roomId}` },
-    (payload) => onUpdate(payload.new as Record<string, unknown>),
-  );
-  withBackoffSubscribe(channel, roomId, 'members');
-  return () => {
-    (channel as RealtimeChannel & { _deiCleanup?: () => void })._deiCleanup?.();
-  };
+  try {
+    const channelName = uniqueChannelName(`room:${roomId}:members`);
+    const channel = supabase.channel(channelName).on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'room_member', filter: `room_id=eq.${roomId}` },
+      (payload) => {
+        try {
+          onUpdate(payload.new as Record<string, unknown>);
+        } catch (err) {
+          logger.captureException(err, {
+            tags: { feature: 'realtime', sub_feature: 'members', step: 'on-update' },
+            extra: { roomId },
+          });
+        }
+      },
+    );
+    withBackoffSubscribe(channel, roomId, 'members');
+    return () => {
+      try {
+        (channel as RealtimeChannel & { _deiCleanup?: () => void })._deiCleanup?.();
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { feature: 'realtime', sub_feature: 'members', step: 'cleanup' },
+          extra: { roomId },
+        });
+      }
+    };
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'realtime', sub_feature: 'members', step: 'subscribe' },
+      extra: { roomId },
+    });
+    return () => {};
+  }
 }
 
 export type PresenceSyncHandler = (state: RealtimePresenceState<{ user_id: string }>) => void;
@@ -115,27 +195,54 @@ export function subscribeRoomPresence(
   const presenceThrottleMs = POLICY.gridPerformance.realtimeDebounceMs * 2;
   let throttleTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const channel = roomChannel(roomId, selfUserId)
-    .on('presence', { event: 'sync' }, () => {
-      if (throttleTimer !== null) return;
-      throttleTimer = setTimeout(() => {
-        throttleTimer = null;
-        onSync(channel.presenceState<{ user_id: string }>());
-      }, presenceThrottleMs);
+  try {
+    const channelName = uniqueChannelName(`room:${roomId}:presence`);
+    const channel = supabase.channel(channelName, {
+      config: { presence: { key: selfUserId } },
     })
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        void channel.track({ user_id: selfUserId });
-      }
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        logger.captureMessage(`realtime: room ${roomId} presence 구독 ${status}`, 'warning', {
-          tags: { feature: 'realtime', room_id: roomId, sub_feature: 'presence' },
+      .on('presence', { event: 'sync' }, () => {
+        if (throttleTimer !== null) return;
+        throttleTimer = setTimeout(() => {
+          throttleTimer = null;
+          try {
+            onSync(channel.presenceState<{ user_id: string }>());
+          } catch (err) {
+            logger.captureException(err, {
+              tags: { feature: 'realtime', sub_feature: 'presence', step: 'on-sync' },
+              extra: { roomId },
+            });
+          }
+        }, presenceThrottleMs);
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          void channel.track({ user_id: selfUserId });
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          logger.captureMessage(`realtime: room ${roomId} presence 구독 ${status}`, 'warning', {
+            tags: { feature: 'realtime', room_id: roomId, sub_feature: 'presence' },
+          });
+        }
+      });
+
+    return () => {
+      if (throttleTimer !== null) clearTimeout(throttleTimer);
+      try {
+        void supabase.removeChannel(channel);
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { feature: 'realtime', sub_feature: 'presence', step: 'cleanup' },
+          extra: { roomId },
         });
       }
+    };
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'realtime', sub_feature: 'presence', step: 'subscribe' },
+      extra: { roomId },
     });
-
-  return () => {
-    if (throttleTimer !== null) clearTimeout(throttleTimer);
-    void supabase.removeChannel(channel);
-  };
+    return () => {
+      if (throttleTimer !== null) clearTimeout(throttleTimer);
+    };
+  }
 }

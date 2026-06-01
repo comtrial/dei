@@ -70,30 +70,49 @@ export function useRoomVideos(
     setLoading(true);
     void fetchVideos();
 
-    const unsub = subscribeRoomVideos(roomId, (row) => {
-      const receivedAt = Date.now();
-      const video = row as VideoRow;
+    let unsub: () => void = () => {};
+    try {
+      unsub = subscribeRoomVideos(roomId, (row) => {
+        try {
+          const receivedAt = Date.now();
+          const video = row as VideoRow;
 
-      const expectedAt =
-        typeof video.created_at === 'string' ? new Date(video.created_at).getTime() : receivedAt;
-      analytics.capture(ANALYTICS_EVENTS.room_grid_realtime_lag, {
-        room_id: roomId,
-        expected_at: expectedAt,
-        received_at: receivedAt,
-        lag_ms: receivedAt - expectedAt,
+          const expectedAt =
+            typeof video.created_at === 'string' ? new Date(video.created_at).getTime() : receivedAt;
+          analytics.capture(ANALYTICS_EVENTS.room_grid_realtime_lag, {
+            room_id: roomId,
+            expected_at: expectedAt,
+            received_at: receivedAt,
+            lag_ms: receivedAt - expectedAt,
+          });
+
+          pendingPatchRef.current.push(video);
+
+          if (debounceTimerRef.current !== null) return;
+          debounceTimerRef.current = setTimeout(() => {
+            debounceTimerRef.current = null;
+            flushPatch();
+          }, POLICY.gridPerformance.realtimeDebounceMs);
+        } catch (err) {
+          logger.captureException(err, {
+            tags: { feature: 'room_videos', step: 'realtime-insert', room_id: roomId },
+          });
+        }
       });
-
-      pendingPatchRef.current.push(video);
-
-      if (debounceTimerRef.current !== null) return;
-      debounceTimerRef.current = setTimeout(() => {
-        debounceTimerRef.current = null;
-        flushPatch();
-      }, POLICY.gridPerformance.realtimeDebounceMs);
-    });
+    } catch (err) {
+      logger.captureException(err, {
+        tags: { feature: 'room_videos', step: 'realtime-subscribe', room_id: roomId },
+      });
+    }
 
     return () => {
-      unsub();
+      try {
+        unsub();
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { feature: 'room_videos', step: 'realtime-unsub', room_id: roomId },
+        });
+      }
       if (debounceTimerRef.current !== null) {
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
