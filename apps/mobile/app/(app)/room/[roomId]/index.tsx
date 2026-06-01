@@ -10,7 +10,7 @@ import { MessageCircle, MoreHorizontal } from 'lucide-react-native';
 import { Banner, GridRoom, IconButton, Badge, TopNav } from '@dei/ui';
 import type { GridRoomCell, GridRoomFilledCell, GridRoomTimeSlot, GradientComponentProps } from '@dei/ui';
 import type { Database } from '@dei/api';
-import { POLICY, analytics, formatTimeStripSlots, getCurrentHourSlotKst, isQuietHourKst, logger } from '@dei/shared';
+import { POLICY, analytics, formatTimeStripSlots, getCurrentHourSlotKst, isQuietHourKst } from '@dei/shared';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { getCachedVideoUri, getCachedThumbnailUri } from '@/lib/video';
@@ -73,7 +73,7 @@ function CellVideoMedia({
   );
 
   return (
-    <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#1A1A1A' }]}>
+    <View className="absolute inset-0 bg-ink">
       {thumbnailUri ? (
         <Image
           source={{ uri: thumbnailUri }}
@@ -247,7 +247,7 @@ export default function RoomScreen() {
       analytics.capture(ANALYTICS_EVENTS.room_joined_unblurred, { room_id: roomId });
       setGateChecked(true);
     })();
-  }, [roomId, user?.id]);
+  }, [roomId, user?.id, router]);
 
   useEffect(() => {
     if (!user?.id || !roomId) return;

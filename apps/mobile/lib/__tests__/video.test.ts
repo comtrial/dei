@@ -13,7 +13,11 @@ vi.mock('expo-file-system/legacy', () => ({
   getInfoAsync: vi.fn(),
   readAsStringAsync: vi.fn(),
   writeAsStringAsync: vi.fn(),
+  makeDirectoryAsync: vi.fn(),
+  downloadAsync: vi.fn(),
+  deleteAsync: vi.fn(),
   documentDirectory: 'file:///documents/',
+  cacheDirectory: 'file:///cache/',
   EncodingType: { Base64: 'base64' },
 }));
 
@@ -62,14 +66,14 @@ describe('recordClip', () => {
   });
 
   it('record() 결과 없으면 RECORD_FAILED throw', async () => {
-    const ref = { current: { record: vi.fn().mockResolvedValue(undefined) } };
+    const ref = { current: { recordAsync: vi.fn().mockResolvedValue(undefined) } };
     await expect(recordClip(ref as never)).rejects.toThrow('RECORD_FAILED');
   });
 
   it('파일 크기 > maxFileSizeBytes 이면 VIDEO_TOO_LARGE throw', async () => {
     const ref = {
       current: {
-        record: vi.fn().mockResolvedValue({ uri: 'file:///video.mp4' }),
+        recordAsync: vi.fn().mockResolvedValue({ uri: 'file:///video.mp4' }),
       },
     };
     mockGetInfoAsync.mockResolvedValue({
@@ -85,7 +89,7 @@ describe('recordClip', () => {
   it('파일 크기 <= maxFileSizeBytes 이면 localUri + durationMs 반환', async () => {
     const ref = {
       current: {
-        record: vi.fn().mockResolvedValue({ uri: 'file:///video.mp4' }),
+        recordAsync: vi.fn().mockResolvedValue({ uri: 'file:///video.mp4' }),
       },
     };
     mockGetInfoAsync.mockResolvedValue({

@@ -8,18 +8,37 @@ const mockRecordClip = jest.fn();
 const mockAnalyticsCapture = jest.fn();
 const mockRequestMicrophonePermissionsAsync = jest.fn();
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ replace: mockReplace, push: mockPush, back: mockBack }),
-  useLocalSearchParams: () => ({ roomId: 'room-123' }),
-}));
+jest.mock('expo-router', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factory runs before ESM imports; require is required.
+  const React = require('react');
+  return {
+    useRouter: () => ({ replace: mockReplace, push: mockPush, back: mockBack }),
+    useLocalSearchParams: () => ({ roomId: 'room-123' }),
+    useFocusEffect: (cb: () => void | (() => void)) => {
+      React.useEffect(() => {
+        const cleanup = cb();
+        return cleanup;
+      }, [cb]);
+    },
+  };
+});
 
-jest.mock('expo-camera', () => ({
-  Camera: {
-    requestMicrophonePermissionsAsync: (...args: unknown[]) =>
-      mockRequestMicrophonePermissionsAsync(...args),
-  },
-  CameraView: 'CameraView',
-}));
+jest.mock('expo-camera', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factory runs before ESM imports; require is required.
+  const React = require('react');
+  return {
+    Camera: {
+      requestMicrophonePermissionsAsync: (...args: unknown[]) =>
+        mockRequestMicrophonePermissionsAsync(...args),
+    },
+    CameraView: ({ onCameraReady }: { onCameraReady?: () => void }) => {
+      React.useEffect(() => {
+        if (onCameraReady) onCameraReady();
+      }, [onCameraReady]);
+      return null;
+    },
+  };
+});
 
 jest.mock('@/lib/permissions', () => ({
   getPermissionState: (...args: unknown[]) => mockGetPermissionState(...args),
@@ -34,6 +53,7 @@ jest.mock('@dei/shared', () => ({
   logger: { captureException: jest.fn() },
 }));
 
+// eslint-disable-next-line import/first -- SUT import must run after jest.mock() calls
 import VideoCaptureScreen from '../upload';
 
 describe('VideoCaptureScreen (S11)', () => {

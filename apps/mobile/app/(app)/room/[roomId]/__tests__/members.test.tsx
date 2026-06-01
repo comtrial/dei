@@ -24,6 +24,7 @@ jest.mock('@/lib/room-rpc', () => ({
   getMemberProfile: (...args: unknown[]) => mockGetMemberProfile(...args),
 }));
 
+// eslint-disable-next-line import/first -- SUT import must run after jest.mock() calls
 import MemberProfileScreen from '../members';
 
 const BASE_PROFILE = {

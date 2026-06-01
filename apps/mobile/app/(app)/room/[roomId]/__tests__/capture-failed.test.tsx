@@ -14,6 +14,7 @@ jest.mock('@dei/shared', () => ({
   logger: { captureException: jest.fn() },
 }));
 
+// eslint-disable-next-line import/first -- SUT import must run after jest.mock() calls
 import CaptureFailedScreen from '../capture-failed';
 
 describe('CaptureFailedScreen (S12)', () => {

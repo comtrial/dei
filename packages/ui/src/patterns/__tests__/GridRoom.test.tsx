@@ -48,10 +48,11 @@ describe('GridRoom (X10)', () => {
     expect(screen.getByText('13:55')).toBeTruthy();
   });
 
-  it('renders empty cells with "이름 · 안 올림" label', () => {
+  it('renders empty cells with member name + Zzz.. placeholder', () => {
     render(<GridRoom cells={cells} />);
-    expect(screen.getByText('동현 · 안 올림')).toBeTruthy();
-    expect(screen.getByText('유민 · 안 올림')).toBeTruthy();
+    expect(screen.getByText('동현')).toBeTruthy();
+    expect(screen.getByText('유민')).toBeTruthy();
+    expect(screen.getAllByText('Zzz..').length).toBe(3);
   });
 
   it('uses r-md (=14px, HTML r14) rounding on cells, not r-lg', () => {

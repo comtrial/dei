@@ -38,6 +38,7 @@ jest.mock('@dei/shared', () => ({
   logger: { captureException: jest.fn() },
 }));
 
+// eslint-disable-next-line import/first -- SUT import must run after jest.mock() calls
 import UploadPreviewScreen from '../upload-preview';
 
 describe('UploadPreviewScreen (S11b)', () => {

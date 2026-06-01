@@ -44,6 +44,11 @@ jest.mock('@/lib/room-rpc', () => ({
     mockGetRoomMembersWithProfile(...args),
 }));
 
+jest.mock('@/lib/video', () => ({
+  getCachedVideoUri: jest.fn().mockResolvedValue('file:///cache/video.mp4'),
+  getCachedThumbnailUri: jest.fn().mockResolvedValue('file:///cache/thumb.jpg'),
+}));
+
 jest.mock('@dei/shared', () => ({
   analytics: { capture: jest.fn() },
   logger: { captureException: jest.fn() },
@@ -81,20 +86,20 @@ jest.mock('expo-image', () => ({
   Image: 'Image',
 }));
 
-jest.mock('react-native-gesture-handler', () => ({
-  GestureDetector: ({ children }: { children: React.ReactNode }) => children,
-  Gesture: {
-    Pan: () => ({
-      onStart: () => ({ onEnd: () => ({ runOnJS: () => ({}) }) }),
-    }),
-    LongPress: () => ({
-      minDuration: () => ({
-        onStart: () => ({ onEnd: () => ({ runOnJS: () => ({}) }) }),
-      }),
-    }),
-    Simultaneous: () => ({}),
-  },
-}));
+jest.mock('react-native-gesture-handler', () => {
+  const chainable: Record<string, () => unknown> = {};
+  const chain = new Proxy(chainable, {
+    get: () => () => chain,
+  });
+  return {
+    GestureDetector: ({ children }: { children: React.ReactNode }) => children,
+    Gesture: {
+      Pan: () => chain,
+      LongPress: () => chain,
+      Simultaneous: () => chain,
+    },
+  };
+});
 
 const defaultVideo = {
   id: 'vid-1',
@@ -108,6 +113,7 @@ const defaultVideo = {
   created_at: new Date().toISOString(),
 };
 
+// eslint-disable-next-line import/first -- SUT import must run after jest.mock() calls
 import VideoFullscreenScreen from '../[videoId]';
 
 describe('VideoFullscreenScreen (S13b)', () => {
@@ -161,15 +167,10 @@ describe('VideoFullscreenScreen (S13b)', () => {
     });
   });
 
-  it('signed URL 실패 → StateView error 렌더', async () => {
+  it('비디오 URI 획득 실패 → StateView error 렌더', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { supabase } = require('@/lib/supabase');
-    supabase.storage.from = () => ({
-      createSignedUrl: jest.fn().mockResolvedValue({
-        data: null,
-        error: new Error('storage error'),
-      }),
-    });
+    const { getCachedVideoUri } = require('@/lib/video');
+    (getCachedVideoUri as jest.Mock).mockResolvedValueOnce(null);
 
     render(<VideoFullscreenScreen />);
 

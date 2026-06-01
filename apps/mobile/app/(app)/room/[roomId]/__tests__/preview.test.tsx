@@ -35,6 +35,7 @@ jest.mock('@dei/shared', () => ({
   logger: { captureException: (...args: unknown[]) => mockLoggerCaptureException(...args) },
 }));
 
+// eslint-disable-next-line import/first -- SUT import must run after jest.mock() calls
 import RoomPreviewScreen from '../preview';
 
 function makeVideoChain(rows: unknown[]) {
@@ -85,10 +86,8 @@ describe('RoomPreviewScreen (S10)', () => {
   });
 
   it('영상 0건 → 본문 렌더 + GridRoom 표시', async () => {
-    let videoCallCount = 0;
     mockSupabaseFrom.mockImplementation((table: string) => {
       if (table === 'video') {
-        videoCallCount += 1;
         return makeVideoChain([]);
       }
       if (table === 'room_member') {

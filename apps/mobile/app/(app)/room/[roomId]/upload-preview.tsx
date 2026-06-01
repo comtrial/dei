@@ -156,19 +156,8 @@ export default function UploadPreviewScreen() {
         onPress={() => setMuted((m) => !m)}
         disabled={uploading}
         hitSlop={16}
-        style={{
-          position: 'absolute',
-          top: insets.top + 12,
-          right: 20,
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          backgroundColor: 'rgba(0,0,0,0.55)',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 30,
-          opacity: uploading ? 0.3 : 1,
-        }}
+        className={`absolute right-5 w-11 h-11 rounded-full bg-black/55 items-center justify-center z-30 ${uploading ? 'opacity-30' : ''}`}
+        style={[{ top: insets.top + 12 }]}
       >
         {muted ? <VolumeX color="white" size={22} /> : <Volume2 color="white" size={22} />}
       </Pressable>
@@ -176,17 +165,9 @@ export default function UploadPreviewScreen() {
       {capturedAtLabel ? (
         <View
           pointerEvents="none"
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}
+          className="absolute inset-0 items-center justify-center"
         >
-          <Text
-            style={{
-              color: 'white',
-              fontSize: 56,
-              fontWeight: '800',
-              letterSpacing: 2,
-              opacity: 0.75,
-            }}
-          >
+          <Text className="text-white text-[56px] font-extrabold tracking-[2px] opacity-75">
             {capturedAtLabel}
           </Text>
         </View>

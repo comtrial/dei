@@ -19,6 +19,7 @@ jest.mock('@/lib/permissions', () => ({
   openSystemSettings: (...args: unknown[]) => mockOpenSystemSettings(...args),
 }));
 
+// eslint-disable-next-line import/first -- SUT import must run after jest.mock() calls
 import CameraPermissionScreen from '../camera';
 
 describe('CameraPermissionScreen (S11a)', () => {

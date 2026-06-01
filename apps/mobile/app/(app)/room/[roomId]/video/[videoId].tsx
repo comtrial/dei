@@ -303,9 +303,6 @@ export default function VideoFullscreenScreen() {
 
   function handleVideoPress() {}
 
-  const progress =
-    player.duration > 0 ? player.currentTime / player.duration : 0;
-
   const memberInitial = memberNickname ? memberNickname.charAt(0) : '?';
 
   const metaSlot = memberUserId ? (
@@ -347,6 +344,7 @@ export default function VideoFullscreenScreen() {
           onPress={handleVideoPress}
         >
           <VideoView
+            testID="fullscreen-video"
             player={player}
             contentFit="contain"
             nativeControls={false}
@@ -383,17 +381,9 @@ export default function VideoFullscreenScreen() {
       {capturedAtLabel ? (
         <View
           pointerEvents="none"
-          style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}
+          className="absolute inset-0 items-center justify-center"
         >
-          <Text
-            style={{
-              color: 'white',
-              fontSize: 56,
-              fontWeight: '800',
-              letterSpacing: 2,
-              opacity: 0.75,
-            }}
-          >
+          <Text className="text-white text-[56px] font-extrabold tracking-[2px] opacity-75">
             {capturedAtLabel}
           </Text>
         </View>
@@ -402,16 +392,8 @@ export default function VideoFullscreenScreen() {
       {uiVisible ? (
         <View
           pointerEvents="box-none"
-          style={{
-            position: 'absolute',
-            top: insets.top + 12,
-            left: 18,
-            right: 18,
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            zIndex: 30,
-          }}
+          className="absolute left-[18px] right-[18px] flex-row justify-between items-center z-30"
+          style={[{ top: insets.top + 12 }]}
         >
           <IconButton
             glyph={X}

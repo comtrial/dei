@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -204,6 +184,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      identity_rejoin_lock: {
+        Row: {
+          ci_hash: string
+          created_at: string
+          id: string
+          locked_until: string
+          reason: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          ci_hash: string
+          created_at?: string
+          id?: string
+          locked_until: string
+          reason?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          ci_hash?: string
+          created_at?: string
+          id?: string
+          locked_until?: string
+          reason?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       match_member: {
         Row: {
@@ -432,6 +442,7 @@ export type Database = {
       profile: {
         Row: {
           bio: string | null
+          birth_date: string | null
           birth_year: number | null
           created_at: string
           gender: string | null
@@ -452,6 +463,7 @@ export type Database = {
         }
         Insert: {
           bio?: string | null
+          birth_date?: string | null
           birth_year?: number | null
           created_at?: string
           gender?: string | null
@@ -472,6 +484,7 @@ export type Database = {
         }
         Update: {
           bio?: string | null
+          birth_date?: string | null
           birth_year?: number | null
           created_at?: string
           gender?: string | null
@@ -916,36 +929,229 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_room_videos: {
-        Args: { p_hour_from: number; p_hour_to: number; p_room_id: string }
+      _flag_attr_value: {
+        Args: {
+          p_attr: Database["public"]["Enums"]["flag_attribute"]
+          p_user: string
+        }
+        Returns: Json
+      }
+      _flag_cond_match: {
+        Args: {
+          p_actual: Json
+          p_expected: Json
+          p_op: Database["public"]["Enums"]["flag_operator"]
+        }
+        Returns: boolean
+      }
+      _video_review_notify_config: { Args: never; Returns: Json }
+      block_profile_user: {
+        Args: { p_blocked_user_id: string; p_reason?: string }
+        Returns: string
+      }
+      can_enter_discovery: {
+        Args: { target_user_id?: string }
+        Returns: boolean
+      }
+      consume_refresh_item: {
+        Args: { p_seen_user_ids?: string[] }
+        Returns: {
+          display_name: string
+          gender: string
+          log_id: string
+          pool_id: string
+          redemption_id: string
+          user_id: string
+          video_path: string
+          video_url: string
+        }[]
+      }
+      create_notification: {
+        Args: {
+          p_body?: string
+          p_dedupe_key?: string
+          p_metadata?: Json
+          p_route?: string
+          p_title: string
+          p_type: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      create_profile_report: {
+        Args: {
+          p_description?: string
+          p_log_id?: string
+          p_reason?: string
+          p_reason_category?: string
+          p_reported_id: string
+        }
+        Returns: string
+      }
+      delete_own_log_and_recalculate: {
+        Args: { p_log_id: string }
+        Returns: {
+          log_date: string
+          remaining_count: number
+          status: string
+        }[]
+      }
+      evaluate_my_flags: { Args: never; Returns: Json }
+      get_available_heart_count: {
+        Args: { p_user_id?: string }
+        Returns: number
+      }
+      get_available_refresh_item_count: {
+        Args: { p_user_id?: string }
+        Returns: number
+      }
+      get_my_eligibility: {
+        Args: never
+        Returns: {
+          account_state: Database["public"]["Enums"]["account_state"]
+          account_user_id: string
+          age_eligible: boolean
+          can_enter_discovery: boolean
+          first_video_approved: boolean
+          first_video_uploaded: boolean
+          has_accepted_terms: boolean
+          identity_verified: boolean
+          latest_video_id: string
+          latest_video_rejection_reason: string
+          latest_video_status: Database["public"]["Enums"]["moderation_status"]
+          next_step: Database["public"]["Enums"]["onboarding_state"]
+          onboarding_state: Database["public"]["Enums"]["onboarding_state"]
+          profile_complete: boolean
+        }[]
+      }
+      get_public_profile: {
+        Args: { p_profile_user_id: string }
         Returns: {
           created_at: string
-          duration_ms: number | null
-          hour_slot: number | null
-          id: string
-          muted: boolean
-          room_id: string
-          status: string
-          storage_path: string | null
-          thumbnail_path: string | null
-          user_id: string
+          gender: string
+          interest_categories: string[]
+          interest_tags: string[]
+          intro: string
+          mbti: string
+          nickname: string
+          photo_url: string
+          profile_user_id: string
+          region_sido: string
+          region_sigungu: string
         }[]
-        SetofOptions: {
-          from: "*"
-          to: "video"
-          isOneToOne: false
-          isSetofReturn: true
-        }
+      }
+      get_public_profile_logs: {
+        Args: { p_profile_user_id: string }
+        Returns: {
+          created_at: string
+          duration_sec: number
+          hour_slot: number
+          id: string
+          recorded_at: string
+          thumbnail_path: string
+          user_id: string
+          video_url: string
+        }[]
       }
       is_admin: { Args: never; Returns: boolean }
       is_blocked_between: { Args: { a: string; b: string }; Returns: boolean }
+      is_heart_product: { Args: { p_product_id: string }; Returns: boolean }
+      is_public_profile_visible: {
+        Args: { p_profile_user_id: string; p_viewer_user_id: string }
+        Returns: boolean
+      }
+      is_refresh_item_product: {
+        Args: { p_product_id: string }
+        Returns: boolean
+      }
+      leave_conversation: {
+        Args: { p_conversation_id: string }
+        Returns: {
+          conversation_id: string
+          match_id: string
+          other_user_id: string
+          status: string
+        }[]
+      }
+      recalculate_daily_log: { Args: { p_user_id: string }; Returns: undefined }
       room_is_member: {
         Args: { p_room_id: string; p_user_id: string }
         Returns: boolean
       }
+      send_message: {
+        Args: { p_body: string; p_conversation_id: string }
+        Returns: {
+          body: string
+          conversation_id: string
+          created_at: string
+          id: string
+          sender_user_id: string
+          status: string
+        }[]
+      }
+      send_room_message: {
+        Args: {
+          p_body: string
+          p_client_msg_id?: string
+          p_room_id: string
+          p_whisper_to_user_id?: string
+        }
+        Returns: {
+          body: string
+          client_msg_id: string | null
+          created_at: string
+          id: string
+          room_id: string
+          status: string
+          user_id: string
+          whisper_to_user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "message"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
-      [_ in never]: never
+      account_state: "active" | "suspended" | "banned" | "deleted"
+      device_platform: "ios" | "android" | "web"
+      flag_attribute:
+        | "days_since_signup"
+        | "days_since_first_video"
+        | "days_since_first_video_approved"
+        | "identity_verified"
+        | "profile_complete"
+        | "first_video_approved"
+        | "likes_sent_count"
+        | "likes_received_count"
+        | "match_count"
+        | "has_successful_payment"
+        | "gender"
+        | "region_sido"
+        | "account_state"
+      flag_operator: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in"
+      identity_provider: "portone"
+      moderation_case_status: "open" | "in_review" | "resolved" | "dismissed"
+      moderation_source_type: "report" | "profile_video" | "user"
+      moderation_status: "pending" | "approved" | "rejected" | "removed"
+      onboarding_state:
+        | "terms"
+        | "phone"
+        | "identity_verification"
+        | "profile"
+        | "log_intro"
+        | "first_video"
+        | "video_review"
+        | "complete"
+      push_provider: "expo" | "apns" | "fcm"
+      verification_status:
+        | "pending"
+        | "verified"
+        | "failed"
+        | "expired"
+        | "canceled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1071,11 +1277,48 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
-    Enums: {},
+    Enums: {
+      account_state: ["active", "suspended", "banned", "deleted"],
+      device_platform: ["ios", "android", "web"],
+      flag_attribute: [
+        "days_since_signup",
+        "days_since_first_video",
+        "days_since_first_video_approved",
+        "identity_verified",
+        "profile_complete",
+        "first_video_approved",
+        "likes_sent_count",
+        "likes_received_count",
+        "match_count",
+        "has_successful_payment",
+        "gender",
+        "region_sido",
+        "account_state",
+      ],
+      flag_operator: ["eq", "neq", "gt", "gte", "lt", "lte", "in"],
+      identity_provider: ["portone"],
+      moderation_case_status: ["open", "in_review", "resolved", "dismissed"],
+      moderation_source_type: ["report", "profile_video", "user"],
+      moderation_status: ["pending", "approved", "rejected", "removed"],
+      onboarding_state: [
+        "terms",
+        "phone",
+        "identity_verification",
+        "profile",
+        "log_intro",
+        "first_video",
+        "video_review",
+        "complete",
+      ],
+      push_provider: ["expo", "apns", "fcm"],
+      verification_status: [
+        "pending",
+        "verified",
+        "failed",
+        "expired",
+        "canceled",
+      ],
+    },
   },
 } as const
-
