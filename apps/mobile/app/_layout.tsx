@@ -4,11 +4,15 @@ import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { cssInterop } from 'nativewind';
+import { VideoView } from 'expo-video';
 
 import { initPostHog } from '@/lib/posthog';
 import { initSentry } from '@/lib/sentry';
 import { AuthProvider } from '@/providers/auth-provider';
 import { RootGate } from '@/providers/root-gate';
+
+cssInterop(VideoView, { className: 'style' });
 
 /**
  * 루트 레이아웃 (spec §3.3 · A-4)
