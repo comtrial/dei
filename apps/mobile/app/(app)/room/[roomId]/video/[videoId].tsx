@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEvent } from 'expo';
 import { Image } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Play } from 'lucide-react-native';
+import { Play, X } from 'lucide-react-native';
 
-import { Avatar, Chip, FullscreenVideo, IconButton, StateView } from '@dei/ui';
+import { Avatar, Chip, IconButton, StateView } from '@dei/ui';
 import { analytics, logger, POLICY } from '@dei/shared';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { supabase } from '@/lib/supabase';
+import { getCachedVideoUri } from '@/lib/video';
 import {
   getVideoById,
   getSiblingVideos,
@@ -23,6 +25,7 @@ type FetchState = 'loading' | 'error' | 'ready';
 
 export default function VideoFullscreenScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { videoId, roomId } = useLocalSearchParams<{
     videoId: string;
     roomId: string;
@@ -33,6 +36,7 @@ export default function VideoFullscreenScreen() {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [memberNickname, setMemberNickname] = useState<string>('');
   const [memberUserId, setMemberUserId] = useState<string>('');
+  const [capturedAtLabel, setCapturedAtLabel] = useState<string | null>(null);
   const [siblings, setSiblings] = useState<{ id: string; url: string; thumbnail: string | null }[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [firstFrameRendered, setFirstFrameRendered] = useState(false);
@@ -46,7 +50,7 @@ export default function VideoFullscreenScreen() {
     (p) => {
       p.loop = true;
       p.muted = true;
-      p.bufferOptions = { preferredForwardBufferDuration: 1 };
+      p.bufferOptions = { preferredForwardBufferDuration: 5 };
       p.play();
     },
   );
@@ -58,6 +62,14 @@ export default function VideoFullscreenScreen() {
   const { isPlaying } = useEvent(player, 'playingChange', {
     isPlaying: player.playing,
   });
+
+  useEffect(() => {
+    if (!videoUrl) return;
+    const t = setTimeout(() => {
+      try { player.play(); } catch {}
+    }, 0);
+    return () => clearTimeout(t);
+  }, [videoUrl, player]);
 
   const loadVideo = useCallback(async () => {
     if (!videoId || !roomId) return;
@@ -84,14 +96,8 @@ export default function VideoFullscreenScreen() {
         }
       }
 
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from('room-videos')
-        .createSignedUrl(video.storage_path, 60);
-      if (signedError || !signedData?.signedUrl) {
-        logger.captureException(signedError ?? new Error('signed URL empty'), {
-          tags: { screen: 'VideoFullscreen', videoId: videoId ?? '' },
-          extra: { roomId, storagePath: video.storage_path },
-        });
+      const cachedVideoUri = await getCachedVideoUri(video.storage_path, video.id);
+      if (!cachedVideoUri) {
         setFetchState('error');
         return;
       }
@@ -100,13 +106,24 @@ export default function VideoFullscreenScreen() {
       if (video.thumbnail_path) {
         const { data: thumbData } = await supabase.storage
           .from('room-videos')
-          .createSignedUrl(video.thumbnail_path, 60);
+          .createSignedUrl(video.thumbnail_path, 600);
         thumbSignedUrl = thumbData?.signedUrl ?? null;
       }
 
-      setVideoUrl(signedData.signedUrl);
+      setVideoUrl(cachedVideoUri);
       setThumbnailUrl(thumbSignedUrl);
       setMemberUserId(video.user_id ?? '');
+
+      if (video.created_at) {
+        const d = new Date(video.created_at);
+        setCapturedAtLabel(
+          Number.isNaN(d.getTime())
+            ? null
+            : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+        );
+      } else {
+        setCapturedAtLabel(null);
+      }
 
       const members = await getRoomMembersWithProfile(roomId);
       const member = members.find((m) => m.user_id === video.user_id);
@@ -196,8 +213,8 @@ export default function VideoFullscreenScreen() {
   }, [loadVideo]);
 
   useEffect(() => {
-    if (status === 'readyToPlay' && !firstFrameRendered) {
-      setFirstFrameRendered(true);
+    if (status === 'readyToPlay') {
+      try { player.play(); } catch {}
       analytics.capture(ANALYTICS_EVENTS.video_first_frame_rendered, {
         videoId,
         latency_ms: Math.round(performance.now() - loadStartMs),
@@ -213,17 +230,13 @@ export default function VideoFullscreenScreen() {
         error_code: error.message,
       });
     }
-  }, [status, error, firstFrameRendered, videoId, roomId, videoUrl, loadStartMs]);
+  }, [status, error, videoId, roomId, videoUrl, loadStartMs, player]);
 
   useEffect(() => {
-    if (!isPlaying && status === 'readyToPlay' && firstFrameRendered) {
-      analytics.capture(ANALYTICS_EVENTS.video_stalled, {
-        videoId,
-        position_ms: Math.round(player.currentTime * 1000),
-        reason: 'buffering',
-      });
+    if (!isPlaying && status === 'readyToPlay') {
+      try { player.play(); } catch {}
     }
-  }, [isPlaying, status, firstFrameRendered, videoId, player]);
+  }, [isPlaying, status, player]);
 
   const swipeToIndex = useCallback(
     async (nextIndex: number) => {
@@ -259,6 +272,8 @@ export default function VideoFullscreenScreen() {
   const swipeStartX = useRef(0);
 
   const panGesture = Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
     .onStart((e) => {
       swipeStartX.current = e.translationX;
     })
@@ -286,13 +301,7 @@ export default function VideoFullscreenScreen() {
 
   const combinedGesture = Gesture.Simultaneous(panGesture, longPressGesture);
 
-  function handleVideoPress() {
-    if (player.playing) {
-      player.pause();
-    } else {
-      player.play();
-    }
-  }
+  function handleVideoPress() {}
 
   const progress =
     player.duration > 0 ? player.currentTime / player.duration : 0;
@@ -331,48 +340,89 @@ export default function VideoFullscreenScreen() {
   }
 
   return (
-    <GestureDetector gesture={combinedGesture}>
-      <FullscreenVideo
-        mode="playback"
-        onClose={uiVisible ? () => router.back() : undefined}
-        onVideoPress={handleVideoPress}
-        progress={uiVisible ? progress : undefined}
-        metaSlot={uiVisible ? metaSlot : null}
-        swipeHint={uiVisible ? '‹ 다른 멤버 영상 ›' : undefined}
-      >
-        <VideoView
-          player={player}
-          contentFit="contain"
-          nativeControls={false}
-          className="absolute inset-0"
-          onFirstFrameRender={() => {
-            if (!firstFrameRendered) {
-              setFirstFrameRendered(true);
-            }
-          }}
-        />
-        {!firstFrameRendered && thumbnailUrl ? (
-          <View className="absolute inset-0">
+    <View className="flex-1 bg-black">
+      <GestureDetector gesture={combinedGesture}>
+        <Pressable
+          style={StyleSheet.absoluteFillObject}
+          onPress={handleVideoPress}
+        >
+          <VideoView
+            player={player}
+            contentFit="contain"
+            nativeControls={false}
+            style={StyleSheet.absoluteFillObject}
+            onFirstFrameRender={() => {
+              if (!firstFrameRendered) {
+                setFirstFrameRendered(true);
+              }
+            }}
+          />
+          {!firstFrameRendered && thumbnailUrl ? (
             <Image
               source={{ uri: thumbnailUrl }}
               contentFit="cover"
               cachePolicy="memory-disk"
-              className="absolute inset-0"
+              style={StyleSheet.absoluteFillObject}
             />
-          </View>
-        ) : null}
-        {!isPlaying && firstFrameRendered ? (
-          <View className="absolute inset-0 items-center justify-center">
-            <IconButton
-              glyph={Play}
-              variant="glass"
-              size={36}
-              accessibilityLabel="재생"
-              onPress={handleVideoPress}
-            />
-          </View>
-        ) : null}
-      </FullscreenVideo>
-    </GestureDetector>
+          ) : null}
+        </Pressable>
+      </GestureDetector>
+
+      {!isPlaying && firstFrameRendered ? (
+        <View pointerEvents="box-none" style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}>
+          <IconButton
+            glyph={Play}
+            variant="glass"
+            size={36}
+            accessibilityLabel="재생"
+            onPress={handleVideoPress}
+          />
+        </View>
+      ) : null}
+
+      {capturedAtLabel ? (
+        <View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}
+        >
+          <Text
+            style={{
+              color: 'white',
+              fontSize: 56,
+              fontWeight: '800',
+              letterSpacing: 2,
+              opacity: 0.75,
+            }}
+          >
+            {capturedAtLabel}
+          </Text>
+        </View>
+      ) : null}
+
+      {uiVisible ? (
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            top: insets.top + 12,
+            left: 18,
+            right: 18,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            zIndex: 30,
+          }}
+        >
+          <IconButton
+            glyph={X}
+            variant="glass"
+            size={36}
+            accessibilityLabel="닫기"
+            onPress={() => router.back()}
+          />
+          {metaSlot ?? <View />}
+        </View>
+      ) : null}
+    </View>
   );
 }
