@@ -1,8 +1,10 @@
-import { useCallback, useState } from 'react';
-import { View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Volume2, VolumeX } from 'lucide-react-native';
 
 import {
   AlertDialog,
@@ -11,6 +13,7 @@ import {
   FullscreenVideo,
   ProgressBar,
   Spinner,
+  Text,
 } from '@dei/ui';
 import { analytics, logger } from '@dei/shared';
 
@@ -19,18 +22,30 @@ import { uploadClip } from '@/lib/video';
 
 export default function UploadPreviewScreen() {
   const router = useRouter();
-  const { roomId, localUri, durationMs: durationMsParam } = useLocalSearchParams<{
+  const insets = useSafeAreaInsets();
+  const { roomId, localUri, durationMs: durationMsParam, capturedAtIso } = useLocalSearchParams<{
     roomId: string;
     localUri: string;
     durationMs: string;
+    capturedAtIso?: string;
   }>();
 
   const durationMs = Number(durationMsParam);
   const safeDurationMs = Number.isNaN(durationMs) ? 0 : durationMs;
 
+  const capturedAtLabel = capturedAtIso
+    ? (() => {
+        const d = new Date(capturedAtIso);
+        return Number.isNaN(d.getTime())
+          ? null
+          : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      })()
+    : null;
+
   const [discardConfirmVisible, setDiscardConfirmVisible] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [muted, setMuted] = useState(false);
 
   const player = useVideoPlayer(
     localUri ? { uri: localUri } : null,
@@ -41,9 +56,9 @@ export default function UploadPreviewScreen() {
     },
   );
 
-  const durationLabel = safeDurationMs > 0
-    ? `● ${(safeDurationMs / 1000).toFixed(1)}초`
-    : undefined;
+  useEffect(() => {
+    player.muted = muted;
+  }, [muted, player]);
 
   const handleClose = useCallback(() => {
     if (uploading) return;
@@ -92,7 +107,7 @@ export default function UploadPreviewScreen() {
 
     try {
       await uploadClip(
-        { roomId, localUri, durationMs: safeDurationMs },
+        { roomId, localUri, durationMs: safeDurationMs, capturedAtIso, muted },
         { onProgress: setUploadProgress },
       );
       router.replace({
@@ -115,46 +130,13 @@ export default function UploadPreviewScreen() {
     } finally {
       setUploading(false);
     }
-  }, [uploading, roomId, localUri, safeDurationMs, router]);
+  }, [uploading, roomId, localUri, safeDurationMs, capturedAtIso, muted, router]);
 
   return (
     <View className="flex-1 bg-black">
       <FullscreenVideo
         mode="preview"
-        duration={durationLabel}
         onClose={uploading ? undefined : handleClose}
-        bottomSlot={
-          <View className="gap-[8px]">
-            {uploading ? (
-              <ProgressBar
-                value={uploadProgress}
-                height={4}
-                className="bg-white/20"
-                fillClassName="bg-white"
-              />
-            ) : null}
-            <BottomActionBar layout="row">
-              <Button
-                testID="retake-button"
-                variant="secondary"
-                fullWidth
-                disabled={uploading}
-                onPress={() => { void handleRetake(); }}
-              >
-                다시 찍기
-              </Button>
-              <Button
-                testID="upload-button"
-                variant="ink"
-                fullWidth
-                disabled={uploading}
-                onPress={() => { void handleUpload(); }}
-              >
-                올리기
-              </Button>
-            </BottomActionBar>
-          </View>
-        }
       >
         {localUri ? (
           <VideoView
@@ -162,10 +144,84 @@ export default function UploadPreviewScreen() {
             player={player}
             contentFit="contain"
             nativeControls={false}
-            className="absolute inset-0"
+            style={StyleSheet.absoluteFillObject}
           />
         ) : null}
       </FullscreenVideo>
+
+      <Pressable
+        testID="mute-toggle"
+        accessibilityRole="button"
+        accessibilityLabel={muted ? '음소거 해제' : '음소거'}
+        onPress={() => setMuted((m) => !m)}
+        disabled={uploading}
+        hitSlop={16}
+        style={{
+          position: 'absolute',
+          top: insets.top + 12,
+          right: 20,
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: 'rgba(0,0,0,0.55)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 30,
+          opacity: uploading ? 0.3 : 1,
+        }}
+      >
+        {muted ? <VolumeX color="white" size={22} /> : <Volume2 color="white" size={22} />}
+      </Pressable>
+
+      {capturedAtLabel ? (
+        <View
+          pointerEvents="none"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text
+            style={{
+              color: 'white',
+              fontSize: 56,
+              fontWeight: '800',
+              letterSpacing: 2,
+              opacity: 0.75,
+            }}
+          >
+            {capturedAtLabel}
+          </Text>
+        </View>
+      ) : null}
+
+      <View className="absolute bottom-0 left-0 right-0">
+        {uploading ? (
+          <ProgressBar
+            value={uploadProgress}
+            height={4}
+            className="bg-white/20"
+            fillClassName="bg-white"
+          />
+        ) : null}
+        <BottomActionBar layout="row">
+          <Button
+            testID="retake-button"
+            variant="secondary"
+            fullWidth
+            disabled={uploading}
+            onPress={() => { void handleRetake(); }}
+          >
+            다시 찍기
+          </Button>
+          <Button
+            testID="upload-button"
+            variant="accent"
+            fullWidth
+            disabled={uploading}
+            onPress={() => { void handleUpload(); }}
+          >
+            올리기
+          </Button>
+        </BottomActionBar>
+      </View>
 
       {uploading ? <Spinner variant="overlay" size={36} /> : null}
 
