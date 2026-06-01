@@ -66,9 +66,18 @@ export type Database = {
           ci_hash: string | null
           created_at: string
           di_hash: string | null
+          failed_at: string | null
+          failure_code: string | null
+          failure_count: number
+          failure_message: string | null
           id: string
+          identity_verification_tx_id: string | null
+          lock_until: string | null
           provider: string
+          provider_metadata: Json
+          provider_verification_id: string | null
           status: string
+          updated_at: string
           user_id: string
           verified_at: string | null
         }
@@ -76,9 +85,18 @@ export type Database = {
           ci_hash?: string | null
           created_at?: string
           di_hash?: string | null
+          failed_at?: string | null
+          failure_code?: string | null
+          failure_count?: number
+          failure_message?: string | null
           id?: string
+          identity_verification_tx_id?: string | null
+          lock_until?: string | null
           provider?: string
+          provider_metadata?: Json
+          provider_verification_id?: string | null
           status?: string
+          updated_at?: string
           user_id: string
           verified_at?: string | null
         }
@@ -86,9 +104,18 @@ export type Database = {
           ci_hash?: string | null
           created_at?: string
           di_hash?: string | null
+          failed_at?: string | null
+          failure_code?: string | null
+          failure_count?: number
+          failure_message?: string | null
           id?: string
+          identity_verification_tx_id?: string | null
+          lock_until?: string | null
           provider?: string
+          provider_metadata?: Json
+          provider_verification_id?: string | null
           status?: string
+          updated_at?: string
           user_id?: string
           verified_at?: string | null
         }
@@ -251,6 +278,7 @@ export type Database = {
       message: {
         Row: {
           body: string
+          client_msg_id: string | null
           created_at: string
           id: string
           room_id: string
@@ -260,6 +288,7 @@ export type Database = {
         }
         Insert: {
           body: string
+          client_msg_id?: string | null
           created_at?: string
           id?: string
           room_id: string
@@ -269,6 +298,7 @@ export type Database = {
         }
         Update: {
           body?: string
+          client_msg_id?: string | null
           created_at?: string
           id?: string
           room_id?: string
@@ -408,8 +438,11 @@ export type Database = {
           is_adult: boolean
           is_in_active_room: boolean
           last_room_leave_at: string | null
+          mbti: string | null
           nickname: string | null
+          nickname_changed_at: string | null
           nickname_lower: string | null
+          onboarding_completed_at: string | null
           photo_url: string | null
           quiet_hours_end: number
           quiet_hours_start: number
@@ -425,8 +458,11 @@ export type Database = {
           is_adult?: boolean
           is_in_active_room?: boolean
           last_room_leave_at?: string | null
+          mbti?: string | null
           nickname?: string | null
+          nickname_changed_at?: string | null
           nickname_lower?: string | null
+          onboarding_completed_at?: string | null
           photo_url?: string | null
           quiet_hours_end?: number
           quiet_hours_start?: number
@@ -442,12 +478,36 @@ export type Database = {
           is_adult?: boolean
           is_in_active_room?: boolean
           last_room_leave_at?: string | null
+          mbti?: string | null
           nickname?: string | null
+          nickname_changed_at?: string | null
           nickname_lower?: string | null
+          onboarding_completed_at?: string | null
           photo_url?: string | null
           quiet_hours_end?: number
           quiet_hours_start?: number
           region?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      push_token: {
+        Row: {
+          platform: string
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          platform: string
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          platform?: string
+          token?: string
           updated_at?: string
           user_id?: string
         }
@@ -632,6 +692,36 @@ export type Database = {
           },
         ]
       }
+      support_ticket: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          message: string
+          reply_email: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          message: string
+          reply_email?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          message?: string
+          reply_email?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       team: {
         Row: {
           created_at: string
@@ -735,12 +825,52 @@ export type Database = {
           },
         ]
       }
+      terms_agreement: {
+        Row: {
+          agreed_at: string
+          created_at: string
+          id: string
+          location_collection: boolean
+          marketing_opt_in: boolean
+          privacy_policy: boolean
+          service_terms: boolean
+          terms_version: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agreed_at?: string
+          created_at?: string
+          id?: string
+          location_collection?: boolean
+          marketing_opt_in?: boolean
+          privacy_policy?: boolean
+          service_terms?: boolean
+          terms_version: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agreed_at?: string
+          created_at?: string
+          id?: string
+          location_collection?: boolean
+          marketing_opt_in?: boolean
+          privacy_policy?: boolean
+          service_terms?: boolean
+          terms_version?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       video: {
         Row: {
           created_at: string
           duration_ms: number | null
           hour_slot: number | null
           id: string
+          muted: boolean
           room_id: string
           status: string
           storage_path: string | null
@@ -752,6 +882,7 @@ export type Database = {
           duration_ms?: number | null
           hour_slot?: number | null
           id?: string
+          muted?: boolean
           room_id: string
           status?: string
           storage_path?: string | null
@@ -763,6 +894,7 @@ export type Database = {
           duration_ms?: number | null
           hour_slot?: number | null
           id?: string
+          muted?: boolean
           room_id?: string
           status?: string
           storage_path?: string | null
@@ -791,6 +923,7 @@ export type Database = {
           duration_ms: number | null
           hour_slot: number | null
           id: string
+          muted: boolean
           room_id: string
           status: string
           storage_path: string | null
