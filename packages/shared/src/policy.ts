@@ -107,8 +107,8 @@ export const POLICY = {
     maxDurationMs: 3000,
     /** 업로드 파일 크기 상한 bytes — 3MB 초과 시 클라 거부. (C-1 §3-3) */
     maxFileSizeBytes: 3 * 1024 * 1024,
-    /** 썸네일 jpg 크기 상한 bytes — 셀 표시용 50KB 충분. (C-1 §3-4) */
-    thumbnailMaxSizeBytes: 50 * 1024,
+    /** 썸네일 jpg 크기 상한 bytes — 셀 표시용 100KB. (C-1 §3-4) */
+    thumbnailMaxSizeBytes: 100 * 1024,
     /** prefetch 대상 sibling 수 — 직전·직후 각 1개. (C-1 §4-4) */
     prefetchSiblingCount: 1,
   },

@@ -83,6 +83,12 @@ export interface GridRoomEmptyCell {
   tone?: EmptyBlobTone;
   /** 라벨 보조 문구. 기본 '안 올림'. */
   label?: string;
+  /** 자기 자신 셀 — onCellPress 분기용. */
+  isSelf?: boolean;
+  /** 멤버 user_id — 자기 셀 fallback 매칭용. */
+  userId?: string;
+  /** 현재 시간대에서 자기 자신 셀로 촬영 가능한 경우만 true (보라색 face 표시). */
+  canRecord?: boolean;
 }
 
 export type GridRoomCell = GridRoomFilledCell | GridRoomEmptyCell;
@@ -257,19 +263,25 @@ const EmptyCell = memo(function EmptyCell({
   index: number;
   onCellPress?: GridRoomProps['onCellPress'];
 }) {
+  const initial = cell.name.charAt(0);
   return (
     <Pressable
       testID={`gridroom-cell-${index}`}
       accessibilityRole="button"
       accessibilityLabel={`${cell.name} — ${cell.label ?? '안 올림'}`}
       onPress={onCellPress ? () => onCellPress(cell, index) : undefined}
-      className="relative aspect-[3/4] overflow-hidden rounded-md items-center justify-center bg-[#1A1A1A]"
+      className="relative aspect-[3/4] overflow-hidden rounded-md bg-[#1A1A1A]"
     >
-      <EmptyBlob tone={cell.tone ?? 'pink'} />
-      <View className="absolute inset-x-0 bottom-[8px] items-center">
-        <Text className="text-2xs font-bold text-paper/60 tracking-wide">
-          {cell.name} · {cell.label ?? '안 올림'}
-        </Text>
+      <View className="absolute left-[8px] top-[8px] flex-row items-center gap-[5px]">
+        <PresenceAvatar initial={initial} present={false} />
+        <Text className="text-2xs font-bold text-paper">{cell.name}</Text>
+      </View>
+      <View className="absolute inset-0 items-center justify-center">
+        {cell.canRecord ? (
+          <EmptyBlob tone="purple" size={120} />
+        ) : (
+          <Text className="text-3xl font-black text-paper/40 tracking-tight">Zzz..</Text>
+        )}
       </View>
     </Pressable>
   );
