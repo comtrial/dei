@@ -1,4 +1,4 @@
-import type { CameraViewRef } from 'expo-camera';
+import CameraView from 'expo-camera/build/CameraView';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getThumbnailAsync } from 'expo-video-thumbnails';
 import { type RefObject } from 'react';
@@ -7,6 +7,13 @@ import type { Database } from '@dei/api';
 import { POLICY, getCurrentHourSlotKst, logger } from '@dei/shared';
 
 import { supabase } from '@/lib/supabase';
+
+function generateId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
 
 type VideoRow = Database['public']['Tables']['video']['Insert'];
 
@@ -27,13 +34,13 @@ export type RecordClipResult = {
 };
 
 export async function recordClip(
-  cameraRef: RefObject<CameraViewRef | null>,
+  cameraRef: RefObject<CameraView | null>,
 ): Promise<RecordClipResult> {
   if (!cameraRef.current) {
     throw new Error('CAMERA_NOT_READY');
   }
 
-  const result = await cameraRef.current.record({
+  const result = await cameraRef.current.recordAsync({
     maxDuration: POLICY.video.maxDurationMs / 1000,
   });
 
@@ -50,27 +57,23 @@ export async function recordClip(
     throw new Error('VIDEO_TOO_LARGE');
   }
 
-  const durationMs = Math.min(
-    POLICY.video.maxDurationMs,
-    POLICY.video.maxDurationMs,
-  );
+  const durationMs = POLICY.video.maxDurationMs;
 
   return { localUri: result.uri, durationMs };
 }
 
 async function generateThumbnail(localUri: string): Promise<string> {
-  let thumb = await getThumbnailAsync(localUri, { time: 0, quality: 0.7 });
-
-  const info = await FileSystem.getInfoAsync(thumb.uri);
-  if (info.exists && info.size > POLICY.video.thumbnailMaxSizeBytes) {
-    thumb = await getThumbnailAsync(localUri, { time: 0, quality: 0.4 });
-    const retryInfo = await FileSystem.getInfoAsync(thumb.uri);
-    if (retryInfo.exists && retryInfo.size > POLICY.video.thumbnailMaxSizeBytes) {
-      throw new Error('THUMBNAIL_TOO_LARGE');
+  let lastThumbUri: string | null = null;
+  for (const quality of [0.7, 0.4, 0.2, 0.1]) {
+    const thumb = await getThumbnailAsync(localUri, { time: 0, quality });
+    lastThumbUri = thumb.uri;
+    const info = await FileSystem.getInfoAsync(thumb.uri);
+    if (info.exists && info.size <= POLICY.video.thumbnailMaxSizeBytes) {
+      return thumb.uri;
     }
   }
-
-  return thumb.uri;
+  if (lastThumbUri) return lastThumbUri;
+  throw new Error('THUMBNAIL_TOO_LARGE');
 }
 
 async function readFileAsArrayBuffer(uri: string): Promise<ArrayBuffer> {
@@ -86,10 +89,10 @@ async function readFileAsArrayBuffer(uri: string): Promise<ArrayBuffer> {
 }
 
 export async function uploadClip(
-  args: { roomId: string; localUri: string; durationMs?: number },
+  args: { roomId: string; localUri: string; durationMs?: number; capturedAtIso?: string; muted?: boolean },
   options: UploadClipOptions = {},
 ): Promise<UploadClipResult> {
-  const { roomId, localUri, durationMs = POLICY.video.maxDurationMs } = args;
+  const { roomId, localUri, durationMs = POLICY.video.maxDurationMs, capturedAtIso, muted = false } = args;
   const { onProgress } = options;
 
   const {
@@ -101,7 +104,7 @@ export async function uploadClip(
   }
   const userId = user.id;
 
-  const videoId = crypto.randomUUID();
+  const videoId = generateId();
   const videoPath = `${roomId}/${userId}/${videoId}.mp4`;
   const thumbPath = `${roomId}/${userId}/${videoId}.jpg`;
 
@@ -113,7 +116,7 @@ export async function uploadClip(
       tags: { feature: 'video-upload', step: 'thumbnail' },
       extra: { roomId },
     });
-    await persistToLocalQueue({ roomId, localUri, durationMs, videoId });
+    await persistToLocalQueue({ roomId, localUri, durationMs, videoId, capturedAtIso, muted });
     throw err;
   }
 
@@ -131,7 +134,7 @@ export async function uploadClip(
       tags: { feature: 'video-upload', step: 'read-file' },
       extra: { roomId },
     });
-    await persistToLocalQueue({ roomId, localUri, durationMs, videoId });
+    await persistToLocalQueue({ roomId, localUri, durationMs, videoId, capturedAtIso, muted });
     throw err;
   }
 
@@ -158,7 +161,7 @@ export async function uploadClip(
       tags: { feature: 'video-upload', step: 'video' },
       extra: { roomId },
     });
-    await persistToLocalQueue({ roomId, localUri, durationMs, videoId });
+    await persistToLocalQueue({ roomId, localUri, durationMs, videoId, capturedAtIso, muted });
     throw err;
   }
 
@@ -173,6 +176,8 @@ export async function uploadClip(
     duration_ms: durationMs,
     hour_slot: getCurrentHourSlotKst(),
     status: 'ready',
+    muted,
+    ...(capturedAtIso ? { created_at: capturedAtIso } : {}),
   };
 
   try {
@@ -183,7 +188,7 @@ export async function uploadClip(
       tags: { feature: 'video-upload', step: 'insert' },
       extra: { roomId, videoId },
     });
-    await persistToLocalQueue({ roomId, localUri, durationMs, videoId });
+    await persistToLocalQueue({ roomId, localUri, durationMs, videoId, capturedAtIso, muted });
     throw err;
   }
 
@@ -202,6 +207,74 @@ export async function uploadClip(
   }
 
   return { videoId, thumbnailUrl: signedData.signedUrl };
+}
+
+const VIDEO_CACHE_DIR = `${FileSystem.cacheDirectory}room-videos/`;
+
+async function ensureCacheDir(): Promise<void> {
+  const info = await FileSystem.getInfoAsync(VIDEO_CACHE_DIR);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(VIDEO_CACHE_DIR, { intermediates: true });
+  }
+}
+
+async function downloadToCache(
+  storagePath: string,
+  cachePath: string,
+  tagFeature: string,
+  extra: Record<string, unknown>,
+): Promise<string | null> {
+  try {
+    const info = await FileSystem.getInfoAsync(cachePath);
+    if (info.exists && info.size > 0) return cachePath;
+
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(storagePath, 600);
+    if (error || !data?.signedUrl) {
+      logger.captureException(error ?? new Error('signed URL empty'), {
+        tags: { feature: tagFeature, step: 'signed-url' },
+        extra,
+      });
+      return null;
+    }
+
+    const download = await FileSystem.downloadAsync(data.signedUrl, cachePath);
+    if (download.status !== 200) {
+      try {
+        await FileSystem.deleteAsync(cachePath, { idempotent: true });
+      } catch {}
+      logger.captureException(new Error(`Download failed: HTTP ${download.status}`), {
+        tags: { feature: tagFeature, step: 'download' },
+        extra: { ...extra, status: download.status },
+      });
+      return null;
+    }
+
+    return download.uri;
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: tagFeature, step: 'unexpected' },
+      extra,
+    });
+    return null;
+  }
+}
+
+export async function getCachedVideoUri(
+  storagePath: string,
+  videoId: string,
+): Promise<string | null> {
+  await ensureCacheDir();
+  return downloadToCache(storagePath, `${VIDEO_CACHE_DIR}${videoId}.mp4`, 'video-cache', { videoId });
+}
+
+export async function getCachedThumbnailUri(
+  storagePath: string,
+  videoId: string,
+): Promise<string | null> {
+  await ensureCacheDir();
+  return downloadToCache(storagePath, `${VIDEO_CACHE_DIR}${videoId}.jpg`, 'thumbnail-cache', { videoId });
 }
 
 export async function isClipVisible(args: {
@@ -241,6 +314,8 @@ type QueueEntry = {
   localUri: string;
   durationMs: number;
   enqueuedAt: string;
+  capturedAtIso?: string;
+  muted?: boolean;
 };
 
 const QUEUE_FILE_NAME = 'video_upload_queue.json';
@@ -298,6 +373,8 @@ export async function retryQueuedUploads(): Promise<void> {
         roomId: entry.roomId,
         localUri: entry.localUri,
         durationMs: entry.durationMs,
+        capturedAtIso: entry.capturedAtIso,
+        muted: entry.muted,
       });
     } catch {
       remaining.push(entry);
