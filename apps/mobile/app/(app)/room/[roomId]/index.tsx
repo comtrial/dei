@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient, type LinearGradientProps } from 'expo-linear-gradient';
-import { MessageCircle, MoreHorizontal, Play } from 'lucide-react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { MessageCircle, MoreHorizontal } from 'lucide-react-native';
 
 import { Banner, GridRoom, IconButton, Badge, TopNav } from '@dei/ui';
 import type { GridRoomCell, GridRoomFilledCell, GridRoomTimeSlot, GradientComponentProps } from '@dei/ui';
 import type { Database } from '@dei/api';
-import { POLICY, analytics, formatTimeStripSlots, isQuietHourKst } from '@dei/shared';
+import { POLICY, analytics, formatTimeStripSlots, getCurrentHourSlotKst, isQuietHourKst, logger } from '@dei/shared';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { getCachedVideoUri, getCachedThumbnailUri } from '@/lib/video';
 import { useAuth } from '@/providers/auth-provider';
 import { useRoomVideos } from '@/hooks/useRoomVideos';
 import { useRoomMembers } from '@/hooks/useRoomMembers';
@@ -25,6 +27,74 @@ import {
   getBlockedUserIds,
   type RoomMemberWithProfile,
 } from '@/lib/room-rpc';
+
+function CellVideoMedia({
+  videoId,
+  storagePath,
+  thumbnailPath,
+}: {
+  videoId: string;
+  storagePath: string;
+  thumbnailPath: string | null;
+}) {
+  const [videoUri, setVideoUri] = useState<string | null>(null);
+  const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
+  const [firstFrameRendered, setFirstFrameRendered] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (thumbnailPath) {
+        const t = await getCachedThumbnailUri(thumbnailPath, videoId);
+        if (!cancelled && t) setThumbnailUri(t);
+      }
+      const v = await getCachedVideoUri(storagePath, videoId);
+      if (!cancelled && v) setVideoUri(v);
+    })();
+    return () => { cancelled = true; };
+  }, [storagePath, thumbnailPath, videoId]);
+
+  const player = useVideoPlayer(
+    videoUri ? { uri: videoUri } : null,
+    (p) => {
+      p.loop = true;
+      p.muted = true;
+      p.play();
+    },
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      try { player.play(); } catch {}
+      return () => {
+        try { player.pause(); } catch {}
+      };
+    }, [player]),
+  );
+
+  return (
+    <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#1A1A1A' }]}>
+      {thumbnailUri ? (
+        <Image
+          source={{ uri: thumbnailUri }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={100}
+          style={StyleSheet.absoluteFillObject}
+        />
+      ) : null}
+      {videoUri ? (
+        <VideoView
+          player={player}
+          contentFit="cover"
+          nativeControls={false}
+          style={[StyleSheet.absoluteFillObject, { opacity: firstFrameRendered ? 1 : 0 }]}
+          onFirstFrameRender={() => setFirstFrameRendered(true)}
+        />
+      ) : null}
+    </View>
+  );
+}
 
 type VideoRow = Database['public']['Tables']['video']['Row'];
 
@@ -46,12 +116,16 @@ function buildCells(
   onlineUserIds: Set<string>,
   selfGender: string | null,
   blockedUserIds: Set<string>,
+  selfUserId: string | null,
+  nowHour: number,
 ): GridRoomCell[] {
   const hourVideos = videosByHour[currentHour] ?? [];
   const videoByUser = new Map<string, VideoRow>();
   for (const v of hourVideos) {
     if (!videoByUser.has(v.user_id)) videoByUser.set(v.user_id, v);
   }
+
+  const isCurrentSlot = currentHour === nowHour;
 
   const sameGender = selfGender
     ? members.filter((m) => m.profile?.gender === selfGender)
@@ -70,15 +144,23 @@ function buildCells(
   const source = selfGender ? ordered : members;
 
   return source.map((member): GridRoomCell => {
+    const isSelf = selfUserId !== null && member.user_id === selfUserId;
+    const canRecord = isSelf && isCurrentSlot;
     if (blockedUserIds.has(member.user_id)) {
-      return { kind: 'empty', name: member.profile?.nickname ?? member.user_id.slice(0, 6) };
+      return {
+        kind: 'empty',
+        name: member.profile?.nickname ?? member.user_id.slice(0, 6),
+        isSelf,
+        userId: member.user_id,
+        canRecord,
+      };
     }
 
     const video = videoByUser.get(member.user_id);
     const displayName = member.profile?.nickname ?? member.user_id.slice(0, 6);
 
     if (!video || video.status === 'failed' || video.status === 'archived') {
-      return { kind: 'empty', name: displayName };
+      return { kind: 'empty', name: displayName, isSelf, userId: member.user_id, canRecord };
     }
 
     const uploadHour = video.created_at
@@ -95,19 +177,12 @@ function buildCells(
       uploadTime: uploadHour,
       videoId: video.id,
       present: onlineUserIds.has(member.user_id),
-      media: video.thumbnail_path ? (
-        <View className="absolute inset-0">
-          <Image
-            source={{ uri: video.thumbnail_path }}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            transition={250}
-            className="absolute inset-0"
-          />
-          <View className="absolute top-[8px] right-[8px]">
-            <Play color="white" size={14} />
-          </View>
-        </View>
+      media: video.storage_path ? (
+        <CellVideoMedia
+          videoId={video.id}
+          storagePath={video.storage_path}
+          thumbnailPath={video.thumbnail_path ?? null}
+        />
       ) : undefined,
     };
   });
@@ -220,13 +295,16 @@ export default function RoomScreen() {
   }, []);
 
   const cells = useMemo(
-    () => buildCells(membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds),
-    [membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds],
+    () => {
+      const nowHour = getCurrentHourSlotKst();
+      return buildCells(membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id ?? null, nowHour);
+    },
+    [membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id],
   );
 
   const timeStrip = useMemo<GridRoomTimeSlot[]>(() => {
     return formatTimeStripSlots(currentHour, hourRange).map((s) => ({
-      label: s.isQuiet ? `${s.label} zzz` : s.label,
+      label: s.label,
       isNow: s.isNow,
     }));
   }, [currentHour, hourRange]);
@@ -332,7 +410,12 @@ export default function RoomScreen() {
             timeHint="시간대를 밀어서 회상"
             GradientComponent={GradientWrapper}
             onCellPress={(cell) => {
-              if (cell.kind === 'empty') return;
+              if (cell.kind === 'empty') {
+                if (cell.canRecord) {
+                  router.push(`/(app)/room/${roomId}/upload`);
+                }
+                return;
+              }
               const videoId = (cell as GridRoomFilledCell).videoId;
               if (!videoId) return;
               router.push(`/room/${roomId}/video/${videoId}`);
