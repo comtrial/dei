@@ -1,6 +1,7 @@
 // supabase/functions/send-message/index.ts
 import { getAuthenticatedUser } from '../_shared/auth.ts';
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
+import { captureEdgeError } from '../_shared/log.ts';
 
 function codePointLength(s: string): number {
   return [...s].length;
@@ -37,7 +38,13 @@ Deno.serve(async (req) => {
   let auth;
   try {
     auth = await getAuthenticatedUser(req);
-  } catch {
+  } catch (e) {
+    // 토큰 형식 비호환(ES256/JWKS 회귀 등) 은 여기서만 드러난다(CLAUDE.md item 9).
+    captureEdgeError('send-message', e, {
+      stage: 'auth',
+      status: 401,
+      tags: { feature: 'chat' },
+    });
     return errorResponse('unauthenticated', 401);
   }
   const { supabaseAsUser } = auth;
@@ -78,6 +85,20 @@ Deno.serve(async (req) => {
       return errorResponse('invalid_whisper_target', 422, { reason });
     }
     if (msg.includes('authentication required')) return errorResponse('unauthenticated', 401);
+    // send_failed uuid 버그가 서버에 안 남던 그 지점 — RPC 예기치 못한 실패.
+    captureEdgeError('send-message', error, {
+      stage: 'send_room_message_rpc',
+      status: 500,
+      userId: auth.user.id,
+      tags: { feature: 'chat', code: 'send_failed' },
+      extra: {
+        roomId,
+        clientMsgId,
+        isWhisper: whisperTo != null,
+        rpcCode: error.code ?? null,
+        rpcMessage: msg,
+      },
+    });
     return errorResponse('send_failed', 500, { detail: msg });
   }
 
@@ -93,7 +114,16 @@ Deno.serve(async (req) => {
 
   // 멘션 푸시 (귓속말만, best-effort — 실패가 send 실패를 만들지 않음)
   if (message.whisper_to_user_id && !data_is_dedup_echo(deduped)) {
-    void dispatchWhisperPush(auth.supabase, message).catch(() => {});
+    void dispatchWhisperPush(auth.supabase, message).catch((err) =>
+      captureEdgeError('send-message', err, {
+        stage: 'whisper_push',
+        status: 200,
+        userId: auth.user.id,
+        level: 'warning',
+        tags: { feature: 'chat-push', code: 'whisper_push_failed' },
+        extra: { roomId: message.room_id, targetUserId: message.whisper_to_user_id },
+      })
+    );
   }
 
   return jsonResponse({ ok: true, deduped, message }, { status: 200 });
