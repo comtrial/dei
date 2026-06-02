@@ -227,7 +227,7 @@ export default function RoomChatScreen() {
       onRetry={retry}
       onSelectMention={onSelectMention}
       onClearWhisper={() => setWhisperTarget(null)}
-      onAvatarPress={(userId) => router.push(`/room/${roomId}/members?focus=${userId}`)}
+      onAvatarPress={(userId) => router.push(`/room/${roomId}/members?userId=${userId}`)}
       onClose={() => router.back()}
       newCount={newCount}
       onJump={onJump}
