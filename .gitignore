@@ -37,3 +37,8 @@ apps/mobile/e2e/screenshots/
 
 # dev env backup (local supabase 전환 시 백업)
 apps/mobile/.env.remote.bak
+
+# 로컬 툴 · 디자인 아티팩트
+.gstack/
+.lazyweb/
+.claude/

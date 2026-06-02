@@ -44,6 +44,15 @@ export const House = StubIcon;
 export const Heart = StubIcon;
 export const MessageCircle = StubIcon;
 export const Video = StubIcon;
+// S13a 전체화면 채팅: InputBar 전송(↑) / NewMessageJumpButton(↓).
+export const ArrowUp = StubIcon;
+export const ArrowDown = StubIcon;
+// @dei/ui 트리에서 전이적으로 끌려오는 아이콘들(StateView/Input/PhotoUpload 등).
+export const RefreshCw = StubIcon;
+export const Pencil = StubIcon;
+export const Search = StubIcon;
+export const Plus = StubIcon;
+export const Camera = StubIcon;
 
 export default StubIcon;
 export const __isLucideStub = true;

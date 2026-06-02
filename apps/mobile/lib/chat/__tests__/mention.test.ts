@@ -36,6 +36,37 @@ describe('mention parsing', () => {
     const out = filterCandidates(MEMBERS, '수', { selfId: 'me', blockedIds: new Set(['u1']) });
     expect(out.map((m) => m.userId)).toEqual(['u2']);
   });
+
+  // 엣지(agent team 발굴).
+  it('empty query (@만 입력) → 후보는 active·non-self·non-blocked 전원', () => {
+    const out = filterCandidates(MEMBERS, '', { selfId: 'me', blockedIds: new Set() });
+    expect(out.map((m) => m.userId)).toEqual(['u1', 'u2']); // 나(self)·민준(left) 제외
+  });
+
+  it('case-insensitive prefix 매칭', () => {
+    const m: RoomMemberLite[] = [{ userId: 'x', name: 'Alex', status: 'active' }];
+    expect(filterCandidates(m, 'al', { selfId: 'me', blockedIds: new Set() }).map((c) => c.userId)).toEqual(['x']);
+    expect(filterCandidates(m, 'AL', { selfId: 'me', blockedIds: new Set() }).map((c) => c.userId)).toEqual(['x']);
+  });
+
+  it('멤버 0명 / 전원 left·blocked → 후보 []', () => {
+    expect(filterCandidates([], '수', { selfId: 'me', blockedIds: new Set() })).toEqual([]);
+    const allOut: RoomMemberLite[] = [
+      { userId: 'u1', name: '수아', status: 'left' },
+      { userId: 'u2', name: '수민', status: 'active' },
+    ];
+    expect(filterCandidates(allOut, '수', { selfId: 'me', blockedIds: new Set(['u2']) })).toEqual([]);
+  });
+
+  it('parseMentionQuery: @토큰은 개행을 넘지 않는다(\\S* 경계)', () => {
+    // 마지막 줄이 @로 시작 안 하면 비active.
+    expect(parseMentionQuery('@수\n아')).toEqual({ active: false, query: '' });
+  });
+
+  it('parseMentionQuery: 단어 경계 없는 @(이메일/URL 류)은 트리거 안 함', () => {
+    // 'foo@bar' 의 @ 는 앞에 공백/줄머리가 없어 멘션으로 잡히지 않는다.
+    expect(parseMentionQuery('foo@bar')).toEqual({ active: false, query: '' });
+  });
 });
 
 describe('resolveTailMention (G-A 풀네임 자동 귓속말 해석)', () => {

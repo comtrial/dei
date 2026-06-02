@@ -5,7 +5,7 @@ import { logger } from '@dei/shared';
 import { supabase } from '@/lib/supabase';
 import { subscribeRoomMessages } from '@/lib/realtime';
 import { sendRoomMessage } from '@/lib/chat/send-message';
-import { mergeIncoming, type ChatMessage } from '@/lib/chat/message-merge';
+import { mergeIncoming, isWhisperVisibleTo, type ChatMessage } from '@/lib/chat/message-merge';
 import { uuidv4 } from '@/lib/chat/uuid';
 
 interface Args {
@@ -58,10 +58,8 @@ export function useRoomChat({ roomId, selfId }: Args) {
   useEffect(() => {
     const unsub = subscribeRoomMessages(roomId, (row) => {
       const msg = rowToMessage(row);
-      // 방어: 귓속말은 발신자=self 또는 대상=self 일 때만(RLS가 1차 가드, 이건 belt)
-      if (msg.whisperToUserId != null && msg.whisperToUserId !== selfId && msg.userId !== selfId) {
-        return;
-      }
+      // 방어: 귓속말은 발신자=self 또는 대상=self 일 때만(RLS가 1차 가드, 이건 belt).
+      if (!isWhisperVisibleTo(msg, selfId)) return;
       setMessages((prev) => mergeIncoming(prev, msg));
     });
     return unsub;

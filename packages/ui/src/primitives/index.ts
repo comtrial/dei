@@ -41,6 +41,8 @@ export { PhotoUpload } from './PhotoUpload';
 export type { PhotoUploadProps, PhotoUploadState } from './PhotoUpload';
 export { Avatar } from './Avatar';
 export type { AvatarProps } from './Avatar';
+export { AvatarStack } from './AvatarStack';
+export type { AvatarStackProps, AvatarStackItem } from './AvatarStack';
 export { SlideToConfirm } from './SlideToConfirm';
 export type { SlideToConfirmProps, SlideToConfirmTone } from './SlideToConfirm';
 export { Popover } from './Popover';

@@ -83,26 +83,99 @@ describe('RoomChatView', () => {
     expect(screen.getByText(' 이거 봤어?')).toBeTruthy();
   });
 
-  // body-render-9: 내가 보낸 귓속말 → 발신측 화면에서 '→ <대상>에게' + 우측정렬(me 처럼).
-  it('my whisper bubble shows "→ <target>에게" sender label (right-aligned, not "me")', () => {
+  // S13a 재구성: 내가 보낸 귓속말 → 이름 숨김 + '귓속말' 태그(방향 안내 제거).
+  it('my whisper bubble hides sender name and shows a 귓속말 tag (no 방향 안내)', () => {
     setup({
       messages: [
         { id: 's4', clientMsgId: null, userId: 'me', body: '비밀 메시지', whisperToUserId: 'u2', createdAt: 't4', sendState: 'sent' },
       ],
     });
-    expect(screen.getByText('→ 민준에게')).toBeTruthy();
-    // 내 이름('나')으로는 안 떠야 한다(누가 보낸 게 아니라 누구에게 보냈는지).
-    expect(screen.queryByText(/→ 귓속말/)).toBeNull();
+    expect(screen.getByText('비밀 메시지')).toBeTruthy();
+    expect(screen.getByTestId('chat-bubble-whisper-tag')).toBeTruthy();
+    // 방향 안내(→ …에게 / → 나에게)는 더 이상 렌더하지 않는다.
+    expect(screen.queryByText(/에게$/)).toBeNull();
+    expect(screen.queryByText(/→/)).toBeNull();
   });
 
-  // body-render-9: 남이 나에게 보낸 귓속말 → '<발신자> → 나에게'.
-  it('incoming whisper to me shows "<sender> → 나에게"', () => {
+  // S13a 재구성: 받은 귓속말 → 보낸이 이름 + '귓속말' 태그(방향 안내 제거).
+  it('incoming whisper to me shows sender name + 귓속말 tag, no 방향 안내', () => {
     setup({
       messages: [
         { id: 's5', clientMsgId: null, userId: 'u1', body: '너만 알아', whisperToUserId: 'me', createdAt: 't5', sendState: 'sent' },
       ],
     });
-    expect(screen.getByText('수아 → 나에게')).toBeTruthy();
+    expect(screen.getByText('너만 알아')).toBeTruthy();
+    expect(screen.getByText('수아')).toBeTruthy();
+    expect(screen.getByTestId('chat-bubble-whisper-tag')).toBeTruthy();
+    expect(screen.queryByText(/나에게/)).toBeNull();
+  });
+
+  // 전체화면 헤더: 방 제목 없이 '멤버 N명' 부제만.
+  it('renders full-screen header with member count subtitle (no room title)', () => {
+    setup({ memberCount: 8 });
+    expect(screen.getByText('멤버 8명')).toBeTruthy();
+  });
+
+  // 전체화면: 바텀시트 scrim/surface 가 더 이상 없다.
+  it('is a full screen — no bottom-sheet scrim/surface', () => {
+    setup();
+    expect(screen.queryByTestId('bottom-sheet-surface')).toBeNull();
+    expect(screen.queryByTestId('bottom-sheet-scrim')).toBeNull();
+    expect(screen.getByTestId('room-chat-screen')).toBeTruthy();
+  });
+
+  // 키보드: 컴포저가 KeyboardAvoidingView 안에 위치(키보드 위로 밀림).
+  it('wraps the stream+composer in a KeyboardAvoidingView', () => {
+    setup();
+    expect(screen.getByTestId('room-chat-kav')).toBeTruthy();
+    expect(screen.getByTestId('input-bar-input')).toBeTruthy();
+  });
+
+  // back 헤더 탭 → onClose.
+  it('back control fires onClose', () => {
+    const props = setup();
+    fireEvent.press(screen.getByLabelText('뒤로'));
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // 빈 상태: 메시지 0건이면 안내 + 컴포저 유지.
+  it('shows empty state with composer still present when no messages', () => {
+    setup({ messages: [] });
+    expect(screen.getByText('아직 메시지가 없어요')).toBeTruthy();
+    expect(screen.getByTestId('input-bar-input')).toBeTruthy();
+    expect(screen.queryByTestId('chat-stream')).toBeNull();
+  });
+
+  // blockedIds: 차단 멤버는 멘션 후보에서 제외(귓속말 누설 차단 경로 — 현재 미테스트).
+  it('excludes a blocked member from mention candidates', () => {
+    setup({ input: '@', blockedIds: new Set(['u1']) });
+    // u1(수아)은 차단 → 후보 행 없음, u2(민준)은 노출.
+    expect(screen.queryByTestId('mention-row-u1')).toBeNull();
+    expect(screen.getByTestId('mention-row-u2')).toBeTruthy();
+  });
+
+  // 멘션 패널: @ 없거나 후보 0이면 미노출.
+  it('hides mention panel when input has no active @ query', () => {
+    setup({ input: '안녕하세요' });
+    expect(screen.queryByTestId('mention-row-u1')).toBeNull();
+    expect(screen.queryByTestId('mention-row-u2')).toBeNull();
+  });
+
+  // 내가 보낸 귓속말 실패 → 재시도(clientMsgId 전달).
+  it('failed whisper-mine shows retry firing onRetry with clientMsgId', () => {
+    const props = setup({
+      messages: [
+        { id: 'w9', clientMsgId: 'cw9', userId: 'me', body: '비밀', whisperToUserId: 'u1', createdAt: 't9', sendState: 'failed' },
+      ],
+    });
+    fireEvent.press(screen.getByTestId('chat-bubble-retry'));
+    expect(props.onRetry).toHaveBeenCalledWith('cw9');
+  });
+
+  // 키보드: 스트림이 작성 중 탭으로 키보드를 닫지 않도록 keyboardShouldPersistTaps='handled'.
+  it('stream keeps keyboard on tap (keyboardShouldPersistTaps=handled)', () => {
+    setup();
+    expect(screen.getByTestId('chat-stream').props.keyboardShouldPersistTaps).toBe('handled');
   });
 
   // ★신규2: 아바타 탭 → onAvatarPress(메시지 발신자 userId).
@@ -117,13 +190,14 @@ describe('RoomChatView', () => {
   });
 
   // ★신규1: 멤버 photoUrl 이 아바타 이미지로 전달(이니셜 대신 원형 이미지).
+  // u1(수아)은 photoUrl 보유 → 버블 아바타 + 헤더 AvatarStack 양쪽에 노출되므로 ≥1.
   it('passes member photoUrl through to the avatar image', () => {
     setup({
       messages: [
         { id: 's7', clientMsgId: null, userId: 'u1', body: '하이', whisperToUserId: null, createdAt: 't7', sendState: 'sent' },
       ],
     });
-    expect(screen.getByTestId('av-photo')).toBeTruthy();
+    expect(screen.getAllByTestId('av-photo').length).toBeGreaterThanOrEqual(1);
   });
 
   // F: 귓속말 칩이 떠 있어도 본문 새 @ 입력이면 후보 노출(대상 교체).

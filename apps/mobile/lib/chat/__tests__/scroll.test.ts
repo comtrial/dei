@@ -9,6 +9,13 @@ describe('isNearBottom (inverted list: offset≈0 is bottom)', () => {
   it('false beyond threshold', () => {
     expect(isNearBottom(200)).toBe(false);
   });
+
+  // 경계(agent team 발굴): NEAR_BOTTOM_PX=120 정확히 포함, 121 제외.
+  it('boundary: 119/120 = near, 121 = not near', () => {
+    expect(isNearBottom(119)).toBe(true);
+    expect(isNearBottom(120)).toBe(true);
+    expect(isNearBottom(121)).toBe(false);
+  });
 });
 
 describe('countNewMessages (concurrency-misc-12: self 메시지 제외)', () => {

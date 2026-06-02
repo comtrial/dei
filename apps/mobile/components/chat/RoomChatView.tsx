@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useRef } from 'react';
-import { FlatList, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  Badge,
-  BottomSheet,
+  AvatarStack,
   ChatBubble,
   InputBar,
   MentionAutocomplete,
@@ -25,11 +25,19 @@ import { isSendable, MAX_BODY, messageLength } from '@/lib/chat/length';
  * supabase/router/realtime 배선은 route 파일(chat.tsx)이 담당 →
  * 이 컴포넌트는 supabase mock 없이 RNTL 로 직접 렌더·검증 가능하다.
  *
+ * 레이아웃(S13a 재구성 — 전체화면):
+ *  - 루트는 SafeAreaView(top/bottom) + flex-1 column. (바텀시트 셸 제거)
+ *  - 헤더 TopNav: 방 제목 없이 `멤버 N명` 부제 + 우측 멤버 AvatarStack + back.
+ *  - 스트림(inverted FlatList) 은 flex-1 로 가용공간 차지, 그 아래 컴포저.
+ *  - KeyboardAvoidingView 로 컴포저가 키보드 위로 밀려 올라간다(가림 방지).
+ *  - 귓속말: ChatBubble 이 보낸이 아바타 + '귓속말' 태그로 표현(방향 안내 없음).
+ *
  * raw 스타일 0(@dei/ui + NativeWind 토큰만). 멘션 후보 필터/길이 게이트는
  * lib/chat 순수로직(parseMentionQuery·filterCandidates·isSendable)을 재사용.
  */
 export interface RoomChatViewProps {
-  roomName: string;
+  /** @deprecated 헤더 제목 제거(S13a 재구성) — 더 이상 표시하지 않으나 계약 보존용 optional. */
+  roomName?: string;
   memberCount: number;
   selfId: string;
   messages: ChatMessage[];
@@ -88,100 +96,127 @@ export function RoomChatView(props: RoomChatViewProps) {
 
   const sendable = isSendable(input) && !props.roomEnded;
 
+  // 헤더 멤버 아바타 스택: active 멤버 중 self 제외(이 방에 누가 있나 식별).
+  const stackItems = useMemo(
+    () =>
+      members
+        .filter((m) => m.status === 'active' && m.userId !== selfId)
+        .map((m) => ({
+          userId: m.userId,
+          initial: m.avatarInitial,
+          bg: m.avatarBg,
+          photoUrl: m.photoUrl,
+        })),
+    [members, selfId],
+  );
+
+  if (!props.visible) return null;
+
   return (
-    <BottomSheet visible={props.visible} onClose={props.onClose} heightPct={78}>
-      <TopNav
-        left="close"
-        title={props.roomName}
-        onLeftPress={props.onClose}
-        rightActions={<Badge variant="count">{`${props.memberCount}명`}</Badge>}
-      />
+    // testID 는 SafeAreaView 가 아니라 내부 View 에 둔다 — jest 의 safe-area mock 이
+    // SafeAreaView 를 children 통과(props drop)로 처리해 testID 가 사라지기 때문.
+    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-bg">
+      <View className="flex-1" testID="room-chat-screen">
+        <TopNav
+          left="back"
+          onLeftPress={props.onClose}
+          leftAccessibilityLabel="뒤로"
+          subtitle={`멤버 ${props.memberCount}명`}
+          rightActions={<AvatarStack items={stackItems} max={3} />}
+        />
 
-      {props.messages.length === 0 ? (
-        <StateView kind="empty" icon="💬" title="아직 메시지가 없어요" />
-      ) : (
-        <FlatList
-          ref={listRef}
-          testID="chat-stream"
+        <KeyboardAvoidingView
+          testID="room-chat-kav"
           className="flex-1"
-          data={[...props.messages].reverse()}
-          inverted
-          scrollEventThrottle={16}
-          onScroll={(e) => props.onScroll?.(e.nativeEvent.contentOffset.y)}
-          keyExtractor={(m) => m.id}
-          renderItem={({ item }) => {
-            const mine = item.userId === selfId;
-            const member = members.find((mm) => mm.userId === item.userId);
-            const isWhisper = item.whisperToUserId != null;
-            const variant: 'them' | 'me' | 'whisper' = isWhisper ? 'whisper' : mine ? 'me' : 'them';
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View className="flex-1">
+          {props.messages.length === 0 ? (
+            <StateView
+              kind="empty"
+              icon="💬"
+              title="아직 메시지가 없어요"
+              desc="첫 메시지를 남겨보세요. @닉네임으로 귓속말도 보낼 수 있어요."
+            />
+          ) : (
+            <FlatList
+              ref={listRef}
+              testID="chat-stream"
+              className="flex-1"
+              data={[...props.messages].reverse()}
+              inverted
+              // 입력 중 스트림 탭이 키보드를 닫지 않게(전송 버튼 탭은 그대로 전달).
+              keyboardShouldPersistTaps="handled"
+              scrollEventThrottle={16}
+              onScroll={(e) => props.onScroll?.(e.nativeEvent.contentOffset.y)}
+              keyExtractor={(m) => m.id}
+              renderItem={({ item }) => {
+                const mine = item.userId === selfId;
+                const member = members.find((mm) => mm.userId === item.userId);
+                const isWhisper = item.whisperToUserId != null;
+                const variant: 'them' | 'me' | 'whisper' = isWhisper ? 'whisper' : mine ? 'me' : 'them';
 
-            // body-render-9: 귓속말 발신자명 분기.
-            //  - 내가 보낸 귓속말(mine): 누구에게 보냈는지 보이게 '→ <대상>에게'(대상 멤버명).
-            //  - 받은 귓속말: '<발신자> → 나에게'. 내가 보낸 귓속말이 '나'로 안 뜨게.
-            let name = member?.name;
-            if (isWhisper) {
-              if (mine) {
-                const targetName =
-                  members.find((mm) => mm.userId === item.whisperToUserId)?.name ?? '상대';
-                name = `→ ${targetName}에게`;
-              } else {
-                name = `${member?.name ?? '익명'} → 나에게`;
+                // 방향 안내("→ 나에게"/"→ …에게") 제거(S13a 재구성). 받은 귓속말은
+                // 보낸이 이름만 노출(ChatBubble 이 '귓속말' 태그로 비밀임을 표시).
+                // 내가 보낸 귓속말/내 메시지는 ChatBubble 이 이름을 숨긴다.
+                const name = member?.name;
+
+                return (
+                  <View className="px-[14px] py-[3px]">
+                    <ChatBubble
+                      variant={variant}
+                      mine={mine}
+                      name={name}
+                      avatarInitial={member?.avatarInitial}
+                      avatarBg={member?.avatarBg}
+                      avatarPhotoUrl={member?.photoUrl}
+                      onAvatarPress={() => props.onAvatarPress(item.userId)}
+                      sendState={mine ? item.sendState : 'sent'}
+                      onRetry={() => {
+                        if (item.clientMsgId) props.onRetry(item.clientMsgId);
+                      }}
+                    >
+                      {/* G-B: 본문 @토큰을 mention 노드로 강조(them/me/whisper·낙관 공통). */}
+                      {renderBodyWithMentions(item.body, { variant })}
+                    </ChatBubble>
+                  </View>
+                );
+              }}
+            />
+          )}
+
+          <View>
+            <NewMessageJumpButton count={props.newCount} onPress={handleJump} />
+            <MentionAutocomplete
+              candidates={candidates}
+              visible={candidates.length > 0}
+              onSelect={(c) => {
+                const member = members.find((m) => m.userId === c.userId);
+                if (member) props.onSelectMention(member);
+              }}
+            />
+            <InputBar
+              value={input}
+              onChange={props.onChangeInput}
+              onSend={props.onSend}
+              sendDisabled={!sendable}
+              charcount={{ count: messageLength(input), max: MAX_BODY }}
+              whisperTarget={
+                whisperTarget
+                  ? {
+                      name: whisperTarget.name,
+                      avatarInitial: whisperTarget.avatarInitial,
+                      avatarBg: whisperTarget.avatarBg,
+                    }
+                  : null
               }
-            }
-
-            return (
-              <View className="px-[14px] py-[3px]">
-                <ChatBubble
-                  variant={variant}
-                  mine={mine}
-                  name={name}
-                  avatarInitial={member?.avatarInitial}
-                  avatarBg={member?.avatarBg}
-                  avatarPhotoUrl={member?.photoUrl}
-                  onAvatarPress={() => props.onAvatarPress(item.userId)}
-                  sendState={mine ? item.sendState : 'sent'}
-                  onRetry={() => {
-                    if (item.clientMsgId) props.onRetry(item.clientMsgId);
-                  }}
-                >
-                  {/* G-B: 본문 @토큰을 mention 노드로 강조(them/me/whisper·낙관 공통). */}
-                  {renderBodyWithMentions(item.body, { variant })}
-                </ChatBubble>
-              </View>
-            );
-          }}
-        />
-      )}
-
-      <View>
-        <NewMessageJumpButton count={props.newCount} onPress={handleJump} />
-        <MentionAutocomplete
-          candidates={candidates}
-          visible={candidates.length > 0}
-          onSelect={(c) => {
-            const member = members.find((m) => m.userId === c.userId);
-            if (member) props.onSelectMention(member);
-          }}
-        />
-        <InputBar
-          value={input}
-          onChange={props.onChangeInput}
-          onSend={props.onSend}
-          sendDisabled={!sendable}
-          charcount={{ count: messageLength(input), max: MAX_BODY }}
-          whisperTarget={
-            whisperTarget
-              ? {
-                  name: whisperTarget.name,
-                  avatarInitial: whisperTarget.avatarInitial,
-                  avatarBg: whisperTarget.avatarBg,
-                }
-              : null
-          }
-          onClearWhisper={props.onClearWhisper}
-        />
+              onClearWhisper={props.onClearWhisper}
+            />
+          </View>
+        </View>
+        </KeyboardAvoidingView>
       </View>
-    </BottomSheet>
+    </SafeAreaView>
   );
 }
 
