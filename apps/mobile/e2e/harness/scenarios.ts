@@ -32,6 +32,7 @@ export interface ScenarioFixture {
   newCount?: number;
   blockedIds?: Set<string>;
   roomEnded?: boolean;
+  overlay?: boolean;
 }
 
 export const SCENARIOS = {
@@ -40,6 +41,17 @@ export const SCENARIOS = {
     selfId: SELF,
     members: MEMBERS,
     messages: BASE_MSGS,
+  },
+
+  // 오버레이 모드: 영상 위 dim scrim + dark band(헤더/컴포저) + 본문 transparent.
+  'overlay': {
+    selfId: SELF,
+    members: MEMBERS,
+    messages: [
+      ...BASE_MSGS,
+      { id: 'w3', clientMsgId: null, userId: 'u2', body: '우리 둘이 따로 보자', whisperToUserId: 'me', createdAt: 't4', sendState: 'sent' },
+    ],
+    overlay: true,
   },
 
   // 받은 귓속말: 보낸이(민준) 아바타 + 이름 + '귓속말' 태그, 방향 안내 없음.
