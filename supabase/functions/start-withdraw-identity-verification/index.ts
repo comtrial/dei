@@ -1,5 +1,6 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
+import { captureEdgeError } from '../_shared/log.ts';
 import {
   codedErrorResponse,
   getFailureWindowStart,
@@ -26,10 +27,13 @@ Deno.serve(async (req) => {
     return codedErrorResponse('METHOD_NOT_ALLOWED', 'method not allowed', 405);
   }
 
+  let userId: string | undefined;
+
   try {
     const storeId = getRequiredEnv('PORTONE_STORE_ID');
     const channelKey = getRequiredEnv('PORTONE_IDENTITY_CHANNEL_KEY');
     const { supabase, user } = await getAuthenticatedUser(req);
+    userId = user.id;
     const now = new Date().toISOString();
 
     const { data: verified, error: verifiedError } = await supabase
@@ -133,6 +137,13 @@ Deno.serve(async (req) => {
       storeId,
     });
   } catch (error) {
+    // env 누락 + lookup/insert throw.
+    captureEdgeError('start-withdraw-identity-verification', error, {
+      stage: 'start_withdraw_verification',
+      status: 500,
+      userId,
+      tags: { feature: 'withdraw-verify', code: 'BAD_REQUEST' },
+    });
     const message = error instanceof Error ? error.message : 'failed to start withdrawal verification';
     return codedErrorResponse('BAD_REQUEST', message);
   }
