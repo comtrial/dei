@@ -3,6 +3,7 @@ import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  Avatar,
   AvatarStack,
   ChatBubble,
   InputBar,
@@ -40,6 +41,12 @@ export interface RoomChatViewProps {
   roomName?: string;
   memberCount: number;
   selfId: string;
+  /** 내 프로필 사진 URL(헤더 우측). 없으면 이니셜/색 폴백. */
+  selfPhotoUrl?: string;
+  /** 내 아바타 이니셜(헤더 우측 폴백). */
+  selfInitial?: string;
+  /** 내 아바타 bg className(폴백). */
+  selfBg?: string;
   messages: ChatMessage[];
   members: RoomMemberLite[];
   input: string;
@@ -122,7 +129,17 @@ export function RoomChatView(props: RoomChatViewProps) {
           onLeftPress={props.onClose}
           leftAccessibilityLabel="뒤로"
           subtitle={`멤버 ${props.memberCount}명`}
-          rightActions={<AvatarStack items={stackItems} max={3} />}
+          // 좌측(부제 옆): 방 참여 멤버 아바타 스택(프로필 사진). 우측: 내 프로필.
+          leftAccessory={stackItems.length > 0 ? <AvatarStack items={stackItems} max={3} size={28} /> : undefined}
+          rightActions={
+            <Avatar
+              size={32}
+              initial={props.selfInitial}
+              photoUrl={props.selfPhotoUrl}
+              bg={props.selfBg}
+              accessibilityLabel="내 프로필"
+            />
+          }
         />
 
         <KeyboardAvoidingView
@@ -156,13 +173,17 @@ export function RoomChatView(props: RoomChatViewProps) {
                 const isWhisper = item.whisperToUserId != null;
                 const variant: 'them' | 'me' | 'whisper' = isWhisper ? 'whisper' : mine ? 'me' : 'them';
 
-                // 방향 안내("→ 나에게"/"→ …에게") 제거(S13a 재구성). 받은 귓속말은
-                // 보낸이 이름만 노출(ChatBubble 이 '귓속말' 태그로 비밀임을 표시).
-                // 내가 보낸 귓속말/내 메시지는 ChatBubble 이 이름을 숨긴다.
-                const name = member?.name;
+                // 이름 전달 규칙:
+                //  - 받은 귓속말/them : 보낸이(member) 이름 → ChatBubble 이 이름+태그로 표시
+                //  - 내가 보낸 귓속말   : '수신자' 이름(@닉네임) → 누구에게 속삭였는지
+                //  - 내 일반 메시지(me) : 이름 미표시(ChatBubble 이 숨김)
+                const name =
+                  isWhisper && mine
+                    ? (members.find((mm) => mm.userId === item.whisperToUserId)?.name ?? '상대')
+                    : member?.name;
 
                 return (
-                  <View className="px-[14px] py-[3px]">
+                  <View className="px-[14px] py-[5px]">
                     <ChatBubble
                       variant={variant}
                       mine={mine}

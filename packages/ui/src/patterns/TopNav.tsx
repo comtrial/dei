@@ -69,6 +69,11 @@ export interface TopNavProps extends ViewProps {
    * title 과 함께 주면 2단(제목 위 / 부제 아래)으로 렌더한다.
    */
   subtitle?: string;
+  /**
+   * 좌측 그룹(컨트롤+타이틀) 옆에 붙는 보조 노드 — 예: 참여 멤버 AvatarStack.
+   * rightActions(우측 끝)와 달리 타이틀 바로 옆(좌측 정렬)에 온다.
+   */
+  leftAccessory?: ReactNode;
   /** 우측 액션 slot — IconButton/Badge(count)/Avatar/Button 등을 caller 가 조립. */
   rightActions?: ReactNode;
   className?: string;
@@ -82,6 +87,7 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
     leftSlot,
     title,
     subtitle,
+    leftAccessory,
     rightActions,
     className,
     ...rest
@@ -136,6 +142,8 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
             ) : null}
           </View>
         ) : null}
+        {/* 좌측 보조 노드(참여 멤버 아바타 스택 등) — 타이틀 옆. */}
+        {leftAccessory != null ? <View className="ml-[10px]">{leftAccessory}</View> : null}
       </View>
 
       {/* 우측 액션 slot — 간격 8px 로 나열(HTML 우측 액션 gap 분포). */}
