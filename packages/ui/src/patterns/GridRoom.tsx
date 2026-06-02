@@ -1,5 +1,6 @@
 import { forwardRef, memo, useMemo, type ComponentType, type ReactNode } from 'react';
 import { Pressable, View, type ViewProps } from 'react-native';
+import { Image } from 'expo-image';
 
 import { Text } from '../primitives/Text';
 import { EmptyBlob, type EmptyBlobTone } from '../primitives/EmptyBlob';
@@ -72,6 +73,12 @@ export interface GridRoomFilledCell {
   media?: ReactNode;
   present?: boolean;
   videoId?: string;
+  /**
+   * 멤버 프로필 사진 URL(서명된 https). 지정 시 presence 아바타가 이니셜 대신
+   * 원형 이미지로 렌더하며, 미지정/로드 실패 전까지 `initial` 폴백. expo-image
+   * memory-disk 캐시 → 재렌더/재진입 시 네트워크 왕복 없이 즉시 표시.
+   */
+  photoUrl?: string;
 }
 
 /** 아직 영상을 안 올린 셀. */
@@ -158,14 +165,39 @@ function TimeChip({ slot }: { slot: GridRoomTimeSlot }) {
 const PresenceAvatar = memo(function PresenceAvatar({
   initial,
   present,
+  photoUrl,
+  index,
 }: {
   initial: string;
   present: boolean;
+  /** 멤버 프로필 사진 URL(서명된 https). 지정 시 이니셜 대신 원형 이미지. */
+  photoUrl?: string;
+  /** 셀 인덱스 — testID 분리용(empty 셀은 미지정). */
+  index?: number;
 }) {
+  const photoTestID = index != null ? `gridroom-avatar-photo-${index}` : undefined;
+  const initialTestID = index != null ? `gridroom-avatar-initial-${index}` : undefined;
   return (
     <View className="relative w-[22px] h-[22px]">
-      <View className="w-[22px] h-[22px] items-center justify-center rounded-full border-[1.5px] border-accent bg-[rgba(0,0,0,0.35)]">
-        <Text className="text-2xs font-bold text-paper">{initial}</Text>
+      <View className="w-[22px] h-[22px] items-center justify-center overflow-hidden rounded-full border-[1.5px] border-accent bg-[rgba(0,0,0,0.35)]">
+        {photoUrl != null ? (
+          // 프로필 이미지: 원형 컨테이너를 가득 채우는 cover 이미지(이니셜 폴백 대체).
+          // cachePolicy=memory-disk + recyclingKey: 한 번 받은 아바타는 디스크+메모리
+          // 캐시 → 재렌더/재진입 시 네트워크 왕복 없이 즉시 표시(Avatar primitive 와 동일).
+          <Image
+            testID={photoTestID}
+            source={{ uri: photoUrl }}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={photoUrl}
+            transition={120}
+            className="w-[22px] h-[22px] rounded-full"
+          />
+        ) : (
+          <Text testID={initialTestID} className="text-2xs font-bold text-paper">
+            {initial}
+          </Text>
+        )}
       </View>
       {present ? (
         <View className="absolute -bottom-[2px] -right-[2px] w-[8px] h-[8px] rounded-full bg-accent border border-paper" />
@@ -233,7 +265,12 @@ const FilledCell = memo(
           }
           className="absolute left-[8px] top-[8px] flex-row items-center gap-[5px]"
         >
-          <PresenceAvatar initial={initial} present={cell.present ?? true} />
+          <PresenceAvatar
+            initial={initial}
+            present={cell.present ?? true}
+            photoUrl={cell.photoUrl}
+            index={index}
+          />
           <Text className="text-2xs font-bold text-paper">{cell.name}</Text>
         </Pressable>
         <View className="absolute inset-0 items-center justify-center">
@@ -251,6 +288,7 @@ const FilledCell = memo(
     prev.cell.videoId === next.cell.videoId &&
     prev.cell.uploadTime === next.cell.uploadTime &&
     prev.cell.present === next.cell.present &&
+    prev.cell.photoUrl === next.cell.photoUrl &&
     prev.index === next.index,
 );
 
