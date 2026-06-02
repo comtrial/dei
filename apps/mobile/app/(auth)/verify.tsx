@@ -276,6 +276,12 @@ export default function VerifyScreen() {
           throw error;
         }
 
+        // 개발용 바이패스는 약관 동의 화면(S02)을 건너뛰므로 terms_agreement 행이 없다.
+        // 그러면 app/index.tsx 부트스트랩의 `if (!termsAgreement) → terms` 가드가
+        // 닉네임(step1) 진입 전에 약관으로 튕긴다(이 버그). 바이패스에서도 약관 동의를
+        // 기록해 부트스트랩이 정상적으로 step1 로 보내게 한다(FALLBACK 동의값 사용).
+        await ensureLatestTermsAgreementForCurrentUser();
+
         setVerificationRequest(null);
         verificationRequestRef.current = null;
         router.replace(ROUTES.profileStep1);
