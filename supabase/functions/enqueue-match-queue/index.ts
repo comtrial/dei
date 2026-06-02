@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { supabase, user } = await getAuthenticatedUser(req);
+    const { supabase, supabaseAsUser, user } = await getAuthenticatedUser(req);
     const body = await req.json().catch(() => ({})) as EnqueueBody;
     const memberIds = toMemberIds(body, user.id);
 
@@ -251,6 +251,7 @@ Deno.serve(async (req) => {
       Date.now() + POLICY.matching.queueExpiryHours * 60 * 60 * 1000,
     ).toISOString();
 
+    const requiredGender = ownerProfile.gender === 'male' ? 'female' : 'male';
     const { data: queue, error: queueError } = await supabase
       .from('match_queue')
       .insert({
@@ -258,6 +259,7 @@ Deno.serve(async (req) => {
         expires_at: expiresAt,
         gender: ownerProfile.gender,
         region: ownerProfile.region,
+        required_gender: requiredGender,
         status: 'waiting',
         team_id: team.id,
       })
@@ -284,6 +286,60 @@ Deno.serve(async (req) => {
       }
     }
 
+    // 자동 즉시 매칭 (config 게이트 — 앱 재빌드 없이 DB 토글). 매칭 규칙·임계값은
+    // 전부 RPC(try_match) + match_config 에 있어 Edge 는 게이트만 본다.
+    const { data: cfg } = await supabase
+      .from('match_config')
+      .select('value')
+      .eq('key', 'automation')
+      .maybeSingle();
+    const automation =
+      typeof cfg?.value === 'string'
+        ? cfg.value
+        : ((cfg?.value as string | undefined) ?? 'manual_admin_curation');
+
+    let matchId: string | null = null;
+    if (automation === 'auto_immediate' || automation === 'auto_scored') {
+      // SECURITY DEFINER RPC 를 호출 사용자 JWT(authenticated grant)로 트리거.
+      // try_match 호출 실패/누락(상대는 큐에 있는데 트리거만 실패한 좁은 케이스)에
+      // 대비해 1회 재시도(sweep cron 대체 — 명세 §8). 재시도도 실패하면 'queued'.
+      for (let attempt = 0; attempt < 2 && !matchId; attempt += 1) {
+        const { data: gm, error: matchError } = await supabaseAsUser.rpc('try_match', {
+          p_queue_id: queue.id,
+        });
+        if (!matchError && gm) {
+          matchId = gm as string;
+          break;
+        }
+        if (!matchError) break; // 정상 호출인데 매칭 미성사(null) → 재시도 불필요, 대기 잔류
+      }
+    }
+
+    if (matchId) {
+      const { data: gm } = await supabase
+        .from('group_match')
+        .select('room_id')
+        .eq('id', matchId)
+        .maybeSingle();
+      return jsonResponse({
+        enqueuedAt: queue.enqueued_at,
+        expiresAt: queue.expires_at,
+        freeRematchWaived:
+          rematchRestriction.restricted
+          && ownerProfile.gender === 'female'
+          && POLICY.payment.femaleInstantRematchFree,
+        matched: true,
+        matchId,
+        memberCount: memberIds.length,
+        passConsumed: Boolean(passToConsume),
+        queueId: queue.id,
+        reused: false,
+        roomId: gm?.room_id ?? null,
+        status: 'matched',
+        teamId: team.id,
+      });
+    }
+
     return jsonResponse({
       enqueuedAt: queue.enqueued_at,
       expiresAt: queue.expires_at,
@@ -291,10 +347,12 @@ Deno.serve(async (req) => {
         rematchRestriction.restricted
         && ownerProfile.gender === 'female'
         && POLICY.payment.femaleInstantRematchFree,
+      matched: false,
       memberCount: memberIds.length,
       passConsumed: Boolean(passToConsume),
       queueId: queue.id,
       reused: false,
+      status: 'queued',
       teamId: team.id,
     });
   } catch (error) {
