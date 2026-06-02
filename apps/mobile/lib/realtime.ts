@@ -246,3 +246,31 @@ export function subscribeRoomPresence(
     };
   }
 }
+
+/**
+ * 방 `room` 행 UPDATE(상태 전이: active→ended/deleted)를 구독한다.
+ * 방이 종료되면 채팅 시트를 읽기전용으로 전환하기 위한 신호(concurrency-misc-9).
+ * 반환된 unsubscribe 를 effect cleanup 에서 반드시 호출한다(구독 누수 방지).
+ */
+export function subscribeRoomStatus(
+  roomId: string,
+  onUpdate: (row: Record<string, unknown>) => void,
+): () => void {
+  const channel = roomChannel(roomId)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'room', filter: `id=eq.${roomId}` },
+      (payload) => onUpdate(payload.new as Record<string, unknown>),
+    )
+    .subscribe((status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        logger.captureMessage(`realtime: room ${roomId} status 구독 ${status}`, 'warning', {
+          tags: { feature: 'realtime', room_id: roomId },
+        });
+      }
+    });
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}

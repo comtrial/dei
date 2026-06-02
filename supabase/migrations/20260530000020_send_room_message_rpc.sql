@@ -1,6 +1,6 @@
 -- 20260530000020_send_room_message_rpc.sql
 -- S13a 메시지 전송 RPC (Edge의 폴백 + 트랜잭션 단일 경로). authenticated grant,
--- 내부 auth.uid()=발신자. 반드시 supabaseAsUser(user JWT)로 호출(service_role 호출 시 auth.uid()=NULL -> 거절).
+-- 내부 auth.uid()=발신자. 반드시 supabaseAsUser(user JWT)로 호출(service_role 호출 시 auth.uid()=NULL → 거절).
 -- 글자수=code point(char_length), 귓속말 가드(self/active/block) 서버 재검증.
 
 create or replace function public.send_room_message(

@@ -20,7 +20,8 @@
     "react": "*",
     "react-native": "*",
     "nativewind": "*",
-    "lucide-react-native": "*"
+    "lucide-react-native": "*",
+    "expo-image": "*"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.0"

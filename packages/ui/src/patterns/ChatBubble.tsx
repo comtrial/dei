@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { View, type ViewProps } from 'react-native';
+import { Pressable, View, type ViewProps } from 'react-native';
+import { AlertCircle } from 'lucide-react-native';
 
 import { Avatar, Text } from '../primitives';
 import { cn } from '../lib/cn';
@@ -23,7 +24,11 @@ import { cn } from '../lib/cn';
  *  - `them`    상대 메시지: bg-2 버블, 좌측 정렬, 아바타 + 이름 표시 (`.msg`)
  *  - `me`      내 메시지: ink 버블 + 흰 글씨, 우측 정렬, 아바타·이름 숨김 (`.msg.me`)
  *  - `whisper` 귓속말: accent-soft 버블 + accent 점선 보더 + accent-deep 이탤릭
- *             텍스트, full-width, 이름 뒤 " → 귓속말" 접미 (`.msg.whisper`)
+ *             텍스트, full-width, 이름 뒤 " → 귓속말" 접미 (`.msg.whisper`).
+ *             `mine` 이면(내가 보낸 귓속말 발신측 뷰) me 처럼 우측정렬 + 실패 시
+ *             재시도 노출(body-render-9). 호출부가 방향을 담은 이름(예:
+ *             "→ 민준에게" / "수아 → 나에게")을 넘기면 "→" 가 들어 있으므로
+ *             자동 " → 귓속말" 접미는 생략된다.
  *  - `mention` 인라인 @멘션 토큰: accent 700 (`.bub .mention`) — 버블 본문 안에
  *             섞어 쓰는 텍스트 변형. 행 레이아웃이 아니라 Text 한 조각이다.
  */
@@ -46,6 +51,12 @@ const ROW_CLASS: Record<Exclude<ChatBubbleVariant, 'mention'>, string> = {
   // .s13a .msg.whisper: align-self stretch; max-width 100%
   whisper: 'flex-row gap-[8px] max-w-full self-stretch',
 };
+
+/**
+ * 내가 보낸 귓속말(mine) 발신측 행: me 처럼 우측정렬·폭 제한(body-render-9).
+ * 기본 whisper(수신/전폭)와 달리 self-end + max-w-78% 로 me 와 시각적으로 통일.
+ */
+const WHISPER_MINE_ROW_CLASS = 'flex-row gap-[8px] max-w-[78%] self-end';
 
 /**
  * `.bub` 버블 className.
@@ -75,41 +86,78 @@ export interface ChatBubbleProps extends ViewProps {
   variant?: ChatBubbleVariant;
   /**
    * 발신자 이름(`.nm`). `them`/`whisper` 에서 버블 위에 표시. `me` 는 숨김.
-   * whisper 는 자동으로 `" → 귓속말"` 접미가 붙는다.
+   * whisper 는 이름에 `"→"` 가 없을 때만 자동으로 `" → 귓속말"` 접미가 붙는다
+   * (방향 이름 "→ 민준에게"/"수아 → 나에게" 를 넘기면 접미 생략, body-render-9).
    */
   name?: string;
+  /**
+   * `whisper` 변형 한정: 내가 보낸 귓속말(발신측 뷰)이면 true.
+   * me 처럼 우측정렬 + 송신 실패 시 재시도 컨트롤을 노출한다(body-render-9).
+   */
+  mine?: boolean;
   /** 좌측 아바타 이니셜(`.av`, 28px). `them` 에서만 표시(me/whisper 는 없음). */
   avatarInitial?: string;
   /** 아바타 배경 className(§3A peer 색 등). 예: `bg-[#7A8DB8]`. */
   avatarBg?: string;
+  /** 좌측 아바타 프로필 이미지 URL. 지정 시 이니셜 대신 원형 이미지(Avatar 위임). */
+  avatarPhotoUrl?: string;
+  /**
+   * 아바타 탭 핸들러. 지정 시 `them` 아바타를 Pressable(role=button,
+   * label=`<name> 프로필 보기`) 로 감싸 프로필 라우팅 트리거에 쓴다.
+   */
+  onAvatarPress?: () => void;
+  /**
+   * `mention` 변형 한정: 어두운 버블(me=ink) 위 렌더 여부.
+   * true 면 대비 보정으로 `accent-soft` 사용(body-render-8). 기본 false.
+   */
+  onDark?: boolean;
   /** 버블 본문. 문자열이면 자동으로 Text 래핑, 노드면 그대로 렌더(인라인 mention 혼용). */
   children?: React.ReactNode;
   className?: string;
+  /** me 변형 한정 송신 상태(클라 낙관). 기본 'sent'. */
+  sendState?: 'sending' | 'sent' | 'failed';
+  /** failed일 때 '!' 탭 재시도. */
+  onRetry?: () => void;
+  /** 재시도 접근성 라벨. 기본 '전송 재시도'. */
+  retryAccessibilityLabel?: string;
 }
 
 type RNTextRef = React.ComponentRef<typeof Text>;
-interface MentionTokenProps extends React.ComponentProps<typeof Text> {
+export interface MentionTokenProps extends React.ComponentProps<typeof Text> {
   className?: string;
+  /**
+   * 어두운 버블 배경(me=ink) 위에 얹힐 때 true.
+   * accent(#FF2D6F)는 ink(#191919) 대비가 부족해(body-render-8) 밝은
+   * `accent-soft`(#FFE9EF) 로 보정한다. them/whisper(밝은 배경)는 false 유지.
+   */
+  onDark?: boolean;
 }
 
 /**
  * 인라인 @멘션 토큰 (`.bub .mention`): accent 700.
  * 버블 본문 안에 다른 Text 조각과 섞어 쓰는 텍스트 변형이라 행 레이아웃이 없다.
+ * `onDark` 면 me(ink) 배경 대비 보정으로 `text-accent-soft` 사용(body-render-8).
  */
-const MentionToken = React.forwardRef<RNTextRef, MentionTokenProps>(function MentionToken(
-  { children, className, ...rest },
+export const MentionToken = React.forwardRef<RNTextRef, MentionTokenProps>(function MentionToken(
+  { children, className, onDark = false, ...rest },
   ref,
 ) {
   return (
     <Text
       ref={ref}
-      className={cn('text-[13px] font-bold text-accent', className)}
+      className={cn(
+        'text-[13px] font-bold',
+        onDark ? 'text-accent-soft' : 'text-accent',
+        className,
+      )}
       {...rest}
     >
       {children}
     </Text>
   );
 });
+
+MentionToken.displayName = 'MentionToken';
 
 /**
  * ChatBubble pattern. `mention` 변형은 인라인 Text 토큰(MentionToken)으로
@@ -120,10 +168,17 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
   {
     variant = 'them',
     name,
+    mine = false,
     avatarInitial,
     avatarBg,
+    avatarPhotoUrl,
+    onAvatarPress,
+    onDark = false,
     children,
     className,
+    sendState = 'sent',
+    onRetry,
+    retryAccessibilityLabel = '전송 재시도',
     accessibilityRole,
     ...rest
   },
@@ -131,15 +186,28 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
 ) {
   // mention: 행이 아니라 인라인 텍스트 토큰. View 가 아닌 Text 를 반환한다.
   if (variant === 'mention') {
-    return <MentionToken className={className as string}>{children}</MentionToken>;
+    return (
+      <MentionToken className={className as string} onDark={onDark}>
+        {children}
+      </MentionToken>
+    );
   }
 
   // me 는 이름 숨김(`.msg.me .nm{display:none}`). them/whisper 만 이름 표시.
   const showName = variant !== 'me' && name != null;
   // them 만 좌측 아바타 표시(me/whisper 는 `.av` 없음).
-  const showAvatar = variant === 'them' && avatarInitial != null;
-  // whisper 이름엔 " → 귓속말" 접미(`.nm::after`).
-  const displayName = variant === 'whisper' && name != null ? `${name}${WHISPER_SUFFIX}` : name;
+  // 이니셜·photoUrl 중 하나라도 있으면 표시(photoUrl 만으로도 아바타 surface).
+  const showAvatar = variant === 'them' && (avatarInitial != null || avatarPhotoUrl != null);
+  // whisper 이름엔 " → 귓속말" 접미(`.nm::after`) — 단, 방향 이름("→ …에게" 등,
+  // 이미 "→" 포함)이면 중복 방지로 접미 생략(body-render-9).
+  const displayName =
+    variant === 'whisper' && name != null && !name.includes('→')
+      ? `${name}${WHISPER_SUFFIX}`
+      : name;
+  // mine 귓속말은 me 처럼 우측정렬. 그 외는 변형별 기본 행 레이아웃.
+  const rowClass = variant === 'whisper' && mine ? WHISPER_MINE_ROW_CLASS : ROW_CLASS[variant];
+  // me 이거나 mine 귓속말이면 송신 상태/재시도를 표시(내가 보낸 메시지 발신측).
+  const isMineSender = variant === 'me' || (variant === 'whisper' && mine);
 
   // 문자열 children 은 본문 색을 입혀 Text 로 래핑. 노드면 그대로(인라인 mention 혼용).
   const body =
@@ -149,14 +217,36 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
       children
     );
 
+  // 좌측 아바타 노드(them 한정). photoUrl 우선, 없으면 이니셜 폴백.
+  const avatarNode = showAvatar ? (
+    <Avatar initial={avatarInitial} photoUrl={avatarPhotoUrl} size={28} bg={avatarBg} />
+  ) : null;
+
   return (
     <View
       ref={ref}
       accessibilityRole={accessibilityRole}
-      className={cn(ROW_CLASS[variant], className)}
+      className={cn(
+        rowClass,
+        // me 낙관 송신: 'sending' 동안 행 전체 흐림(스피너 불가 — Spinner 36|80만). D-04.
+        sendState === 'sending' && 'opacity-60',
+        className,
+      )}
       {...rest}
     >
-      {showAvatar ? <Avatar initial={avatarInitial} size={28} bg={avatarBg} /> : null}
+      {avatarNode != null && onAvatarPress != null ? (
+        // 아바타 탭 → 프로필 라우팅 트리거(role=button). 목적지 화면은 caller 책임.
+        <Pressable
+          testID="chat-bubble-avatar"
+          accessibilityRole="button"
+          accessibilityLabel={name != null ? `${name} 프로필 보기` : '프로필 보기'}
+          onPress={onAvatarPress}
+        >
+          {avatarNode}
+        </Pressable>
+      ) : (
+        avatarNode
+      )}
 
       {/* .col: flex column (이름 + 버블) */}
       <View className="min-w-0 flex-1">
@@ -174,6 +264,20 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
 
         {/* .bub */}
         <View className={BUBBLE_CLASS[variant]}>{body}</View>
+
+        {/* 내가 보낸 메시지(me/내 귓속말) 송신 실패: 버블 아래 우측 탭 재시도(danger). */}
+        {isMineSender && sendState === 'failed' ? (
+          <Pressable
+            testID="chat-bubble-retry"
+            accessibilityRole="button"
+            accessibilityLabel={retryAccessibilityLabel}
+            onPress={onRetry}
+            className="mt-[2px] flex-row items-center gap-[3px] self-end"
+          >
+            <AlertCircle size={13} color="#D62D2D" />
+            <Text className="text-[10.5px] font-semibold text-danger">재시도</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

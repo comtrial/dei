@@ -70,4 +70,28 @@ describe('InputBar (X9)', () => {
     expect(screen.getByTestId('bar')).toBeTruthy();
     expect(ref.current).not.toBeNull();
   });
+
+  it('whisper mode: renders removable target chip header and accent placeholder', () => {
+    render(
+      <InputBar whisperTarget={{ name: '수아', avatarInitial: '수' }} onClearWhisper={jest.fn()} />,
+    );
+    expect(screen.getByTestId('input-bar-whisper-chip')).toBeTruthy();
+    expect(screen.getByText('수아')).toBeTruthy();
+    const input = screen.getByTestId('input-bar-input');
+    expect(input.props.placeholder).toBe('수아에게만 보이는 귓속말…');
+  });
+
+  it('whisper mode: onClearWhisper fires when chip × pressed', () => {
+    const onClearWhisper = jest.fn();
+    render(<InputBar whisperTarget={{ name: '수아' }} onClearWhisper={onClearWhisper} />);
+    fireEvent.press(screen.getByTestId('input-bar-whisper-clear'));
+    expect(onClearWhisper).toHaveBeenCalledTimes(1);
+  });
+
+  it('whisperTarget=null keeps default placeholder (regression)', () => {
+    render(<InputBar />);
+    const input = screen.getByTestId('input-bar-input');
+    expect(input.props.placeholder).toBe('메시지 입력 (@로 귓속말)');
+    expect(screen.queryByTestId('input-bar-whisper-chip')).toBeNull();
+  });
 });
