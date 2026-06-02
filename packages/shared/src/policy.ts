@@ -15,12 +15,12 @@
 
 /** 신고 사유 카테고리 (D10). reports.reason_code CHECK 와 1:1. */
 export const REPORT_CATEGORIES = [
-  { code: 'verbal_abuse', label: '욕설/비방' },
-  { code: 'spam', label: '스팸/광고' },
-  { code: 'fake_profile', label: '허위 프로필 (사진/정보 부정확)' },
-  { code: 'inappropriate_video', label: '부적절한 영상 (음란/혐오/폭력)' },
-  { code: 'harassment', label: '괴롭힘/스토킹' },
-  { code: 'other', label: '기타 (자유 입력 필수)' },
+  { code: 'verbal_abuse', label: '욕설·비방' },
+  { code: 'sexual_content', label: '성적·선정적 콘텐츠' },
+  { code: 'fake_profile', label: '사칭·가짜 프로필' },
+  { code: 'spam', label: '광고·스팸' },
+  { code: 'violence_threat', label: '폭력·위협' },
+  { code: 'other', label: '기타 (자유 입력)' },
 ] as const;
 
 export type ReportCategoryCode = (typeof REPORT_CATEGORIES)[number]['code'];
@@ -36,6 +36,8 @@ export const POLICY = {
     preferredAgeBandYears: 3,
     /** 큐 만료. 초과 시 S09(매칭 실패/만료). */
     queueExpiryHours: 24,
+    /** 방 이탈 후 재매칭 제한. 여성은 결제 없이 자동 면제된다. */
+    rematchCooldownHours: 24,
   },
 
   // ── 팀(묶음) 구성 (D4 · S06) ───────────────────────────────────
@@ -60,6 +62,12 @@ export const POLICY = {
     hardDeleteAfterDays: 30,
     /** 한 사람당 활성 방 1개 원칙(splash 라우팅·busy 판정 근거). */
     maxActiveRoomsPerUser: 1,
+    /**
+     * 마지막 active 멤버 이탈 감지 후 room_ended 콜백 발화까지 대기 ms.
+     * 네트워크 순간 끊김으로 인한 오판 완화용 grace period.
+     * TODO(C-0b §2-1 broadcast 합의 후 제거): 클라 폴백 로직 — broadcast 채택 시 이 값 불필요.
+     */
+    roomEndedGraceMs: 5000,
   },
 
   // ── 자동 퇴장(auto-kick) (D9) ──────────────────────────────────
@@ -91,6 +99,18 @@ export const POLICY = {
     cameraOnlyNoGallery: true,
     /** 계정 삭제 요청 시 전 영상 hard delete 기한. (D8 · GDPR/개보법) */
     purgeOnAccountDeletionHours: 24,
+    /** 업로드 해상도 상한 — 3초 영상에 4K 불필요. (C-1 §3-3) */
+    maxResolution: { w: 1280, h: 720 } as const,
+    /** 업로드 bitrate 상한 kbps — 3초×2Mbps≈750KB. (C-1 §3-3) */
+    maxBitrateKbps: 2000,
+    /** 영상 최대 길이 ms — dei 3초 영상 정체성. (C-1 §3-3) */
+    maxDurationMs: 3000,
+    /** 업로드 파일 크기 상한 bytes — 3MB 초과 시 클라 거부. (C-1 §3-3) */
+    maxFileSizeBytes: 3 * 1024 * 1024,
+    /** 썸네일 jpg 크기 상한 bytes — 셀 표시용 100KB. (C-1 §3-4) */
+    thumbnailMaxSizeBytes: 100 * 1024,
+    /** prefetch 대상 sibling 수 — 직전·직후 각 1개. (C-1 §4-4) */
+    prefetchSiblingCount: 1,
   },
 
   // ── 알림 (D3) ──────────────────────────────────────────────────
@@ -121,8 +141,18 @@ export const POLICY = {
     /** 본인인증 연속 실패 잠금(S03 결정). */
     maxConsecutiveFailures: 5,
     lockoutHours: 24,
+    /** 탈퇴 후 동일 CI 재가입 제한(S20 결정). */
+    rejoinLockDays: 30,
     /** 닉네임 변경 throttle(S04 결정). */
     nicknameChangeThrottleDays: 30,
+  },
+
+  // ── grid 렌더 성능 (C-2) ────────────────────────────────────────
+  gridPerformance: {
+    realtimeDebounceMs: 100,
+    queryStaleTimeMs: 50 * 60 * 1000,
+    prefetchHourRange: 3,
+    appStateStaleAfterMs: 5 * 60 * 1000,
   },
 
   // ── 킬스위치 / 롤아웃 (spec §7) ────────────────────────────────

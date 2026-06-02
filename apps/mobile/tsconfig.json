@@ -19,6 +19,7 @@
     "node_modules",
     "e2e/**",
     "__harness_shims__/**",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "**/__tests__/**"
   ]
 }

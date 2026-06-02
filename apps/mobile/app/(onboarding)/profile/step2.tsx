@@ -1,42 +1,261 @@
-import { View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text } from '@dei/ui';
+import { analytics, logger } from '@dei/shared';
+import {
+  AlertDialog,
+  Banner,
+  BottomActionBar,
+  Button,
+  PhotoUpload,
+  ProgressBar,
+  Spinner,
+  Text,
+  Textarea,
+  TopNav,
+} from '@dei/ui';
 
-/**
- * S04b — 프로필 작성 (2/3) 프로필 사진
- * ==================================================================
- * 담당자: B
- * 화면 목적: 멀티스텝 2단계 — 프로필 사진 1장 필수 + 한 줄 자기소개(선택).
- *           분할 피드 영상이 메인 자기소개라면, 프로필 사진은 멤버 프로필(S14)
- *           진입 시 보이는 카드 표지.
- * 의존 DS 컴포넌트: Text · IconButton(뒤로가기 ‹ 1/3) · ProgressBar(스텝 f2 · 66%)
- *   · PhotoUpload(140x180 빈/촬영 미리보기 · '다시 촬영' 칩) · Button(빈 상태 '📷 지금 촬영' · CTA '다음 3/3')
- *   · Textarea + 0/60 카운트(한 줄 자기소개 선택) · Banner/AlertDialog(가이드 카피 · 권한거부 inline alert · 업로드 실패 alert)
- *   · Spinner(업로드 진행 모달)  [@dei/ui]
- * 의존 데이터: 프로필 사진 업로드(Supabase storage 버킷 — 멤버 프로필 카드 표지) /
- *   한 줄 자기소개 텍스트(profiles 컬럼 · 부적절 필터) / 카메라 권한 상태 /
- *   프로필 step2 저장(사진 URL + bio)
- * 발생 이벤트(PostHog): S2:profile_photo_uploaded (F24 · 프로필 멀티스텝 3단계 · 사진 업로드 트리거)
- * 서버 의존(L1): 사진 storage 업로드 + URL 발급(진행 모달/실패 alert) /
- *   자기소개 부적절 필터(자동) 검사 / S11 카메라 모듈(사진 모드) 연동 — 촬영본 반환
- * 정책 의존(L2): 현장 카메라 촬영만·갤러리 금지(dei 정체성) / 사진 1장 필수·다중 슬롯 제외 /
- *   사진 검수 = 신고 시 사람 검토(등록 자동검수 제외 · PRD §14) /
- *   카메라 권한 거부 = inline alert + 설정 deep link
- * 와이어프레임 참조: all-screens S04b
- *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(PhotoUpload·카메라 연동·자기소개 입력·CTA 동작)은 owner 가 채운다.
- */
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { PROFILE_BIO_MAX_LENGTH } from '@/lib/b-flow';
+import { openSystemSettings, requestPermission } from '@/lib/permissions';
+import { ROUTES } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/auth-provider';
+
+type PickedPhoto = {
+  mimeType: string;
+  uri: string;
+};
+
+function extensionForMimeType(mimeType: string) {
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/webp') return 'webp';
+  return 'jpg';
+}
+
+async function uploadProfilePhoto(userId: string, photo: PickedPhoto) {
+  const response = await fetch(photo.uri);
+  const body = await response.arrayBuffer();
+  const extension = extensionForMimeType(photo.mimeType);
+  const path = `${userId}/profile-${Date.now()}.${extension}`;
+  const { error } = await supabase.storage
+    .from('profile-photos')
+    .upload(path, body, {
+      contentType: photo.mimeType,
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return path;
+}
+
 export default function ProfilePhotoStepScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [bio, setBio] = useState('');
+  const [photo, setPhoto] = useState<PickedPhoto | null>(null);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [cameraPermissionDenied, setCameraPermissionDenied] = useState(false);
+  const [captureFailed, setCaptureFailed] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+
+  const handleCapture = () => {
+    void logger.withErrorCapture(
+      'onboarding.step2.capture',
+      async () => {
+        const permission = await requestPermission('camera');
+        if (permission !== 'granted') {
+          setCameraPermissionDenied(true);
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [7, 9],
+          mediaTypes: ['images'],
+          quality: 0.72,
+        });
+
+        if (result.canceled || result.assets.length === 0) {
+          return;
+        }
+
+        const asset = result.assets[0];
+        setPhoto({
+          mimeType: asset?.mimeType ?? 'image/jpeg',
+          uri: asset?.uri ?? '',
+        });
+        setPhotoUri(asset?.uri ?? null);
+        analytics.capture(ANALYTICS_EVENTS.profile_photo_uploaded, {
+          source: 'camera',
+        });
+      },
+      { tags: { screen: 'onboarding-step2', action: 'capture' } },
+    ).catch((error) => {
+      logger.captureException(error, {
+        tags: { screen: 'onboarding-step2', action: 'capture-catch' },
+      });
+      setCaptureFailed(true);
+    });
+  };
+
+  const handleNext = () => {
+    if (!photo || !photoUri || isSaving) {
+      return;
+    }
+
+    void logger.withErrorCapture(
+      'onboarding.step2.save',
+      async () => {
+        setIsSaving(true);
+
+        if (user) {
+          const photoPath = await uploadProfilePhoto(user.id, photo);
+          const { error } = await supabase
+            .from('profile')
+            .update({ bio: bio.trim() || null, photo_url: photoPath })
+            .eq('user_id', user.id);
+
+          if (error) {
+            throw error;
+          }
+        }
+
+        analytics.capture(ANALYTICS_EVENTS.profile_step_completed, {
+          step: 2,
+        });
+
+        router.push(ROUTES.profileStep3);
+      },
+      { tags: { screen: 'onboarding-step2', action: 'save' } },
+    )
+      .catch((error) => {
+        logger.captureException(error, {
+          tags: { screen: 'onboarding-step2', action: 'save-catch' },
+        });
+        setSaveFailed(true);
+      })
+      .finally(() => setIsSaving(false));
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">프로필 사진 (2/3)</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: B 구현 예정 · all-screens S04b
-        </Text>
-      </View>
+      <TopNav className="border-b-0 bg-bg" onLeftPress={() => router.back()} />
+
+      <ScrollView className="flex-1 bg-bg">
+        <View className="px-[24px] pb-[128px] pt-[18px]">
+          <Text variant="meta" tone="ink-3">
+            프로필 사진 · 2 / 3
+          </Text>
+          <ProgressBar value={2 / 3} className="mt-[10px]" />
+
+          <View className="mt-[30px]">
+            <Text variant="h1" className="text-[25px] leading-[33px]">
+              당신을 보여줄{'\n'}사진을 올려주세요
+            </Text>
+            <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+              본인 얼굴이 보이는 사진 1장
+            </Text>
+          </View>
+
+          <View className="mt-[28px] items-center">
+            <PhotoUpload
+              imageUri={photoUri ?? undefined}
+              state={photoUri ? 'filled' : 'empty'}
+              label="지금 촬영"
+              changeLabel="다시 촬영"
+              onPress={handleCapture}
+              testID="onboarding-photo-upload"
+            />
+            <Text className="mt-[18px] text-center text-[11.5px] leading-[17px] text-ink-3">
+              선정적이거나 타인의 사진은 신고 대상이에요
+            </Text>
+
+            {cameraPermissionDenied ? (
+              <Banner
+                tone="warn"
+                icon="!"
+                title="카메라 권한이 필요해요"
+                cta="설정"
+                onCtaPress={() => {
+                  setCameraPermissionDenied(false);
+                  void openSystemSettings().catch((error) => {
+                    logger.captureException(error, {
+                      tags: { screen: 'onboarding-step2', action: 'open-camera-settings' },
+                    });
+                  });
+                }}
+                className="mt-[18px] w-full"
+              >
+                프로필 사진은 지금 촬영한 사진만 사용할 수 있어요. 설정에서 카메라 권한을 켜주세요.
+              </Banner>
+            ) : null}
+          </View>
+
+          <View className="mt-[30px]">
+            <Text variant="eyebrow" tone="ink-3">
+              한 줄 자기소개 <Text tone="ink-4">선택</Text>
+            </Text>
+            <Textarea
+              value={bio}
+              onChangeText={setBio}
+              maxLength={PROFILE_BIO_MAX_LENGTH}
+              showCount
+              placeholder="자유롭게 적어주세요 (예: 카페 투어 좋아하는 사람 ☕)"
+              className="mt-[8px]"
+            />
+          </View>
+        </View>
+      </ScrollView>
+
+      <BottomActionBar fixed>
+        <Button
+          fullWidth
+          disabled={!photoUri || isSaving}
+          onPress={handleNext}
+          testID="onboarding-step2-next"
+        >
+          {isSaving ? '저장 중' : '다음 (3/3)'}
+        </Button>
+      </BottomActionBar>
+
+      <AlertDialog
+        visible={captureFailed}
+        tone="warn"
+        size="mini"
+        severityTopBorder
+        eyebrow="CAMERA"
+        title="사진을 불러오지 못했어요"
+        description="카메라 권한과 기기 상태를 확인한 뒤 다시 시도해주세요."
+        actions={[{ label: '확인', variant: 'ink', onPress: () => setCaptureFailed(false) }]}
+        onDismiss={() => setCaptureFailed(false)}
+      />
+
+      <AlertDialog
+        visible={saveFailed}
+        tone="warn"
+        icon="!"
+        title="프로필을 저장하지 못했어요"
+        description="네트워크 상태를 확인한 뒤 다시 시도해주세요."
+        actions={[{ label: '확인', variant: 'ink', onPress: () => setSaveFailed(false) }]}
+        onDismiss={() => setSaveFailed(false)}
+      />
+
+      {isSaving ? (
+        <View className="absolute inset-0 items-center justify-center bg-bg/80 px-[32px]">
+          <Spinner size={80} accessibilityLabel="프로필 사진 업로드 중" />
+          <Text variant="body" tone="ink-3" className="mt-[18px] text-center">
+            프로필 사진을 올리고 있어요
+          </Text>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

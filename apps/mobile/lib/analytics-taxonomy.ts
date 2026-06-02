@@ -30,6 +30,7 @@ export const ANALYTICS_EVENTS = {
   match_cancel_confirm_shown: 'S3:match_cancel_confirm_shown',
   match_cancelled_by_user: 'S3:match_cancelled_by_user',
   rematch_restriction_evaluated: 'L2:rematch_restriction_evaluated',
+  payment_failure_alert_shown: 'S18:payment_failure_alert_shown',
 
   // 방·블러게이트
   room_preview_entered_blurred: 'S4:room_preview_entered_blurred',
@@ -43,14 +44,26 @@ export const ANALYTICS_EVENTS = {
   leave_cancelled: 'S5:leave_cancelled',
   room_overflow_menu_opened: 'S7:profile_overflow_menu_opened',
 
+  // grid 성능 모니터링 (C-2 §6)
+  room_grid_first_render: 'S5:room_grid_first_render',
+  room_grid_realtime_lag: 'S5:room_grid_realtime_lag',
+  room_timestrip_swipe: 'S5:room_timestrip_swipe',
+
   // 영상 촬영
   video_capture_entered: 'S11:video_capture_entered',
   capture_failure_alert_shown: 'S12:capture_failure_alert_shown',
+
+  // 영상 서빙 (C-1 §5 — PostHog 모니터링)
+  video_load_started: 'S13:video_load_started',
+  video_first_frame_rendered: 'S13:video_first_frame_rendered',
+  video_stalled: 'S13:video_stalled',
+  video_error: 'S13:video_error',
 
   // 프로필 허브·설정·신고·고객센터
   profile_hub_opened: 'S19:profile_hub_opened',
   nickname_change_throttled_30d: 'S19:nickname_change_throttled_30d',
   withdraw_screen_entered: 'S20:withdraw_screen_entered',
+  withdraw_confirmed: 'S20:withdraw_confirmed',
   report_category_entered: 'S21:report_category_entered',
   report_submitted: 'S21:report_submitted',
   notification_settings_opened: 'S22:notification_settings_opened',

@@ -1,39 +1,235 @@
-import { View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import * as FileSystem from 'expo-file-system/legacy';
+import { Volume2, VolumeX } from 'lucide-react-native';
 
-import { Text } from '@dei/ui';
+import {
+  AlertDialog,
+  BottomActionBar,
+  Button,
+  FullscreenVideo,
+  ProgressBar,
+  Spinner,
+  Text,
+} from '@dei/ui';
+import { analytics, logger } from '@dei/shared';
 
-/**
- * S11b — 촬영 미리보기
- * ==================================================================
- * 담당자: C
- * 화면 목적: 방금 촬영한 3초 영상을 업로드 전 확인하는 단계. 잘못 올리기
- *           방지 + 재촬영 1번 더 기회. BeReal/Locket 패턴.
- * 의존 DS 컴포넌트: Text · FullscreenVideo(자동 루프 영상 미리보기) ·
- *   IconButton(좌상단 원형 닫기 ×) · Badge(녹화 길이 배지 '2.3초', 상단중앙) ·
- *   Button(secondary '다시 찍기' / primary '올리기' 비대칭 2-CTA) ·
- *   BottomActionBar(나란히 2-CTA 바) · AlertDialog(영상 폐기 confirm) ·
- *   ProgressBar(업로드 진행) · Spinner(업로드 오버레이)  [@dei/ui]
- * 의존 데이터: 없음 (촬영 직후 로컬 영상 핸들 — 스키마 테이블 의존 없음)
- * 발생 이벤트(PostHog): 없음
- * 서버 의존(L1): 영상 업로드 (올리기 CTA → 업로드, 실패 시 S12)
- * 정책 의존(L2): 편집 기능 MVP 제외(자르기·필터·텍스트 X — 날것 정신) /
- *   닫기 시 영상 폐기 confirm 강제 / 업로드 진행 중 UI disable
- * 와이어프레임 참조: all-screens S11b
- *
- * ⚠️ 핸드오프 스캐폴딩 — 최소 렌더만. raw 스타일 0(@dei/ui + NativeWind 토큰만).
- *    실제 구현(자동 루프 영상·길이 배지·2-CTA·폐기 confirm·업로드 progress)은
- *    owner 가 채운다.
- */
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { uploadClip } from '@/lib/video';
+
 export default function UploadPreviewScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { roomId, localUri, durationMs: durationMsParam, capturedAtIso } = useLocalSearchParams<{
+    roomId: string;
+    localUri: string;
+    durationMs: string;
+    capturedAtIso?: string;
+  }>();
+
+  const durationMs = Number(durationMsParam);
+  const safeDurationMs = Number.isNaN(durationMs) ? 0 : durationMs;
+
+  const capturedAtLabel = capturedAtIso
+    ? (() => {
+        const d = new Date(capturedAtIso);
+        return Number.isNaN(d.getTime())
+          ? null
+          : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      })()
+    : null;
+
+  const [discardConfirmVisible, setDiscardConfirmVisible] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [muted, setMuted] = useState(false);
+
+  const player = useVideoPlayer(
+    localUri ? { uri: localUri } : null,
+    (p) => {
+      p.loop = true;
+      p.muted = false;
+      p.play();
+    },
+  );
+
+  useEffect(() => {
+    player.muted = muted;
+  }, [muted, player]);
+
+  const handleClose = useCallback(() => {
+    if (uploading) return;
+    setDiscardConfirmVisible(true);
+  }, [uploading]);
+
+  const handleDiscardConfirm = useCallback(async () => {
+    setDiscardConfirmVisible(false);
+    if (localUri) {
+      try {
+        await FileSystem.deleteAsync(localUri, { idempotent: true });
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { feature: 'upload-preview', step: 'discard-delete' },
+          extra: { localUri },
+        });
+      }
+    }
+    router.back();
+  }, [localUri, router]);
+
+  const handleDiscardCancel = useCallback(() => {
+    setDiscardConfirmVisible(false);
+  }, []);
+
+  const handleRetake = useCallback(async () => {
+    if (uploading) return;
+    if (localUri) {
+      try {
+        await FileSystem.deleteAsync(localUri, { idempotent: true });
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { feature: 'upload-preview', step: 'retake-delete' },
+          extra: { localUri },
+        });
+      }
+    }
+    router.back();
+  }, [uploading, localUri, router]);
+
+  const handleUpload = useCallback(async () => {
+    if (uploading || !roomId || !localUri) return;
+
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
+      await uploadClip(
+        { roomId, localUri, durationMs: safeDurationMs, capturedAtIso, muted },
+        { onProgress: setUploadProgress },
+      );
+      router.replace({
+        pathname: '/(app)/room/[roomId]',
+        params: { roomId },
+      });
+    } catch (err) {
+      logger.captureException(err, {
+        tags: { feature: 'upload-preview', step: 'upload-clip' },
+        extra: { roomId, localUri },
+      });
+      analytics.capture(ANALYTICS_EVENTS.capture_failure_alert_shown, {
+        roomId,
+        reason: 'upload_failed',
+      });
+      router.push({
+        pathname: '/(app)/room/[roomId]/capture-failed',
+        params: { roomId, reason: 'upload_failed' },
+      });
+    } finally {
+      setUploading(false);
+    }
+  }, [uploading, roomId, localUri, safeDurationMs, capturedAtIso, muted, router]);
+
   return (
-    <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center gap-3 px-6">
-        <Text variant="h1">촬영 미리보기</Text>
-        <Text variant="caption" className="text-center">
-          핸드오프: C 구현 예정 · all-screens S11b
-        </Text>
+    <View className="flex-1 bg-black">
+      <FullscreenVideo
+        mode="preview"
+        onClose={uploading ? undefined : handleClose}
+      >
+        {localUri ? (
+          <VideoView
+            testID="preview-video"
+            player={player}
+            contentFit="contain"
+            nativeControls={false}
+            style={StyleSheet.absoluteFillObject}
+          />
+        ) : null}
+      </FullscreenVideo>
+
+      <Pressable
+        testID="mute-toggle"
+        accessibilityRole="button"
+        accessibilityLabel={muted ? '음소거 해제' : '음소거'}
+        onPress={() => setMuted((m) => !m)}
+        disabled={uploading}
+        hitSlop={16}
+        className={`absolute right-5 w-11 h-11 rounded-full bg-black/55 items-center justify-center z-30 ${uploading ? 'opacity-30' : ''}`}
+        style={[{ top: insets.top + 12 }]}
+      >
+        {muted ? <VolumeX color="white" size={22} /> : <Volume2 color="white" size={22} />}
+      </Pressable>
+
+      {capturedAtLabel ? (
+        <View
+          pointerEvents="none"
+          className="absolute inset-0 items-center justify-center"
+        >
+          <Text className="text-white text-[56px] font-extrabold tracking-[2px] opacity-75">
+            {capturedAtLabel}
+          </Text>
+        </View>
+      ) : null}
+
+      <View className="absolute bottom-0 left-0 right-0">
+        {uploading ? (
+          <ProgressBar
+            value={uploadProgress}
+            height={4}
+            className="bg-white/20"
+            fillClassName="bg-white"
+          />
+        ) : null}
+        <BottomActionBar layout="row">
+          <Button
+            testID="retake-button"
+            variant="secondary"
+            fullWidth
+            disabled={uploading}
+            onPress={() => { void handleRetake(); }}
+          >
+            다시 찍기
+          </Button>
+          <Button
+            testID="upload-button"
+            variant="accent"
+            fullWidth
+            disabled={uploading}
+            onPress={() => { void handleUpload(); }}
+          >
+            올리기
+          </Button>
+        </BottomActionBar>
       </View>
-    </SafeAreaView>
+
+      {uploading ? <Spinner variant="overlay" size={36} /> : null}
+
+      <AlertDialog
+        testID="discard-dialog"
+        visible={discardConfirmVisible}
+        tone="warn"
+        size="lg"
+        icon="⚠️"
+        title="영상이 사라져요. 정말 닫을까요?"
+        description="닫으면 방금 촬영한 영상이 삭제돼요."
+        onDismiss={handleDiscardCancel}
+        actions={[
+          {
+            label: '취소',
+            variant: 'secondary',
+            testID: 'discard-cancel-button',
+            onPress: handleDiscardCancel,
+          },
+          {
+            label: '네, 삭제할게요',
+            variant: 'ink',
+            testID: 'discard-confirm-button',
+            onPress: () => { void handleDiscardConfirm(); },
+          },
+        ]}
+      />
+    </View>
   );
 }

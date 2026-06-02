@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       audit: {
@@ -71,9 +46,18 @@ export type Database = {
           ci_hash: string | null
           created_at: string
           di_hash: string | null
+          failed_at: string | null
+          failure_code: string | null
+          failure_count: number
+          failure_message: string | null
           id: string
+          identity_verification_tx_id: string | null
+          lock_until: string | null
           provider: string
+          provider_metadata: Json
+          provider_verification_id: string | null
           status: string
+          updated_at: string
           user_id: string
           verified_at: string | null
         }
@@ -81,9 +65,18 @@ export type Database = {
           ci_hash?: string | null
           created_at?: string
           di_hash?: string | null
+          failed_at?: string | null
+          failure_code?: string | null
+          failure_count?: number
+          failure_message?: string | null
           id?: string
+          identity_verification_tx_id?: string | null
+          lock_until?: string | null
           provider?: string
+          provider_metadata?: Json
+          provider_verification_id?: string | null
           status?: string
+          updated_at?: string
           user_id: string
           verified_at?: string | null
         }
@@ -91,9 +84,18 @@ export type Database = {
           ci_hash?: string | null
           created_at?: string
           di_hash?: string | null
+          failed_at?: string | null
+          failure_code?: string | null
+          failure_count?: number
+          failure_message?: string | null
           id?: string
+          identity_verification_tx_id?: string | null
+          lock_until?: string | null
           provider?: string
+          provider_metadata?: Json
+          provider_verification_id?: string | null
           status?: string
+          updated_at?: string
           user_id?: string
           verified_at?: string | null
         }
@@ -182,6 +184,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      identity_rejoin_lock: {
+        Row: {
+          ci_hash: string
+          created_at: string
+          id: string
+          locked_until: string
+          reason: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          ci_hash: string
+          created_at?: string
+          id?: string
+          locked_until: string
+          reason?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          ci_hash?: string
+          created_at?: string
+          id?: string
+          locked_until?: string
+          reason?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       match_member: {
         Row: {
@@ -410,14 +442,18 @@ export type Database = {
       profile: {
         Row: {
           bio: string | null
+          birth_date: string | null
           birth_year: number | null
           created_at: string
           gender: string | null
           is_adult: boolean
           is_in_active_room: boolean
           last_room_leave_at: string | null
+          mbti: string | null
           nickname: string | null
+          nickname_changed_at: string | null
           nickname_lower: string | null
+          onboarding_completed_at: string | null
           photo_url: string | null
           quiet_hours_end: number
           quiet_hours_start: number
@@ -427,14 +463,18 @@ export type Database = {
         }
         Insert: {
           bio?: string | null
+          birth_date?: string | null
           birth_year?: number | null
           created_at?: string
           gender?: string | null
           is_adult?: boolean
           is_in_active_room?: boolean
           last_room_leave_at?: string | null
+          mbti?: string | null
           nickname?: string | null
+          nickname_changed_at?: string | null
           nickname_lower?: string | null
+          onboarding_completed_at?: string | null
           photo_url?: string | null
           quiet_hours_end?: number
           quiet_hours_start?: number
@@ -444,14 +484,18 @@ export type Database = {
         }
         Update: {
           bio?: string | null
+          birth_date?: string | null
           birth_year?: number | null
           created_at?: string
           gender?: string | null
           is_adult?: boolean
           is_in_active_room?: boolean
           last_room_leave_at?: string | null
+          mbti?: string | null
           nickname?: string | null
+          nickname_changed_at?: string | null
           nickname_lower?: string | null
+          onboarding_completed_at?: string | null
           photo_url?: string | null
           quiet_hours_end?: number
           quiet_hours_start?: number
@@ -661,6 +705,36 @@ export type Database = {
           },
         ]
       }
+      support_ticket: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          message: string
+          reply_email: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          message: string
+          reply_email?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          message?: string
+          reply_email?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       team: {
         Row: {
           created_at: string
@@ -764,12 +838,52 @@ export type Database = {
           },
         ]
       }
+      terms_agreement: {
+        Row: {
+          agreed_at: string
+          created_at: string
+          id: string
+          location_collection: boolean
+          marketing_opt_in: boolean
+          privacy_policy: boolean
+          service_terms: boolean
+          terms_version: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agreed_at?: string
+          created_at?: string
+          id?: string
+          location_collection?: boolean
+          marketing_opt_in?: boolean
+          privacy_policy?: boolean
+          service_terms?: boolean
+          terms_version: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agreed_at?: string
+          created_at?: string
+          id?: string
+          location_collection?: boolean
+          marketing_opt_in?: boolean
+          privacy_policy?: boolean
+          service_terms?: boolean
+          terms_version?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       video: {
         Row: {
           created_at: string
           duration_ms: number | null
           hour_slot: number | null
           id: string
+          muted: boolean
           room_id: string
           status: string
           storage_path: string | null
@@ -781,6 +895,7 @@ export type Database = {
           duration_ms?: number | null
           hour_slot?: number | null
           id?: string
+          muted?: boolean
           room_id: string
           status?: string
           storage_path?: string | null
@@ -792,6 +907,7 @@ export type Database = {
           duration_ms?: number | null
           hour_slot?: number | null
           id?: string
+          muted?: boolean
           room_id?: string
           status?: string
           storage_path?: string | null
@@ -973,6 +1089,30 @@ export type Database = {
           status: string
         }[]
       }
+      send_room_message: {
+        Args: {
+          p_body: string
+          p_client_msg_id?: string
+          p_room_id: string
+          p_whisper_to_user_id?: string
+        }
+        Returns: {
+          body: string
+          client_msg_id: string | null
+          created_at: string
+          id: string
+          room_id: string
+          status: string
+          user_id: string
+          whisper_to_user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "message"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       account_state: "active" | "suspended" | "banned" | "deleted"
@@ -1137,9 +1277,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       account_state: ["active", "suspended", "banned", "deleted"],

@@ -47,11 +47,28 @@ export interface BottomSheetProps extends Omit<ViewProps, 'children'> {
   closeLabel?: string;
 }
 
-// heightPct 는 임의 비율 → NativeWind arbitrary 높이로 매핑.
+const HEIGHT_CLASS_BY_PCT = {
+  42: 'h-[42%]',
+  48: 'h-[48%]',
+  50: 'h-[50%]',
+  56: 'h-[56%]',
+  62: 'h-[62%]',
+  72: 'h-[72%]',
+  78: 'h-[78%]',
+} as const;
+
+type BottomSheetHeightPct = keyof typeof HEIGHT_CLASS_BY_PCT;
+
+function isSupportedHeightPct(pct: number): pct is BottomSheetHeightPct {
+  return pct in HEIGHT_CLASS_BY_PCT;
+}
+
+// NativeWind 는 `h-[${pct}%]` 템플릿 리터럴을 스캔하지 못한다.
+// 시트가 auto height 로 접히면 flex-1 ScrollView 본문이 빈 창처럼 보일 수 있어,
+// 앱에서 쓰는 높이를 정적 클래스 문자열로 보관한다.
 function heightClass(pct: number): string {
-  // 0~100 클램프(잘못된 입력 방어).
   const clamped = Math.max(0, Math.min(100, Math.round(pct)));
-  return `h-[${clamped}%]`;
+  return isSupportedHeightPct(clamped) ? HEIGHT_CLASS_BY_PCT[clamped] : HEIGHT_CLASS_BY_PCT[78];
 }
 
 export const BottomSheet = forwardRef<View, BottomSheetProps>(function BottomSheet(
