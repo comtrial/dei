@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 혼자/친구 참여가 섞인 큐에서 반대 성별 묶음을 **최대한 빠르게** 매칭(group_match + room 생성)하는 엔진을, **앱 배포 의존 없이 Supabase 측(마이그레이션 RPC + pg_cron + Edge)에 완전히** 구현한다.
+**Goal:** 혼자/친구 참여가 섞인 큐에서 반대 성별 묶음을 **최대한 빠르게** 매칭(group_match + room 생성)하는 엔진을, **앱 배포 의존 없이 Supabase 측(마이그레이션 RPC + Edge)에 완전히** 구현한다.
 
-**Architecture:** 모든 매칭 로직은 **Postgres SECURITY DEFINER RPC**(try_match / build_match_plan 내장 / match_and_create / match_sweep / expire)에 있고, **pg_cron**이 sweep·expire를 주기 실행, 기존 **Edge `enqueue-match-queue`**가 큐 적재 직후 `try_match`를 호출한다. 앱은 `enqueue-match-queue` 호출 + group_match/room realtime 구독만 — **매칭 규칙·임계값을 바꿔도 앱 재빌드 불필요**(전부 DB/Edge 서버 측). Tier 완화(정확일치→비대칭→solo merge)로 기아 0.
+**Architecture:** 모든 매칭 로직은 **Postgres SECURITY DEFINER RPC**(`try_match` / `match_and_create` / `_try_solo_merge` / `admin_force_match`)에 있고, 기존 **Edge `enqueue-match-queue`**가 큐 적재 직후 `try_match`를 호출한다(**순수 이벤트 기반 — 스케줄러/cron 없음**). 앱은 `enqueue-match-queue` 호출 + group_match/room realtime 구독만 — **매칭 규칙·임계값을 바꿔도 앱 재빌드 불필요**(전부 DB/Edge 서버 측). Tier 완화(정확일치→비대칭→solo merge)로 기아 0, 만료는 lazy(후보쿼리 필터).
 
-**Tech Stack:** Supabase Postgres (PL/pgSQL RPC, pg_cron, advisory lock, FOR UPDATE SKIP LOCKED) / Supabase Edge Functions (Deno) / Vitest 통합 테스트(실 Supabase) / `@dei/shared` POLICY.
+**Tech Stack:** Supabase Postgres (PL/pgSQL RPC, advisory lock, FOR UPDATE SKIP LOCKED) / Supabase Edge Functions (Deno) / Vitest 통합 테스트(실 Supabase) / `@dei/shared` POLICY. **(cron/pg_cron 미사용)**
 
 > 명세 SSOT: `docs/matching-spec/ALGORITHM-SPEC.md` (§번호 참조). 설계: `docs/superpowers/specs/2026-06-02-matching-algorithm-design.md`.
 > 확정 결정: size 정확일치 우선→안되면 합산(5:3 상한) / 혼자 동적 merge / 3:3도 즉시 / team 최대 5 / 빠른 매칭 최우선 / **앱 배포 의존 0**.
@@ -24,12 +24,15 @@
 ## 파일 구조 (생성/수정 맵)
 
 **마이그레이션 (전부 신규, 순서대로):**
-- Create `supabase/migrations/<ts>_matching_schema.sql` — team CHECK 1..5, team.kind, match_queue.required_gender/last_tried_at, match_config 테이블
-- Create `supabase/migrations/<ts>_matching_rpc.sql` — `_match_boost`, `_tier_of`, `match_and_create`, `try_match`, `match_sweep`, `expire_match_queue`, `admin_force_match`
-- Create `supabase/migrations/<ts>_matching_cron.sql` — pg_cron 확장 + sweep/expire 스케줄
+- Create `supabase/migrations/<ts>_matching_schema.sql` — team CHECK 1..5, team.kind, match_queue.required_gender, match_config 테이블 (last_tried_at·sweep 없음 — 이벤트 기반)
+- Create `supabase/migrations/<ts>_matching_helpers.sql` — `_match_boost`, `_tier_of`
+- Create `supabase/migrations/<ts>_match_and_create.sql` — `match_and_create`, `_ensure_side_team`
+- Create `supabase/migrations/<ts>_try_match.sql` — `try_match`, `_try_solo_merge`, `admin_force_match`
+
+> **cron/sweep 마이그레이션 없음.** 검토 결과(명세 §8) 즉시 경로가 모든 정상 케이스를 잡아 sweep 불필요. 만료는 lazy(후보쿼리 `expires_at>now()` 필터). pg_cron 미사용.
 
 **Edge (수정):**
-- Modify `supabase/functions/enqueue-match-queue/index.ts` — 큐 적재 직후 `try_match` 호출 (config 플래그 게이트)
+- Modify `supabase/functions/enqueue-match-queue/index.ts` — 큐 적재 직후 `try_match` 호출 (config 게이트) + 호출 실패 시 1회 재시도(sweep 대체)
 
 **테스트 (통합, 실 Supabase):**
 - Create `apps/mobile/__tests__/integration/matching-rpc.test.ts` — E1~E10 시나리오 (setup.ts 헬퍼 재사용)
@@ -46,7 +49,7 @@
 **Files:**
 - Create: `supabase/migrations/20260602000010_matching_schema.sql`
 
-**DDL 체크리스트:** team.target_size CHECK 1..4→1..5(무손실) / team.kind NOT_NULL default'user' CHECK / match_queue.required_gender NULL+CHECK / match_queue.last_tried_at NULL / match_config PK=key. FK 변경 없음. **PK 설정 확인: Y (team.id / match_queue.id 불변, match_config.key 신규 PK).**
+**DDL 체크리스트:** team.target_size CHECK 1..4→1..5(무손실) / team.kind NOT_NULL default'user' CHECK / match_queue.required_gender NULL+CHECK / match_config PK=key. FK 변경 없음. **PK 설정 확인: Y (team.id / match_queue.id 불변, match_config.key 신규 PK).**
 
 - [ ] **Step 1: Write the migration**
 
@@ -65,10 +68,9 @@ alter table public.team add column if not exists kind text not null default 'use
   check (kind in ('user','synthetic'));
 create index if not exists team_synthetic_idx on public.team(kind) where kind = 'synthetic';
 
--- (c) 매칭 엔진 큐 컬럼
+-- (c) 매칭 엔진 큐 컬럼 (required_gender 만. last_tried_at 불필요 — sweep 없음, 이벤트 기반)
 alter table public.match_queue add column if not exists required_gender text
   check (required_gender in ('male','female'));
-alter table public.match_queue add column if not exists last_tried_at timestamptz;
 
 -- (d) 런타임 설정 테이블 (앱 재빌드 없이 매칭 동작 토글)
 create table if not exists public.match_config (
@@ -204,7 +206,7 @@ git commit -m "feat(db): 매칭 헬퍼 _tier_of/_match_boost (config 기반)"
 - Create: `supabase/migrations/20260602000030_match_and_create.sql`
 - Modify (append): `apps/mobile/__tests__/integration/matching-rpc.test.ts`
 
-> 명세 §7. 입력 = 양측 멤버 user_id 배열 + 각 side gender. solo 여럿이면 synthetic team 생성. **service_role 로 호출 가능**(admin_force_match·sweep 가 사용). canonical (team_a<team_b).
+> 명세 §7. 입력 = 양측 멤버 user_id 배열 + 각 side gender. solo 여럿이면 synthetic team 생성. **service_role 로 호출 가능**(admin_force_match 가 사용). canonical (team_a<team_b).
 
 - [ ] **Step 1: Write the failing test (append)**
 
@@ -583,38 +585,38 @@ git commit -m "test(integration): solo merge 3:3 + over-capacity 거부 시나�
 
 ---
 
-## Task 6: `match_sweep` + `expire_match_queue` + pg_cron
+## Task 6: lazy expire 헬퍼 + `admin_force_match` (cron 없음)
 
 **Files:**
-- Create: `supabase/migrations/20260602000050_match_sweep.sql`
-- Create: `supabase/migrations/20260602000060_matching_cron.sql`
+- Create: `supabase/migrations/20260602000050_matching_ops.sql`
 - Modify (append): `apps/mobile/__tests__/integration/matching-rpc.test.ts`
 
-> 명세 §8. sweep = waiting 잔여를 주기 회수. pg_cron 으로 Supabase 내부 스케줄 — **앱·외부 의존 0.**
+> **sweep cron 없음 — 순수 이벤트 기반(명세 §8).** 매칭은 enqueue 트리거(try_match)가 전담. 여기선 운영용 백도어 `admin_force_match`(Phase 0 수동 편성)와 lazy expire 헬퍼만 둔다. pg_cron 미사용.
 
 - [ ] **Step 1: Write the failing test (append)**
 
 ```ts
-  it('match_sweep: 동시 도착해 즉시경로가 놓친 양측 대기 → sweep 가 매칭', async () => {
-    // 양측 팀을 try_match 호출 없이 waiting 으로만 넣고 sweep 호출
+  it('admin_force_match: 운영진이 두 팀 직접 매칭 (Tier 게이트 우회)', async () => {
     const ids: string[] = [];
-    async function mkTeamQueueNoTrigger(prefix: string, gender: 'male'|'female') {
+    async function mkTeam(prefix: string, gender: 'male'|'female') {
       const { data } = await admin.auth.admin.createUser({ email: `e2e-${prefix}@example.test`, password: 'pw-1234', email_confirm: true });
       ids.push(data!.user!.id);
       await admin.from('profile').update({ gender, nickname: prefix, photo_url: 'x', is_adult: true, onboarding_completed_at: new Date().toISOString() }).eq('user_id', data!.user!.id);
       const { data: team } = await admin.from('team').insert({ owner_user_id: data!.user!.id, gender, target_size: 1, status: 'ready', kind: 'user' }).select().single();
       await admin.from('team_member').insert({ team_id: team!.id, user_id: data!.user!.id, role: 'owner' });
-      await admin.from('match_queue').insert({ team_id: team!.id, gender, required_gender: gender === 'male' ? 'female' : 'male', desired_size: 1, status: 'waiting' });
+      return team!.id;
     }
-    await mkTeamQueueNoTrigger('swm', 'male');
-    await mkTeamQueueNoTrigger('swf', 'female');
+    const tM = await mkTeam('afm-m', 'male');
+    const tF = await mkTeam('afm-f', 'female');
 
-    const { data: matched } = await admin.rpc('match_sweep');
-    expect(matched).toBeGreaterThanOrEqual(1);
+    const { data: gmId, error } = await admin.rpc('admin_force_match', { p_team_a: tM, p_team_b: tF });
+    expect(error).toBeNull();
+    expect(gmId).toBeTruthy();
+    const { data: gm } = await admin.from('group_match').select('room_id').eq('id', gmId).single();
+    const { count } = await admin.from('room_member').select('*', { count: 'exact', head: true }).eq('room_id', gm!.room_id);
+    expect(count).toBe(2);
 
-    // cleanup: 생성된 room 들 정리
-    const { data: rooms } = await admin.from('room_member').select('room_id').in('user_id', ids);
-    for (const r of rooms ?? []) await admin.from('room').delete().eq('id', r.room_id);
+    await admin.from('room').delete().eq('id', gm!.room_id);
     for (const id of ids) await admin.auth.admin.deleteUser(id);
   });
 ```
@@ -622,71 +624,59 @@ git commit -m "test(integration): solo merge 3:3 + over-capacity 거부 시나�
 - [ ] **Step 2: Run to verify fail**
 
 Run: `RUN_INTEGRATION=1 pnpm -F mobile test:integration matching-rpc`
-Expected: FAIL — `match_sweep` does not exist.
+Expected: FAIL — `admin_force_match` does not exist.
 
-- [ ] **Step 3: Write sweep + expire**
+- [ ] **Step 3: Write ops functions (lazy expire + admin force)**
 
 ```sql
--- 20260602000050_match_sweep.sql
-create or replace function public.match_sweep()
-returns int language plpgsql security definer set search_path = public as $$
-declare e record; v_matched int := 0; v_res uuid;
-begin
-  for e in select id from public.match_queue
-             where status='waiting'
-               and (last_tried_at is null or last_tried_at < now() - interval '10 seconds')
-             order by public._match_boost(enqueued_at) asc
-             limit 200 for update skip locked loop
-    update public.match_queue set last_tried_at=now() where id=e.id;
-    v_res := public.try_match(e.id);
-    if v_res is not null then v_matched := v_matched + 1; end if;
-  end loop;
-  return v_matched;
-end $$;
+-- 20260602000050_matching_ops.sql
+-- cron 없음. 운영 백도어 + lazy expire 헬퍼만.
 
-create or replace function public.expire_match_queue()
+-- 운영진 수동 편성 (Phase 0). 두 팀의 멤버를 모아 match_and_create 직접 호출. Tier/큐 게이트 우회.
+create or replace function public.admin_force_match(p_team_a uuid, p_team_b uuid)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_ga text; v_gb text; v_a_ids uuid[]; v_b_ids uuid[]; v_gm uuid;
+begin
+  select gender into v_ga from public.team where id=p_team_a;
+  select gender into v_gb from public.team where id=p_team_b;
+  select array_agg(user_id) into v_a_ids from public.team_member where team_id=p_team_a;
+  select array_agg(user_id) into v_b_ids from public.team_member where team_id=p_team_b;
+  v_gm := public.match_and_create(v_a_ids, v_ga, v_b_ids, v_gb);
+  -- 해당 팀의 waiting 큐가 있으면 matched 로
+  update public.match_queue set status='matched', matched_at=now()
+    where team_id in (p_team_a, p_team_b) and status='waiting';
+  return v_gm;
+end $$;
+revoke all on function public.admin_force_match(uuid,uuid) from public, anon, authenticated;
+grant execute on function public.admin_force_match(uuid,uuid) to service_role;
+
+-- lazy expire: 호출 시점에 만료된 '내' 큐만 expired 로 (전역 cron 대체). 클라가 큐 화면 조회 시 호출.
+create or replace function public.expire_my_stale_queue()
 returns int language plpgsql security definer set search_path = public as $$
 declare v_cnt int;
 begin
   update public.match_queue set status='expired'
-    where status='waiting' and expires_at is not null and expires_at < now();
+    where status='waiting' and expires_at is not null and expires_at < now()
+      and team_id in (select team_id from public.team_member where user_id = auth.uid());
   get diagnostics v_cnt = row_count;
-  update public.team set status='forming'
-    where status='ready' and id in (select team_id from public.match_queue where status='expired');
   return v_cnt;
 end $$;
-
-revoke all on function public.match_sweep() from public, anon;
-revoke all on function public.expire_match_queue() from public, anon;
-grant execute on function public.match_sweep() to service_role;
-grant execute on function public.expire_match_queue() to service_role;
+revoke all on function public.expire_my_stale_queue() from public, anon;
+grant execute on function public.expire_my_stale_queue() to authenticated;
 ```
 
-- [ ] **Step 4: Write pg_cron migration**
+> 만료는 매칭에 무영향(try_match 후보쿼리가 `expires_at>now()` 로 이미 제외). `expire_my_stale_queue` 는 화면 표시(S09)용 — 클라가 큐 화면 열 때 자기 큐만 정리. 전역 주기 잡 불필요.
 
-```sql
--- 20260602000060_matching_cron.sql
--- Supabase 내부 스케줄러. 앱/외부 cron 의존 0. (Supabase 는 pg_cron 지원)
-create extension if not exists pg_cron with schema extensions;
-
--- sweep: 45초마다 (pg_cron 최소단위가 1분이므로, 1분 주기 + 내부에서 충분). 명세 SWEEP_INTERVAL_SEC.
-select cron.schedule('match-sweep', '* * * * *', $$ select public.match_sweep(); $$);
--- expire: 5분마다
-select cron.schedule('match-expire', '*/5 * * * *', $$ select public.expire_match_queue(); $$);
-```
-
-> 주: pg_cron 최소 주기가 1분이라 sweep 는 1분 주기. 더 빠른 회수가 필요하면 즉시경로(try_match)가 대부분 흡수하므로 1분 sweep 로 충분. (초단위가 꼭 필요하면 함수 내 loop 또는 Supabase scheduled Edge 검토 — 후속.)
-
-- [ ] **Step 5: Apply + run test**
+- [ ] **Step 4: Apply + run test**
 
 Run: `pnpm db:reset && RUN_INTEGRATION=1 pnpm -F mobile test:integration matching-rpc`
-Expected: PASS (sweep 매칭). pg_cron 등록 확인: `select jobname from cron.job;` → match-sweep, match-expire.
+Expected: PASS (admin_force_match 2인 방).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260602000050_match_sweep.sql supabase/migrations/20260602000060_matching_cron.sql apps/mobile/__tests__/integration/matching-rpc.test.ts
-git commit -m "feat(db): match_sweep/expire RPC + pg_cron 스케줄 (Supabase 내부, 앱 비의존)"
+git add supabase/migrations/20260602000050_matching_ops.sql apps/mobile/__tests__/integration/matching-rpc.test.ts
+git commit -m "feat(db): admin_force_match 백도어 + lazy expire (cron 없음, 이벤트 기반)"
 ```
 
 ---
@@ -732,7 +722,7 @@ git commit -m "feat(db): match_sweep/expire RPC + pg_cron 스케줄 (Supabase �
     return jsonResponse({ matched: false, status: 'queued', queueId: insertedQueue.id });
 ```
 
-> `supabase`(service-role admin)로 try_match 호출 — sweep 와 동일 경로. (RPC는 security definer라 service_role OK.) 기존 enqueue의 team 생성·게이트 로직은 그대로 둔다. `targetSize`/`teamId`는 기존 코드의 변수명에 맞춰 조정.
+> `supabase`(service-role admin)로 try_match 호출. (RPC는 security definer라 service_role OK.) **try_match 호출이 에러/타임아웃이면 1회 재시도**(sweep cron 대체 — 상대가 큐에 있는데 트리거만 실패한 좁은 케이스 방어). 재시도도 실패하면 'queued' 반환(다음 유입자가 흡수). 기존 enqueue의 team 생성·게이트 로직은 그대로 둔다. `targetSize`/`teamId`는 기존 코드의 변수명에 맞춰 조정.
 
 - [ ] **Step 2: Local serve sanity**
 
@@ -831,7 +821,7 @@ git commit -m "test(e2e): 매칭 실DB e2e (앱 functions.invoke 경로, 즉시 
 
 - [ ] **Step 4: 보고**
 
-"①배포(db push + functions deploy enqueue-match-queue + pg_cron 등록) ②env ③앱 동일 functions.invoke 경로로 enqueue→즉시매칭 검증. 매칭 로직 전부 Supabase(RPC+cron+Edge) — 앱 재빌드 0." 못 한 항목(부하/대량 동시성) 명시.
+"①배포(db push + functions deploy enqueue-match-queue) ②env ③앱 동일 functions.invoke 경로로 enqueue→즉시매칭 검증. 매칭 로직 전부 Supabase(RPC+Edge, cron 없는 이벤트 기반) — 앱 재빌드 0." 못 한 항목(부하/대량 동시성) 명시.
 
 ---
 
@@ -844,14 +834,14 @@ git commit -m "test(e2e): 매칭 실DB e2e (앱 functions.invoke 경로, 즉시 
 - §5 build_match_plan/Tier/solo merge → Task4(_try_solo_merge) + Task5 시나리오 ✅
 - §6 region soft → Task4 쿼리(tier2 전 region 선호) ✅
 - §7 match_and_create → Task3 ✅
-- §8 sweep/expire/cron → Task6 ✅
+- §8 이벤트 기반(cron 없음) + lazy expire + admin_force_match → Task6 ✅
 - §9 동시성 → Task3·4(advisory lock, SKIP LOCKED, unique, canonical) ✅
 - §10 e2e 10시나리오 → Task5(E3·E10) + Task8(E-immediate). **갭: E5(over-cap)=Task5 / E6 동시성·E7 기아·E8 공급0·E9 already-in-room 은 통합테스트로 미작성 → 후속 task로 추가 권장(명시).**
 - §11 롤아웃 → match_config.automation 플래그(Task1·7) ✅
-- 앱 배포 비의존 → 전 task 가 마이그레이션/RPC/Edge/cron + match_config 토글, 앱 화면 변경 0 ✅
+- 앱 배포 비의존 → 전 task 가 마이그레이션/RPC/Edge + match_config 토글(cron 없음), 앱 화면 변경 0 ✅
 
 **Placeholder scan:** 코드 스텝 전부 실제 SQL/TS. (enqueue Edge의 기존 변수명 `teamId`/`targetSize`는 "기존 코드에 맞춰 조정" 명시 — 실행 시 실제 파일 확인 가드.)
 
-**Type consistency:** `try_match(p_queue_id)` / `match_and_create(p_side_a_user_ids, p_side_a_gender, p_side_b_user_ids, p_side_b_gender)` / `match_sweep()` / `expire_match_queue()` 시그니처가 Task3·4·6·7·8 전반 일치. match_config key('automation','tier1_minutes'...) 일관.
+**Type consistency:** `try_match(p_queue_id)` / `match_and_create(p_side_a_user_ids, p_side_a_gender, p_side_b_user_ids, p_side_b_gender)` / `admin_force_match(p_team_a, p_team_b)` / `expire_my_stale_queue()` 시그니처가 Task3·4·6·7·8 전반 일치. match_config key('automation','tier1_minutes'...) 일관.
 
-> **갭 메모:** E6(동시성 race)·E7(기아 sweep 회수)·E8(공급0 expire)·E9(already-in-room 제외) 통합 테스트는 이 플랜에 미포함 — 핵심 경로(즉시·solo merge·over-cap·sweep) 검증 후 후속 Task로 추가. pg_cron 초단위 미지원(1분 최소)은 즉시경로가 대부분 흡수해 수용 가능, 더 빠른 회수 필요 시 Supabase scheduled Edge 검토(후속).
+> **갭 메모:** E6(동시성 race)·E7(기아)·E8(공급0)·E9(already-in-room 제외) 통합 테스트는 이 플랜 핵심 task(즉시·solo merge·over-cap·admin)에 이어 후속 Task로 추가. **cron 제거 — 순수 이벤트 기반**(enqueue 트리거 + 실패 시 1회 재시도). 만료는 lazy.

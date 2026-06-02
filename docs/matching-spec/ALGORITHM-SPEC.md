@@ -40,9 +40,12 @@ ROOM_EXPIRE_DAYS     = 7               # POLICY.room.autoExpireDays
 # Tier 완화 임계 (대기시간 기준, 분) — 운영 데이터로 튜닝 (초기 가안)
 T1_MIN               = 30              # Tier0→Tier1 (정확일치→비대칭)
 T2_MIN               = 120             # Tier1→Tier2 (비대칭→혼합+region완화)
-SWEEP_INTERVAL_SEC   = 45              # pg_cron sweep 주기 (30~60 사이)
 PRIORITY_BOOST_PER_TIER = '15 minutes' # effective_priority boost 단위 (튜닝)
 ```
+
+> **스케줄러(cron) 없음 — 순수 이벤트 기반.** 매칭은 오직 `enqueue` 시점의 `try_match`
+> 호출로 일어난다. 검토 결과(아래 §8) sweep cron 은 즉시 경로가 못 잡는 게 사실상 없어
+> 불필요하고, pg_cron 최소 1분 주기는 "빠른 매칭 최우선"과 역행하므로 채택하지 않는다.
 
 ---
 
@@ -64,7 +67,7 @@ create index if not exists team_synthetic_idx on public.team(kind) where kind='s
 -- (c) 매칭 엔진 멱등/추적 컬럼
 alter table public.match_queue add column if not exists required_gender text
   check (required_gender in ('male','female'));   -- 반대 성별 (enqueue 시 계산)
-alter table public.match_queue add column if not exists last_tried_at timestamptz;  -- sweep 재시도 추적
+-- (last_tried_at 불필요 — sweep cron 제거(§8). 순수 이벤트 기반.)
 -- (group_match_pair_uniq, team_a_id<team_b_id CHECK 는 baseline 에 이미 존재 — 재사용)
 ```
 
@@ -277,37 +280,32 @@ exception when unique_violation then return null   # 동시 같은 쌍 → 멱�
 
 ---
 
-## 8. `match_sweep()` — 안전망 RPC (pg_cron `SWEEP_INTERVAL_SEC`)
+## 8. 스케줄러 없음 — 순수 이벤트 기반 (cron 제거 결정)
 
-```
-function match_sweep() returns int   -- 이번 회차 성사 건수
-1. for gender_pair in [(male,female)]:
-2.   loop:
-3.     # waiting 엔트리를 eff_prio 순으로 하나 집어 try_match 시도
-4.     e := SELECT id FROM match_queue WHERE status='waiting'
-              AND (last_tried_at IS NULL OR last_tried_at < now() - interval '10s')
-            ORDER BY eff_prio ASC LIMIT 1 FOR UPDATE SKIP LOCKED;
-5.     exit when e IS NULL;
-6.     UPDATE match_queue SET last_tried_at=now() WHERE id=e;
-7.     if try_match(e) is not null: matched++;
-8.   end loop;
-9. return matched;
-```
-- **즉시 경로가 못 잡는 것**(동시 도착·잔여 solo 누적·시간경과 Tier 완화 진입)을 주기적으로 회수.
-- `last_tried_at` 으로 busy-loop 방지.
+**검토 결론(사용자 확정): sweep cron 불필요.** 매칭은 오직 `enqueue` 시점의 `try_match`
+호출(이벤트)로 일어난다. 근거:
 
-## 8-1. `expire_match_queue()` — 만료 정리 (pg_cron, 기존 expire Edge 로직 이관 가능)
-```
-UPDATE match_queue SET status='expired'
-  WHERE status='waiting' AND expires_at < now();
-# expired 엔트리의 team.status 복구(forming) — 재시도 가능하게
-```
+| 시나리오 | 즉시 경로만으로 | sweep 필요? |
+|---|---|---|
+| A 대기 중 → B enqueue | B의 try_match가 A를 봄 → 즉시 매칭 | ❌ |
+| A·B 거의 동시 enqueue | advisory lock 직렬화 + enqueue가 INSERT **commit 후** try_match 호출 → 나중 도착자가 먼저 도착자를 봄 | ❌ |
+| solo 홀수 잔여 | 다음 유입자의 enqueue가 트리거 | ❌ |
+| Tier 완화 진입(시간 경과) | 다음 후보의 enqueue 시점에 `_tier_of`가 재평가 | ❌ |
+| 상대 공급 0 | sweep 와도 못 잡음(상대 없음) | ❌ |
 
-## 8-2. `admin_force_match(team_a, team_b)` — 운영진 수동 편성 백도어
+→ sweep 가 유일하게 더 잡는 건 **"상대가 큐에 있는데 내 enqueue의 try_match 호출만 실패/누락된"** 극히 좁은 경우뿐. 이건 cron 이 아니라 **enqueue 안에서 try_match 실패 시 1회 재시도**(또는 다음 유입자가 자연 흡수)로 충분.
+pg_cron 최소 주기 1분은 "빠른 매칭 최우선"과 역행하고 운영 부담만 늘므로 **채택하지 않는다.**
+
+### 8-1. 만료 처리 — lazy expire (cron 없이)
+`expires_at`(24h)은 **별도 정리 잡 없이** 후보 쿼리의 `(expires_at is null or expires_at > now())` 필터가 자연 제외한다(§4·§5에 이미 포함). 만료 행을 즉시 `status='expired'`로 바꿀 필요가 매칭상 없다.
+- 화면 표시(S09 매칭실패)용 status 갱신이 필요하면: **클라가 큐 화면 조회 시점**에 `expires_at < now()` 인 자기 큐를 만료로 처리하거나, RPC 호출 시 lazy 갱신. 전역 주기 잡 불필요.
+
+### 8-2. `admin_force_match(team_a, team_b)` — 운영진 수동 편성 백도어
 ```
-# Phase 0 / 예외 운영용. match_and_create 를 직접 호출(Tier 게이트 우회).
+# Phase 0(현 manual_admin_curation) / 예외 운영용. match_and_create 를 직접 호출(Tier 게이트 우회).
 # service_role 또는 is_admin() 게이트.
 ```
+> 참고: `match_queue.last_tried_at` 컬럼은 sweep 제거로 불필요 → 스키마에서 제외(§2 수정).
 
 ---
 
@@ -339,7 +337,7 @@ UPDATE match_queue SET status='expired'
 - **E5 상한 초과 거부**: 한 side 6명 구성 시도 → 안 됨(SIDE_MAX=5).
 - **E6 동시성**: 두 팀이 같은 상대를 동시 enqueue → 정확히 1 매칭, 다른 하나 waiting/다음.
 - **E7 기아 방지**: 남 혼자 7 / 여 혼자 5 → 5쌍 즉시, 잔여 2명 sweep 가 다음 유입과 회수.
-- **E8 성별 공급 0**: 남만 enqueue → 매칭 0, 24h 후 expired.
+- **E8 성별 공급 0**: 남만 enqueue → 매칭 0(waiting 잔류). expires_at 경과 시 후보쿼리에서 자연 제외(lazy).
 - **E9 already-in-room**: is_in_active_room=true 유저 포함 → 매칭 제외.
 - **E10 멱등**: 같은 쌍 동시 생성 시도 → group_match 1건만.
 
@@ -350,9 +348,10 @@ UPDATE match_queue SET status='expired'
 | Phase | 내용 | automation flag |
 |---|---|---|
 | 0 | RPC 머지 + 운영진 `admin_force_match` 수동 검증 | manual_admin_curation |
-| 1 | enqueue Edge 즉시 자동 매칭 (← 빠른 매칭 달성) | auto_immediate |
-| 2 | sweep cron 안전망 + expire cron | auto_immediate + sweep |
-| 3 | 후보 정렬 eff_prio → 품질 score (hook 교체) | auto_scored |
+| 1 | enqueue Edge 즉시 자동 매칭 (← 빠른 매칭 달성, **이걸로 완성**) | auto_immediate |
+| 2 | 후보 정렬 eff_prio → 품질 score (hook 교체) | auto_scored |
+
+> cron/sweep Phase 없음 — 순수 이벤트 기반(§8).
 
 ---
 
