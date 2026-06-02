@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { subscribeRoomMessages } from '@/lib/realtime';
 import { sendRoomMessage } from '@/lib/chat/send-message';
 import { mergeIncoming, type ChatMessage } from '@/lib/chat/message-merge';
+import { uuidv4 } from '@/lib/chat/uuid';
 
 interface Args {
   roomId: string;
@@ -96,7 +97,24 @@ export function useRoomChat({ roomId, selfId }: Args) {
         );
         pending.current.delete(clientMsgId);
       } catch (err) {
-        logger.captureException(err, { tags: { feature: 'chat-send', room_id: roomId } });
+        // 전송 실패는 사용자 영향이 크므로 Sentry 로 진단 컨텍스트와 함께 보고한다.
+        // code(SendMessageError) / reason / client_msg_id / whisper 여부 / body 길이로
+        // not_room_member·room_not_active·invalid_whisper·uuid 캐스팅 등 원인 구분.
+        const sendErr = err as { code?: string; reason?: string; message?: string };
+        logger.captureException(err, {
+          tags: {
+            feature: 'chat-send',
+            room_id: roomId,
+            error_code: sendErr.code ?? 'unknown',
+          },
+          extra: {
+            client_msg_id: clientMsgId,
+            is_whisper: whisperToUserId != null,
+            body_length: [...body].length,
+            reason: sendErr.reason ?? null,
+            message: sendErr.message ?? null,
+          },
+        });
         setMessages((prev) =>
           prev.map((m) => (m.clientMsgId === clientMsgId ? { ...m, sendState: 'failed' } : m)),
         );
@@ -107,7 +125,9 @@ export function useRoomChat({ roomId, selfId }: Args) {
 
   const send = useCallback(
     (body: string, whisperToUserId: string | null = null) => {
-      const clientMsgId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+      // RN(Hermes)엔 crypto.randomUUID 가 없어 직전 폴백이 비-UUID 를 만들어
+      // client_msg_id(uuid) 캐스팅 실패로 전송이 전부 깨졌다. uuidv4() 로 항상 유효 UUID 보장.
+      const clientMsgId = uuidv4();
       return doSend(clientMsgId, body, whisperToUserId);
     },
     [doSend],
