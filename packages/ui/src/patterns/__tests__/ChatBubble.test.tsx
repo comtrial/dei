@@ -37,38 +37,45 @@ describe('ChatBubble (X8)', () => {
     expect(body).toContain('text-white');
   });
 
-  it('"whisper" bubble uses accent-soft + dashed accent border + italic and a 귓속말 suffix', () => {
+  it('"whisper" (received) shows sender avatar + name + 귓속말 tag, accent-soft italic body, no 방향 접미', () => {
     render(
-      <ChatBubble testID="cb" variant="whisper" name="수아">
+      <ChatBubble testID="cb" variant="whisper" name="수아" avatarInitial="수" avatarBg="bg-[#7A8DB8]">
         카페 추천해줘요!
       </ChatBubble>,
     );
-    // name gets the " → 귓속말" suffix (.nm::after)
-    expect(screen.getByText('수아 → 귓속말')).toBeTruthy();
-    const row = screen.getByTestId('cb').props.className as string;
-    expect(row).toContain('self-stretch');
+    // 보낸이 이름 + '귓속말' 태그 (방향 접미/안내 없음)
+    expect(screen.getByText('수아')).toBeTruthy();
+    expect(screen.getByTestId('chat-bubble-whisper-tag')).toBeTruthy();
+    expect(screen.queryByText(/→ 귓속말/)).toBeNull();
+    expect(screen.queryByText(/나에게/)).toBeNull();
+    // 보낸이 아바타(이니셜) 노출
+    expect(screen.getByText('수')).toBeTruthy();
+    // 버블 표면: accent-deep + italic 유지
     const body = screen.getByText('카페 추천해줘요!').props.className as string;
     expect(body).toContain('text-accent-deep');
     expect(body).toContain('italic');
   });
 
-  it('"whisper" + mine: right-aligned (self-end), directional name keeps no 귓속말 suffix (body-render-9)', () => {
+  it('"whisper" + mine: right-aligned (self-end via row-reverse), my avatar shown, name hidden, 귓속말 tag kept', () => {
     render(
-      <ChatBubble testID="cb" variant="whisper" mine name="→ 민준에게">
+      <ChatBubble testID="cb" variant="whisper" mine name="민준" avatarInitial="나" avatarBg="bg-[#C99A5B]">
         비밀 메시지
       </ChatBubble>,
     );
     const row = screen.getByTestId('cb').props.className as string;
     expect(row).toContain('self-end');
-    // 방향 이름은 "→" 를 포함하므로 자동 " → 귓속말" 접미가 붙지 않는다.
-    expect(screen.getByText('→ 민준에게')).toBeTruthy();
-    expect(screen.queryByText(/→ 귓속말/)).toBeNull();
+    // 내 귓속말은 발신자 이름 숨김(me 처럼), '귓속말' 태그는 노출
+    expect(screen.queryByText('민준')).toBeNull();
+    expect(screen.getByTestId('chat-bubble-whisper-tag')).toBeTruthy();
+    // 내 아바타 이니셜 노출(우측)
+    expect(screen.getByText('나')).toBeTruthy();
+    expect(screen.getByText('비밀 메시지')).toBeTruthy();
   });
 
   it('"whisper" + mine + failed: renders tappable retry firing onRetry (body-render-9)', () => {
     const onRetry = jest.fn();
     render(
-      <ChatBubble testID="cb" variant="whisper" mine sendState="failed" name="→ 민준에게" onRetry={onRetry}>
+      <ChatBubble testID="cb" variant="whisper" mine sendState="failed" avatarInitial="나" onRetry={onRetry}>
         실패한 귓속말
       </ChatBubble>,
     );
