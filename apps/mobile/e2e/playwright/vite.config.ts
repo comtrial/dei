@@ -1,12 +1,11 @@
 /**
- * Vite config for the Playwright chat web harness.
+ * Vite config for the Playwright S13a room-chat web harness.
  *
- * Strategy: render the *real* chat screens/components with react-native-web in
- * a real browser, but alias the non-deterministic boundaries:
- *   - react-native            → react-native-web
- *   - @/lib/chat/chat-service → e2e/harness/mockChatService  (no Supabase/Docker)
- *   - expo-router             → __harness_shims__/expo-router (records nav)
- *   - @/providers/auth-provider → __harness_shims__/auth-provider (fixed user)
+ * Strategy: render the *real* production view `RoomChatView` with
+ * react-native-web in a real browser, fed deterministic fixture props
+ * (e2e/harness/scenarios.ts). RoomChatView is a pure view (no Supabase/router),
+ * so the only boundaries to alias are RN→RN-web and a handful of RN ecosystem
+ * deps that don't resolve cleanly under RN-web/Vite (lucide, reanimated, …).
  *
  * NativeWind className styling is intentionally NOT compiled here — the chat
  * spec assertions are testID / text / visibility / a11y-state based (counter
@@ -58,14 +57,13 @@ export default defineConfig({
     alias: [
       // RN → RN Web.
       { find: /^react-native$/, replacement: 'react-native-web' },
-      // Hermetic boundaries.
-      { find: '@/lib/chat/chat-service', replacement: r('e2e/harness/mockChatService.ts') },
+      // Hermetic boundaries. RoomChatView 는 순수 view 라 supabase/router/auth 를
+      // import 하지 않는다 — expo-router 만 안전망으로 alias(직접 import 시 대비).
       { find: 'expo-router', replacement: r('__harness_shims__/expo-router.ts') },
-      { find: '@/providers/auth-provider', replacement: r('__harness_shims__/auth-provider.tsx') },
-      { find: '@/__harness_shims__/expo-router', replacement: r('__harness_shims__/expo-router.ts') },
       // RN ecosystem deps that don't resolve cleanly under RN-web/Vite and are
       // NOT load-bearing for the chat spec's testID/text assertions.
       { find: 'lucide-react-native', replacement: r('__harness_shims__/lucide.tsx') },
+      { find: 'expo-image', replacement: r('__harness_shims__/expo-image.tsx') },
       { find: 'expo-haptics', replacement: r('__harness_shims__/expo-haptics.ts') },
       { find: 'nativewind', replacement: r('__harness_shims__/nativewind.ts') },
       { find: 'react-native-reanimated', replacement: r('__harness_shims__/rn-reanimated.tsx') },

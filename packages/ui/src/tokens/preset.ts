@@ -34,4 +34,9 @@ const preset: Partial<Config> = {
 };
 
 export default preset;
-module.exports = preset;
+// tailwind.config.js 는 CJS 라 `require('@dei/ui/tokens/preset')` 로 default 를
+// 직접 받는다. 단 ESM 번들(브라우저 e2e 하네스 등)에서는 `module` 이 없으므로
+// guard — 없으면 no-op(이미 위 `export default` 로 충분).
+if (typeof module !== 'undefined' && (module as { exports?: unknown }).exports) {
+  (module as { exports: unknown }).exports = preset;
+}

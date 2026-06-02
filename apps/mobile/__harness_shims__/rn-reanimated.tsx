@@ -25,6 +25,23 @@ export const FadeOutDown = entry;
 export const SlideInDown = entry;
 export const SlideOutDown = entry;
 
+// Spinner(StateView 의 loading) hook/worklet API — 웹 하네스는 애니메이션이
+// load-bearing 이 아니므로 전부 no-op 으로 둔다(존재 + 안전 호출만 보장).
+export const useSharedValue = <T,>(initial: T) => ({ value: initial });
+export const useAnimatedStyle = (_fn: () => Record<string, unknown>) => ({});
+export const withTiming = <T,>(toValue: T) => toValue;
+export const withRepeat = <T,>(animation: T) => animation;
+export const withDelay = <T,>(_delay: number, animation: T) => animation;
+export const withSequence = <T,>(...animations: T[]) => animations[animations.length - 1];
+export const withSpring = <T,>(toValue: T) => toValue;
+export const cancelAnimation = (_sv: unknown) => {};
+export const interpolate = (x: number) => x;
+export const useDerivedValue = <T,>(fn: () => T) => ({ value: fn() });
+export const Easing = new Proxy(
+  {},
+  { get: () => (..._args: unknown[]) => (x: number) => x },
+) as Record<string, unknown>;
+
 const Reanimated = {
   View: 'div',
   Text: 'span',
