@@ -108,10 +108,14 @@ async function main() {
       run('pnpm', ['--filter', 'mobile', 'test:unit']),
   );
 
-  header('5/6 component (Jest + RNTL — @dei/ui 컴포넌트)');
-  gate('component', run('pnpm', ['--filter', '@dei/ui', 'exec', 'jest']));
+  header('5/7 component (Jest + RNTL — @dei/ui + mobile RoomChatView)');
+  gate(
+    'component',
+    run('pnpm', ['--filter', '@dei/ui', 'exec', 'jest']) &&
+      run('pnpm', ['--filter', 'mobile', 'test:component']),
+  );
 
-  header('6/6 integration (실제 Supabase — skip 은 실패로 취급)');
+  header('6/7 integration (실제 Supabase — skip 은 실패로 취급)');
   const reachable = await supabaseReachable();
   const hasServiceKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (!reachable || !hasServiceKey) {
@@ -176,9 +180,35 @@ async function main() {
     gate('integration', ok && reallyRan);
   }
 
-  // e2e-web 은 verify 게이트에서 제외(화면 스캐폴딩 단계, spec §9). 옛 채팅
-  // 도메인 Playwright 하네스는 참고용이라 현재 컴파일되지 않는다 — C 가 방/채팅
-  // 화면을 구현하며 하네스를 재구성할 때 이 단계를 다시 추가한다.
+  // 7/7 e2e-web (Playwright) — S13a 방 내부 채팅 화면 구현 완료로 재추가.
+  // 하네스가 프로덕션 view(RoomChatView)를 RN-web 으로 마운트해 DOM 레벨 검증.
+  // Chromium 미설치 시 로컬에선 NOT-RUN-LOCALLY 로 정직 표기(CI 가 강제).
+  header('7/7 e2e-web (Playwright — RoomChatView RN-web 하네스)');
+  const chromiumInstalled = await (async () => {
+    try {
+      const { existsSync, readdirSync } = await import('node:fs');
+      const cache = `${process.env.HOME}/Library/Caches/ms-playwright`;
+      const cacheLinux = `${process.env.HOME}/.cache/ms-playwright`;
+      for (const dir of [cache, cacheLinux]) {
+        if (existsSync(dir) && readdirSync(dir).some((d) => d.startsWith('chromium'))) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  })();
+  if (!chromiumInstalled) {
+    console.log(
+      `${C.yellow}⚠ e2e-web 로컬 미실행 — Playwright Chromium 미설치 ` +
+        `(pnpm --filter mobile test:e2e:web:install).${C.reset}`,
+    );
+    console.log(
+      `${C.yellow}  → CI(Verify)는 chromium 설치 후 *실제* 실행하며 실패 시 머지 차단.${C.reset}`,
+    );
+    record('e2e-web', 'NOT-RUN-LOCALLY', 'Chromium 미설치; CI 에서 강제 실행');
+  } else {
+    gate('e2e-web', run('pnpm', ['--filter', 'mobile', 'test:e2e:web']));
+  }
 
   summary();
   const blocked = results.some((r) => r.status === 'FAIL');
