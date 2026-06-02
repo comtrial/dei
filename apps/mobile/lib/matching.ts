@@ -1,3 +1,5 @@
+import { logger } from '@dei/shared';
+
 import { supabase } from '@/lib/supabase';
 
 type FunctionInvokeError = {
@@ -42,6 +44,11 @@ async function toFunctionError(fallback: string, error?: FunctionInvokeError | n
       const payload = await error.context.clone().json() as FunctionErrorPayload;
       return new MatchQueueError(payload.error ?? payload.message ?? fallback, payload.code);
     } catch {
+      // 서버가 4xx 를 줬는데 본문이 파싱 안 됨 = 계약 위반 신호. 호출자에게 던지기
+      // 전 1회 경고로 남긴다(여기서 captureException 은 호출부와 이중보고라 message 만).
+      logger.captureMessage('match queue 응답 본문 파싱 실패', 'warning', {
+        tags: { feature: 'matching' },
+      });
       // Fall through to the client error message.
     }
   }
