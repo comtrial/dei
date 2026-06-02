@@ -7,8 +7,11 @@ type LeaveRoomBody = {
   roomId?: unknown;
 };
 
+// 표준 UUID(8-4-4-4-12). 직전 패턴은 4번째 그룹의 dash·길이가 빠져
+// ([89ab][0-9a-f]{12}$) 어떤 실제 UUID(roomId) 도 매칭 못 해 leave-room 이
+// 전 요청을 거부하던 버그. enqueue-match-queue 와 동일 결함. 수정.
 const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LEAVE_REASONS = new Set(['mood', 'mistake', 'bad_member', 'other']);
 
 Deno.serve(async (req) => {
