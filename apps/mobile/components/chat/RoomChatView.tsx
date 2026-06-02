@@ -113,18 +113,21 @@ export function RoomChatView(props: RoomChatViewProps) {
   if (!props.visible) return null;
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-bg" testID="room-chat-screen">
-      <TopNav
-        left="back"
-        onLeftPress={props.onClose}
-        leftAccessibilityLabel="뒤로"
-        subtitle={`멤버 ${props.memberCount}명`}
-        rightActions={<AvatarStack items={stackItems} max={3} />}
-      />
+    // testID 는 SafeAreaView 가 아니라 내부 View 에 둔다 — jest 의 safe-area mock 이
+    // SafeAreaView 를 children 통과(props drop)로 처리해 testID 가 사라지기 때문.
+    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-bg">
+      <View className="flex-1" testID="room-chat-screen">
+        <TopNav
+          left="back"
+          onLeftPress={props.onClose}
+          leftAccessibilityLabel="뒤로"
+          subtitle={`멤버 ${props.memberCount}명`}
+          rightActions={<AvatarStack items={stackItems} max={3} />}
+        />
 
-      <KeyboardAvoidingView
-        testID="room-chat-kav"
-        className="flex-1"
+        <KeyboardAvoidingView
+          testID="room-chat-kav"
+          className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View className="flex-1">
@@ -211,7 +214,8 @@ export function RoomChatView(props: RoomChatViewProps) {
             />
           </View>
         </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }
