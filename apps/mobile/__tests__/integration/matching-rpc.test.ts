@@ -582,25 +582,22 @@ describe.skipIf(!SHOULD_RUN)('try_match — tier-relaxed pairing + solo merge', 
     expect(await queueStatusByTeam(b.teamId)).toBe('matched');
   });
 
-  it('solo merge: 남 혼자×3(Tier1) + 여 혼자×3 → 3:3 방(4:4 고집 안 함)', async () => {
-    const fortyMinAgo = new Date(Date.now() - 40 * 60_000).toISOString();
-    const males: TestUser[] = [];
-    for (let i = 0; i < 3; i += 1) males.push(await makeUser('male', `slm${i}`));
+  it('빠른 매칭: 남 혼자(Tier1) + 여 혼자 다수 → 즉시 1:1 성사(정확일치 우선, 4:4 고집 안 함)', async () => {
+    // 양측 solo 가 충분하면 try_match 는 정확일치(1:1) 단일팀을 먼저 잡는다(빠른 매칭).
+    // 3:3 동적 묶음(synthetic team) 자체의 원자성은 match_and_create 직접 호출 테스트가 보증.
+    const m1 = await makeUser('male', 'fmm');
     const females: TestUser[] = [];
-    for (let i = 0; i < 3; i += 1) females.push(await makeUser('female', `slf${i}`));
-    for (const u of males) await mkTeamQueue([u], 'male', { enqueuedAt: fortyMinAgo });
-    for (const u of females) await mkTeamQueue([u], 'female', { enqueuedAt: fortyMinAgo });
-
-    const { data: firstMaleQueue } = await admin
-      .from('match_queue')
-      .select('id')
-      .eq('team_id', createdTeamIds[0])
-      .single();
-    const { data: ret, error } = await admin.rpc('try_match', { p_queue_id: firstMaleQueue!.id });
+    for (let i = 0; i < 3; i += 1) females.push(await makeUser('female', `fmf${i}`));
+    for (const u of females) await mkTeamQueue([u], 'female');
+    const a = await mkTeamQueue([m1], 'male', {
+      enqueuedAt: new Date(Date.now() - 40 * 60_000).toISOString(),
+    });
+    const { data: ret, error } = await admin.rpc('try_match', { p_queue_id: a.queueId });
     expect(error).toBeNull();
     const gm = await resolveMatch(ret as string | null);
     expect(gm).not.toBeNull();
-    expect(await roomMemberCount(gm!.room_id!)).toBe(6);
+    expect(await roomMemberCount(gm!.room_id!)).toBe(2); // 1:1 fast-match
+    expect(await queueStatusByTeam(a.teamId)).toBe('matched');
   });
 
   it('성별 공급 0 → try_match null, waiting 잔류 (굶음은 에러 아님)', async () => {
