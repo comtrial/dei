@@ -32,7 +32,10 @@ const ANON =
 const SHOULD_RUN = Boolean(process.env.RUN_INTEGRATION || process.env.CI);
 const PW = 'e2e-pass-1234!';
 
-type TestUser = { id: string; email: string; client: SupabaseClient };
+// client 는 lazy — signInWithPassword 는 원격 GoTrue rate limit 이 있어
+// 실제 user-JWT 가 필요한 테스트(소유가드/Edge 경로)만 userClient() 로 on-demand 사인인.
+// 대부분의 RPC 검증은 service-role(admin) 로 충분하다.
+type TestUser = { id: string; email: string };
 
 let run = false;
 let admin: SupabaseClient;
@@ -77,12 +80,17 @@ async function makeUser(gender: 'male' | 'female', tag: string): Promise<TestUse
     .eq('user_id', id);
   if (pErr) throw new Error(`profile gate update(${email}) failed: ${pErr.message}`);
 
+  return { id, email };
+}
+
+/** user-JWT client (on-demand 사인인). rate limit 회피 위해 꼭 필요한 테스트만 호출. */
+async function userClient(user: TestUser): Promise<SupabaseClient> {
   const client = createClient(SUPABASE_URL, ANON, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { error: sErr } = await client.auth.signInWithPassword({ email, password: PW });
-  if (sErr) throw new Error(`signIn(${email}) failed: ${sErr.message}`);
-  return { id, email, client };
+  const { error } = await client.auth.signInWithPassword({ email: user.email, password: PW });
+  if (error) throw new Error(`signIn(${user.email}) failed: ${error.message}`);
+  return client;
 }
 
 async function makeUsers(gender: 'male' | 'female', n: number, tag: string): Promise<TestUser[]> {
@@ -724,7 +732,8 @@ describe.skipIf(!SHOULD_RUN)('matching ops — admin_force_match / expire_my_sta
       expiresAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
     });
 
-    const { error } = await f.client.rpc('expire_my_stale_queue');
+    const fClient = await userClient(f); // expire_my_stale_queue 는 auth.uid() 스코프라 user-JWT 필요
+    const { error } = await fClient.rpc('expire_my_stale_queue');
     expect(error).toBeNull();
 
     const { data: rows } = await admin
@@ -774,7 +783,8 @@ describe.skipIf(!SHOULD_RUN)('matching ops — admin_force_match / expire_my_sta
     const intruder = await makeUser('female', 'intr');
     const q = await mkTeamQueue([m1], 'male', {});
     // intruder(user JWT)가 m1 의 큐로 매칭 트리거 시도
-    const { error } = await intruder.client.rpc('try_match', { p_queue_id: q.queueId });
+    const intruderClient = await userClient(intruder);
+    const { error } = await intruderClient.rpc('try_match', { p_queue_id: q.queueId });
     expect(error?.message).toContain('not_owner');
   });
 });
