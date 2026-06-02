@@ -32,4 +32,13 @@ describe('AvatarStack', () => {
     expect(screen.getByTestId('stk')).toBeTruthy();
     expect(screen.queryByText(/^\+/)).toBeNull();
   });
+
+  it('renders a photo avatar when item.photoUrl is given', () => {
+    render(
+      <AvatarStack
+        items={[{ userId: 'u1', initial: '수', photoUrl: 'https://cdn.test/u1.jpg' }]}
+      />,
+    );
+    expect(screen.getByTestId('av-photo')).toBeTruthy();
+  });
 });

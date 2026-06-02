@@ -146,6 +146,38 @@ describe('RoomChatView', () => {
     expect(screen.queryByTestId('chat-stream')).toBeNull();
   });
 
+  // blockedIds: 차단 멤버는 멘션 후보에서 제외(귓속말 누설 차단 경로 — 현재 미테스트).
+  it('excludes a blocked member from mention candidates', () => {
+    setup({ input: '@', blockedIds: new Set(['u1']) });
+    // u1(수아)은 차단 → 후보 행 없음, u2(민준)은 노출.
+    expect(screen.queryByTestId('mention-row-u1')).toBeNull();
+    expect(screen.getByTestId('mention-row-u2')).toBeTruthy();
+  });
+
+  // 멘션 패널: @ 없거나 후보 0이면 미노출.
+  it('hides mention panel when input has no active @ query', () => {
+    setup({ input: '안녕하세요' });
+    expect(screen.queryByTestId('mention-row-u1')).toBeNull();
+    expect(screen.queryByTestId('mention-row-u2')).toBeNull();
+  });
+
+  // 내가 보낸 귓속말 실패 → 재시도(clientMsgId 전달).
+  it('failed whisper-mine shows retry firing onRetry with clientMsgId', () => {
+    const props = setup({
+      messages: [
+        { id: 'w9', clientMsgId: 'cw9', userId: 'me', body: '비밀', whisperToUserId: 'u1', createdAt: 't9', sendState: 'failed' },
+      ],
+    });
+    fireEvent.press(screen.getByTestId('chat-bubble-retry'));
+    expect(props.onRetry).toHaveBeenCalledWith('cw9');
+  });
+
+  // 키보드: 스트림이 작성 중 탭으로 키보드를 닫지 않도록 keyboardShouldPersistTaps='handled'.
+  it('stream keeps keyboard on tap (keyboardShouldPersistTaps=handled)', () => {
+    setup();
+    expect(screen.getByTestId('chat-stream').props.keyboardShouldPersistTaps).toBe('handled');
+  });
+
   // ★신규2: 아바타 탭 → onAvatarPress(메시지 발신자 userId).
   it('tapping a them-bubble avatar fires onAvatarPress with the message userId', () => {
     const props = setup({
