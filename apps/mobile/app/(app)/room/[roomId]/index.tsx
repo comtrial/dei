@@ -10,7 +10,7 @@ import { MessageCircle, MoreHorizontal } from 'lucide-react-native';
 import { Banner, GridRoom, IconButton, Badge, TopNav } from '@dei/ui';
 import type { GridRoomCell, GridRoomFilledCell, GridRoomTimeSlot, GradientComponentProps } from '@dei/ui';
 import type { Database } from '@dei/api';
-import { POLICY, analytics, formatTimeStripSlots, getCurrentHourSlotKst, isQuietHourKst } from '@dei/shared';
+import { POLICY, analytics, formatTimeStripSlots, getCurrentHourSlotKst, isQuietHourKst, logger } from '@dei/shared';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { getCachedVideoUri, getCachedThumbnailUri } from '@/lib/video';
@@ -237,30 +237,48 @@ export default function RoomScreen() {
 
   useEffect(() => {
     if (!user?.id || !roomId) return;
-    void (async () => {
-      const count = await getSelfVideoCount24h(roomId, user.id);
-      if (count === 0) {
-        analytics.capture(ANALYTICS_EVENTS.blur_reapplied_24h_passed, { room_id: roomId });
-        router.replace(`/(app)/room/${roomId}/preview`);
-        return;
-      }
-      analytics.capture(ANALYTICS_EVENTS.room_joined_unblurred, { room_id: roomId });
-      setGateChecked(true);
-    })();
+    const uid = user.id;
+    // blur 게이트 비동기 경계 — 내부 RPC(getSelfVideoCount24h)는 자체 캡처하므로
+    // 여기서는 미캐치 경계만 보호한다(이중 캡처 금지). withErrorCapture 재던짐 →
+    // void IIFE 라 trailing .catch 필수.
+    void logger
+      .withErrorCapture(
+        'room.blur-gate',
+        async () => {
+          const count = await getSelfVideoCount24h(roomId, uid);
+          if (count === 0) {
+            analytics.capture(ANALYTICS_EVENTS.blur_reapplied_24h_passed, { room_id: roomId });
+            router.replace(`/(app)/room/${roomId}/preview`);
+            return;
+          }
+          analytics.capture(ANALYTICS_EVENTS.room_joined_unblurred, { room_id: roomId });
+          setGateChecked(true);
+        },
+        { tags: { screen: 'room', room_id: roomId }, extra: { user_id: uid } },
+      )
+      .catch(() => {});
   }, [roomId, user?.id, router]);
 
   useEffect(() => {
     if (!user?.id || !roomId) return;
-    void (async () => {
-      const [withProfile, blocked] = await Promise.all([
-        getRoomMembersWithProfile(roomId),
-        getBlockedUserIds(user.id),
-      ]);
-      setMembersWithProfile(withProfile);
-      setBlockedUserIds(blocked);
-      const self = withProfile.find((m) => m.user_id === user.id);
-      setSelfGender(self?.profile?.gender ?? null);
-    })();
+    const uid = user.id;
+    // 멤버 로드 비동기 경계 — 내부 RPC 들은 자체 캡처. 경계만 보호(이중 캡처 금지).
+    void logger
+      .withErrorCapture(
+        'room.load-members',
+        async () => {
+          const [withProfile, blocked] = await Promise.all([
+            getRoomMembersWithProfile(roomId),
+            getBlockedUserIds(uid),
+          ]);
+          setMembersWithProfile(withProfile);
+          setBlockedUserIds(blocked);
+          const self = withProfile.find((m) => m.user_id === uid);
+          setSelfGender(self?.profile?.gender ?? null);
+        },
+        { tags: { screen: 'room', room_id: roomId }, extra: { user_id: uid } },
+      )
+      .catch(() => {});
   }, [roomId, user?.id, members]);
 
   useEffect(() => {
