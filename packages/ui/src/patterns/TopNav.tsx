@@ -64,6 +64,11 @@ export interface TopNavProps extends ViewProps {
   leftSlot?: ReactNode;
   /** 가운데/좌측 타이틀 텍스트. 없으면 타이틀 자리를 비운다. */
   title?: string;
+  /**
+   * 타이틀 아래(또는 단독) 부제. S13a 처럼 제목 없이 부제만(`멤버 N명`)도 가능.
+   * title 과 함께 주면 2단(제목 위 / 부제 아래)으로 렌더한다.
+   */
+  subtitle?: string;
   /** 우측 액션 slot — IconButton/Badge(count)/Avatar/Button 등을 caller 가 조립. */
   rightActions?: ReactNode;
   className?: string;
@@ -76,6 +81,7 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
     leftAccessibilityLabel,
     leftSlot,
     title,
+    subtitle,
     rightActions,
     className,
     ...rest
@@ -113,17 +119,22 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
       accessibilityRole="header"
       {...rest}
     >
-      {/* 좌측 그룹: 컨트롤 + 타이틀 (HTML .nav 의 좌측 정렬) */}
+      {/* 좌측 그룹: 컨트롤 + (타이틀/부제 2단) (HTML .nav 의 좌측 정렬) */}
       <View className="flex-1 flex-row items-center">
         {leftNode}
-        {title ? (
-          <Text
-            tone="ink"
-            numberOfLines={1}
-            className={cn(TITLE_CLASS, titleHasLeading && 'ml-[6px]')}
-          >
-            {title}
-          </Text>
+        {title != null || subtitle != null ? (
+          <View className={cn('min-w-0', titleHasLeading && 'ml-[6px]')}>
+            {title != null ? (
+              <Text tone="ink" numberOfLines={1} className={TITLE_CLASS}>
+                {title}
+              </Text>
+            ) : null}
+            {subtitle != null ? (
+              <Text tone="ink-3" numberOfLines={1} className="text-[11px] font-semibold">
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
       </View>
 
