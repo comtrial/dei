@@ -36,7 +36,6 @@ export default function RoomChatScreen() {
   const router = useRouter();
   const [selfId, setSelfId] = useState('');
   const [members, setMembers] = useState<RoomMemberLite[]>([]);
-  const [roomName, setRoomName] = useState('');
   const [input, setInput] = useState('');
   const [whisperTarget, setWhisperTarget] =
     useState<{ userId: string; name: string; avatarInitial?: string; photoUrl?: string } | null>(
@@ -125,8 +124,8 @@ export default function RoomChatScreen() {
         .eq('id', roomId)
         .maybeSingle();
       if (alive && room) {
-        setRoomName('');
         // concurrency-misc-9: 진입 시점 종료 여부(읽기전용). 이후 변화는 구독으로 갱신.
+        // (방 제목은 S13a 재구성에서 헤더에서 제거 — roomName state 불필요.)
         setRoomEnded(isRoomEnded(room));
       }
     })();
@@ -215,7 +214,6 @@ export default function RoomChatScreen() {
 
   return (
     <RoomChatView
-      roomName={roomName || '방'}
       memberCount={members.filter((m) => m.status === 'active').length}
       selfId={selfId}
       messages={messages}
