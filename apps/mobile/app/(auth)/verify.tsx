@@ -222,6 +222,19 @@ export default function VerifyScreen() {
 
     hasStartedRef.current = true;
 
+    // 개발용 바이패스가 켜진 환경(PortOne 미연동)에서는 진입 시 PortOne 자동호출을
+    // 하지 않는다. 자동호출이 실패하면 '시작 못했어요' 다이얼로그→terms 로 튕겨
+    // 바이패스 버튼을 쓰기도 전에 막히기 때문. BYPASS 일 땐 익명 세션만 만들고
+    // '개발용 본인인증 완료' 버튼으로 진행한다.
+    if (DEV_IDENTITY_BYPASS_ENABLED) {
+      void ensureAnonymousSession().catch((error) => {
+        logger.captureException(error, {
+          tags: { feature: 'identity-verification', action: 'dev-bypass-ensure-session' },
+        });
+      });
+      return;
+    }
+
     const start = async () => {
       setStartFailed(false);
 
