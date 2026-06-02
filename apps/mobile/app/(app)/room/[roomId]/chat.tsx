@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import { analytics } from '@dei/shared';
+import { avatarColorFor } from '@dei/ui';
 
 import { supabase } from '@/lib/supabase';
 import { subscribeRoomStatus } from '@/lib/realtime';
@@ -45,6 +47,9 @@ export default function RoomChatScreen() {
   // 차단 목록(block 기능 도입 시 여기로 주입). 현재는 빈 집합 — 멘션 후보/귓속말
   // 대상 게이트가 일관 동작하도록 contract 만 유지(filterCandidates·resolveTailMention).
   const blockedIds = useMemo(() => new Set<string>(), []);
+
+  // 내 멤버 레코드(헤더 우측 프로필 아바타용).
+  const self = useMemo(() => members.find((m) => m.userId === selfId), [members, selfId]);
 
   const { messages, send, retry } = useRoomChat({ roomId: roomId ?? '', selfId });
 
@@ -102,19 +107,23 @@ export default function RoomChatScreen() {
         ]),
       );
       if (alive) {
-        setMembers(
-          (roomMembers ?? []).map((r) => {
-            const prof = profileByUser.get(r.user_id);
-            const name = prof?.name ?? '익명';
-            return {
-              userId: r.user_id,
-              status: (r.status as RoomMemberLite['status']) ?? 'active',
-              name,
-              avatarInitial: name[0],
-              photoUrl: prof?.photoUrl,
-            };
-          }),
-        );
+        const mapped = (roomMembers ?? []).map((r) => {
+          const prof = profileByUser.get(r.user_id);
+          const name = prof?.name ?? '익명';
+          return {
+            userId: r.user_id,
+            status: (r.status as RoomMemberLite['status']) ?? 'active',
+            name,
+            avatarInitial: name[0],
+            // photoUrl 없을 때 이니셜 배경을 userId 결정색으로(멤버 식별·재렌더 안정).
+            avatarBg: avatarColorFor(r.user_id),
+            photoUrl: prof?.photoUrl,
+          };
+        });
+        setMembers(mapped);
+        // 멤버 프로필 사진을 미리 디코딩·캐시 → 헤더 스택/버블 노출 시 리드타임 0.
+        const urls = mapped.map((m) => m.photoUrl).filter((u): u is string => Boolean(u));
+        if (urls.length) void Image.prefetch(urls, { cachePolicy: 'memory-disk' });
       }
 
       // 방 이름/상태(있으면). 실패해도 무방 — 기본 라벨/active 로 폴백.
@@ -216,6 +225,9 @@ export default function RoomChatScreen() {
     <RoomChatView
       memberCount={members.filter((m) => m.status === 'active').length}
       selfId={selfId}
+      selfPhotoUrl={self?.photoUrl}
+      selfInitial={self?.avatarInitial}
+      selfBg={self?.avatarBg}
       messages={messages}
       members={members}
       input={input}
