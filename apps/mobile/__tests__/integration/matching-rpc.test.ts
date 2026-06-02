@@ -736,4 +736,45 @@ describe.skipIf(!SHOULD_RUN)('matching ops — admin_force_match / expire_my_sta
     expect(byId[fresh.queueId!]).toBe('waiting');
     expect(byId[otherStale.queueId!]).toBe('waiting');
   });
+
+  // ── 보안 하드닝 (edge 재검증 high 버그 수정 검증, 20260602000060) ──────────────
+
+  it('SM-E7 더블시트 거부: 한 side 내 동일 user 중복 → duplicate_seat, 방 생성 안 됨', async () => {
+    const m1 = await makeUser('male', 'dsm');
+    const f1 = await makeUser('female', 'dsf1');
+    const f2 = await makeUser('female', 'dsf2');
+    const { error } = await admin.rpc('match_and_create', {
+      p_side_a_user_ids: [m1.id, m1.id], // 더블시트
+      p_side_a_gender: 'male',
+      p_side_b_user_ids: [f1.id, f2.id],
+      p_side_b_gender: 'female',
+    });
+    expect(error?.message).toContain('duplicate_seat');
+    const { count } = await admin
+      .from('room_member')
+      .select('*', { count: 'exact', head: true })
+      .in('user_id', [m1.id, f1.id, f2.id]);
+    expect(count).toBe(0);
+  });
+
+  it('SM-E9 성별 위변조 거부: 실제 male 인데 gender=female 로 주장 → gender_mismatch', async () => {
+    const m1 = await makeUser('male', 'gsm'); // 실제 male
+    const f1 = await makeUser('female', 'gsf');
+    const { error } = await admin.rpc('match_and_create', {
+      p_side_a_user_ids: [m1.id],
+      p_side_a_gender: 'female', // 위변조: m1 은 male 인데 female 로 주장
+      p_side_b_user_ids: [f1.id],
+      p_side_b_gender: 'male',
+    });
+    expect(error?.message).toContain('gender_mismatch');
+  });
+
+  it('CR-10 소유 가드: 남의 큐 id 로 try_match 호출(user JWT) → not_owner', async () => {
+    const m1 = await makeUser('male', 'own');
+    const intruder = await makeUser('female', 'intr');
+    const q = await mkTeamQueue([m1], 'male', {});
+    // intruder(user JWT)가 m1 의 큐로 매칭 트리거 시도
+    const { error } = await intruder.client.rpc('try_match', { p_queue_id: q.queueId });
+    expect(error?.message).toContain('not_owner');
+  });
 });
