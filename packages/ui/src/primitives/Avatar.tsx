@@ -123,7 +123,9 @@ export const Avatar = forwardRef<View, AvatarProps>(function Avatar(
       accessibilityRole="image"
       accessibilityLabel={accessibilityLabel ?? (initial ? `${initial} 아바타` : undefined)}
       className={cn(
-        'relative items-center justify-center overflow-hidden rounded-full',
+        // shrink-0: flex-row 부모(Chip·아바타 스택·헤더 등)에서 라벨/배지가 공간을
+        // 요구할 때 아바타 width 만 압축돼 타원으로 찌그러지는 것을 막는다(정사각 보존).
+        'relative shrink-0 items-center justify-center overflow-hidden rounded-full',
         `w-[${size}px] h-[${size}px]`,
         bg ?? DEFAULT_BG,
         // PresenceAvatar accent 링: 1.5px accent 보더(box-shadow 대체).

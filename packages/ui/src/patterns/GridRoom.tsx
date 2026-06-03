@@ -178,7 +178,9 @@ const PresenceAvatar = memo(function PresenceAvatar({
   const photoTestID = index != null ? `gridroom-avatar-photo-${index}` : undefined;
   const initialTestID = index != null ? `gridroom-avatar-initial-${index}` : undefined;
   return (
-    <View className="relative w-[22px] h-[22px]">
+    // shrink-0: 이름 라벨과 같은 flex-row 안에 있어, 긴 이름이면 원이 가로 압축돼
+    // 타원이 되는 것을 막는다(정사각 보존).
+    <View className="relative w-[22px] h-[22px] shrink-0">
       <View className="w-[22px] h-[22px] items-center justify-center overflow-hidden rounded-full border-[1.5px] border-accent bg-[rgba(0,0,0,0.35)]">
         {photoUrl != null ? (
           // 프로필 이미지: 원형 컨테이너를 가득 채우는 cover 이미지(이니셜 폴백 대체).

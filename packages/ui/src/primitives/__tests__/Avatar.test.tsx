@@ -20,6 +20,14 @@ describe('Avatar (P6)', () => {
     expect(container).toContain('h-[38px]');
   });
 
+  it('stays a circle inside flex rows (shrink-0 — Chip/스택에서 가로 압축 방지)', () => {
+    // flex-row 부모(Chip 등)에서 라벨이 공간을 요구하면 아바타 width 만 줄어
+    // 타원이 되는 회귀가 있었다. shrink-0 으로 정사각 치수를 강제 보존.
+    render(<Avatar testID="av" initial="최" size={24} />);
+    const container = screen.getByTestId('av').props.className as string;
+    expect(container).toContain('shrink-0');
+  });
+
   it('falls back to the §3A self bg when no bg prop is given', () => {
     render(<Avatar testID="av" initial="수" />);
     const container = screen.getByTestId('av').props.className as string;
