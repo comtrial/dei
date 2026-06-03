@@ -4,7 +4,6 @@ import { Animated, AppState, type AppStateStatus, Easing, Pressable, StyleSheet,
 import { CameraView } from 'expo-camera';
 import type { RefObject } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { lockToLandscape, unlockAllOrientations, LandscapeDirection } from 'react-native-orientation-turbo';
 
 import { Text, color } from '@dei/ui';
 import { analytics, logger } from '@dei/shared';
@@ -53,28 +52,19 @@ export default function VideoCaptureScreen() {
 
     setIsFocused(true);
 
-    let fadeTimer: ReturnType<typeof setTimeout> | null = null;
-    const lockTimer = setTimeout(() => {
-      try {
-        lockToLandscape(LandscapeDirection.RIGHT);
-      } catch (err) {
-        logger.captureException(err, { tags: { feature: 'video-capture', action: 'lock-orientation' } });
-      }
-      fadeTimer = setTimeout(() => {
-        overlayAnimRef.current = Animated.timing(overlayOpacity, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: true,
-        });
-        overlayAnimRef.current.start(({ finished }) => {
-          if (finished) setOverlayMounted(false);
-        });
-      }, 250);
+    const fadeTimer = setTimeout(() => {
+      overlayAnimRef.current = Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      });
+      overlayAnimRef.current.start(({ finished }) => {
+        if (finished) setOverlayMounted(false);
+      });
     }, 350);
 
     return () => {
-      clearTimeout(lockTimer);
-      if (fadeTimer) clearTimeout(fadeTimer);
+      clearTimeout(fadeTimer);
       clearInterval(timerId);
       setIsFocused(false);
       setCameraReady(false);
@@ -86,11 +76,6 @@ export default function VideoCaptureScreen() {
       overlayAnimRef.current = null;
       overlayOpacity.setValue(1);
       setOverlayMounted(true);
-      try {
-        unlockAllOrientations();
-      } catch (err) {
-        logger.captureException(err, { tags: { feature: 'video-capture', action: 'unlock-orientation' } });
-      }
     };
   }, [overlayOpacity, progressAnim]));
 
