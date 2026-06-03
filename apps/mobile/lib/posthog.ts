@@ -20,6 +20,16 @@ function toEventProps(props?: Record<string, unknown>): EventProps | undefined {
 }
 
 let initialized = false;
+/** 등록된 PostHog 클라이언트(피처 플래그 조회용). 미초기화 시 null. */
+let client: PostHog | null = null;
+
+/**
+ * PostHog 피처 플래그 값을 읽는다(원격 제어 — 앱 재배포 없이 분기). 클라이언트가
+ * 없거나(키 미설정) 아직 플래그를 못 받았으면 undefined. 호출부는 fallback 을 둔다.
+ */
+export function getFeatureFlag(key: string): boolean | string | undefined {
+  return client?.getFeatureFlag(key) as boolean | string | undefined;
+}
 
 /**
  * PostHog SDK를 초기화하고 @dei/shared 의 analytics transport 로 등록한다.
@@ -45,6 +55,7 @@ export function initPostHog(): void {
   }
 
   const posthog = new PostHog(apiKey, { host });
+  client = posthog;
 
   const transport: AnalyticsTransport = {
     capture(event, props) {

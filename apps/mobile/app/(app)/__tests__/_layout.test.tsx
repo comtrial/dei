@@ -1,7 +1,8 @@
 import { render, waitFor } from '@testing-library/react-native';
 
 const mockReplace = jest.fn();
-const mockStack = jest.fn(() => null);
+const mockStack = jest.fn(({ children }: { children?: unknown }) => children ?? null);
+const mockStackScreen = jest.fn(() => null);
 const mockSupabaseFrom = jest.fn();
 const mockWithErrorCapture = jest.fn((_name: string, fn: () => Promise<unknown>) => fn());
 let mockAuthState: { isLoading: boolean; user: { id: string } | null } = {
@@ -10,8 +11,11 @@ let mockAuthState: { isLoading: boolean; user: { id: string } | null } = {
 };
 
 jest.mock('expo-router', () => {
+  const Stack = (...args: unknown[]) => mockStack(...args);
+  Stack.Screen = (...args: unknown[]) => mockStackScreen(...args);
+
   return {
-    Stack: (...args: unknown[]) => mockStack(...args),
+    Stack,
     useRouter: () => ({ replace: mockReplace }),
   };
 });
@@ -94,6 +98,7 @@ describe('AppLayout auth gate', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockStack.mockClear();
+    mockStackScreen.mockClear();
     mockAuthState = { isLoading: false, user: { id: 'user-1' } };
     mockGateRows();
   });
@@ -146,6 +151,10 @@ describe('AppLayout auth gate', () => {
     await waitFor(() => {
       expect(mockStack).toHaveBeenCalled();
     });
+    expect(mockStackScreen).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'room/[roomId]/chat' }),
+      undefined,
+    );
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });

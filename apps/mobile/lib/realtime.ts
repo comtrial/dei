@@ -256,21 +256,47 @@ export function subscribeRoomStatus(
   roomId: string,
   onUpdate: (row: Record<string, unknown>) => void,
 ): () => void {
-  const channel = roomChannel(roomId)
-    .on(
-      'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'room', filter: `id=eq.${roomId}` },
-      (payload) => onUpdate(payload.new as Record<string, unknown>),
-    )
-    .subscribe((status) => {
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        logger.captureMessage(`realtime: room ${roomId} status 구독 ${status}`, 'warning', {
-          tags: { feature: 'realtime', room_id: roomId },
+  // sibling subscribe*(messages/videos/members) 와 동일하게 채널 생성·subscribe·
+  // onUpdate 콜백·cleanup 을 전부 try/catch 로 보호한다(기존엔 CHANNEL_ERROR 만 잡힘).
+  try {
+    const channel = roomChannel(roomId)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'room', filter: `id=eq.${roomId}` },
+        (payload) => {
+          try {
+            onUpdate(payload.new as Record<string, unknown>);
+          } catch (err) {
+            logger.captureException(err, {
+              tags: { feature: 'realtime', sub_feature: 'status', step: 'on-update' },
+              extra: { roomId },
+            });
+          }
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          logger.captureMessage(`realtime: room ${roomId} status 구독 ${status}`, 'warning', {
+            tags: { feature: 'realtime', room_id: roomId },
+          });
+        }
+      });
+
+    return () => {
+      try {
+        void supabase.removeChannel(channel);
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { feature: 'realtime', sub_feature: 'status', step: 'cleanup' },
+          extra: { roomId },
         });
       }
+    };
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'realtime', sub_feature: 'status', step: 'subscribe' },
+      extra: { roomId },
     });
-
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+    return () => {};
+  }
 }

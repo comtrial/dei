@@ -1,5 +1,6 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
+import { captureEdgeError } from '../_shared/log.ts';
 import {
   codedErrorResponse,
   IDENTITY_POLICY,
@@ -22,11 +23,18 @@ Deno.serve(async (req) => {
     return codedErrorResponse('METHOD_NOT_ALLOWED', 'method not allowed', 405);
   }
 
+  // IRREVERSIBLE action — catch 에서 식별자를 잃지 않도록 hoist.
+  let userId: string | undefined;
+  let withdrawStage = 'withdraw_account_pipeline';
+  let capturedReason: string | null = null;
+
   try {
     const { supabase, user } = await getAuthenticatedUser(req);
+    userId = user.id;
     const body = await req.json().catch(() => ({})) as WithdrawBody;
     const reason = typeof body.reason === 'string' ? body.reason.trim() : null;
     const detail = typeof body.detail === 'string' ? body.detail.trim() : null;
+    capturedReason = reason;
     const verifiedAfter = new Date(Date.now() - RECENT_REAUTH_WINDOW_MS).toISOString();
 
     const { data: recentVerification, error: verificationError } = await supabase
@@ -95,6 +103,9 @@ Deno.serve(async (req) => {
       throw auditError;
     }
 
+    // rejoin-lock·audit 는 이미 기록됐는데 deleteUser 가 실패하면 '반쯤 탈퇴'
+    // 상태가 된다 — 별도 stage 로 즉시 식별 가능하게 한다.
+    withdrawStage = 'delete_user';
     const { error: deleteError } = await supabase.auth.admin.deleteUser(user.id, true);
     if (deleteError) {
       throw deleteError;
@@ -102,6 +113,13 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ ok: true });
   } catch (error) {
+    captureEdgeError('withdraw-account', error, {
+      stage: withdrawStage,
+      status: 500,
+      userId,
+      tags: { feature: 'account-withdraw', code: 'BAD_REQUEST' },
+      extra: { reason: capturedReason },
+    });
     const message = error instanceof Error ? error.message : 'failed to withdraw account';
     return codedErrorResponse('BAD_REQUEST', message, 400);
   }

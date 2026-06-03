@@ -1,5 +1,6 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
+import { captureEdgeError, captureEdgeMessage } from '../_shared/log.ts';
 import {
   codedErrorResponse,
   getBirthYear,
@@ -66,10 +67,14 @@ Deno.serve(async (req) => {
   }
 
   let stage = 'parse_request';
+  // catch 에서 식별자를 잃지 않도록 hoist(user 는 authenticate stage 후에야 존재).
+  let userId: string | undefined;
+  let capturedVerificationId: string | undefined;
 
   try {
     const body = await req.json() as ConfirmBody;
     const identityVerificationId = body.identityVerificationId?.trim();
+    capturedVerificationId = identityVerificationId;
 
     if (!identityVerificationId) {
       return codedErrorResponse(
@@ -80,6 +85,7 @@ Deno.serve(async (req) => {
 
     stage = 'authenticate';
     const { supabase, user } = await getAuthenticatedUser(req);
+    userId = user.id;
 
     stage = 'find_pending_verification';
     const { data: pending, error: pendingError } = await supabase
@@ -150,6 +156,20 @@ Deno.serve(async (req) => {
           message: portOneBody?.message ?? null,
           purpose: 'withdraw',
           type: portOneBody?.type ?? null,
+        },
+      );
+
+      // PortOne 인프라 장애 — 사용자 잘못 아님.
+      captureEdgeMessage(
+        'confirm-withdraw-identity-verification',
+        'PortOne verification lookup failed',
+        {
+          stage,
+          status: 502,
+          level: 'warning',
+          userId,
+          tags: { feature: 'withdraw-verify' },
+          extra: { identityVerificationId, portoneStatus: portOneResponse.status },
         },
       );
 
@@ -248,7 +268,14 @@ Deno.serve(async (req) => {
     }
 
     return jsonResponse({ identityVerifiedAt: verifiedAt, ok: true });
-  } catch (_error) {
+  } catch (error) {
+    captureEdgeError('confirm-withdraw-identity-verification', error, {
+      stage,
+      status: 500,
+      userId,
+      tags: { feature: 'withdraw-verify', code: 'BAD_REQUEST' },
+      extra: { identityVerificationId: capturedVerificationId },
+    });
     return codedErrorResponse(
       'BAD_REQUEST',
       '본인확인 결과를 저장할 수 없어요.',

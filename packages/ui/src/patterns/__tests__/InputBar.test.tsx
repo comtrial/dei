@@ -45,15 +45,24 @@ describe('InputBar (X9)', () => {
     expect(cls).toContain('w-[32px]');
   });
 
-  it('input is a pill (rounded-full / text-13) keeping bg-2 surface', () => {
+  it('input is a pill (rounded-full / text-15) keeping bg-2 surface when single-line', () => {
     render(<InputBar />);
     const cls = (screen.getByTestId('input-bar-input').props.className as string) ?? '';
-    // S13a .input-bar input: pill 모양 + 13px, bg-2 표면 유지.
+    // S13a .input-bar input: 한 줄일 땐 pill 모양 + 카톡 수준 15px, bg-2 표면 유지.
     expect(cls).toContain('rounded-full');
-    expect(cls).toContain('text-[13px]');
+    expect(cls).toContain('text-[15px]');
     expect(cls).toContain('bg-bg-2');
     // Input base 의 rounded-md 는 pill 로 덮였다.
     expect(cls).not.toContain('rounded-md');
+  });
+
+  it('input is multiline with an auto-grow height style (clamped)', () => {
+    render(<InputBar />);
+    const input = screen.getByTestId('input-bar-input');
+    expect(input.props.multiline).toBe(true);
+    // 초기 높이는 최소 경계(40)로 clamp.
+    const style = Array.isArray(input.props.style) ? Object.assign({}, ...input.props.style) : input.props.style;
+    expect(style?.height).toBe(40);
   });
 
   it('charcount renders "N / max" meta when provided, omitted otherwise', () => {

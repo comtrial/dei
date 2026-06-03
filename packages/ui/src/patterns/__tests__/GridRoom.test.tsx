@@ -129,6 +129,34 @@ describe('GridRoom (X10)', () => {
     expect(screen.getByTestId('thumb')).toBeTruthy();
   });
 
+  it('renders the presence avatar profile photo when photoUrl is provided', () => {
+    render(
+      <GridRoom
+        cells={[
+          {
+            name: '도경',
+            uploadTime: '14:02',
+            photoUrl: 'https://example.test/photo.jpg',
+          },
+        ]}
+      />,
+    );
+    const photo = screen.getByTestId('gridroom-avatar-photo-0');
+    expect(photo).toBeTruthy();
+    expect(photo.props.source).toEqual({ uri: 'https://example.test/photo.jpg' });
+    // 이미지가 있으면 이니셜 텍스트는 렌더하지 않는다(폴백 대체).
+    expect(screen.queryByTestId('gridroom-avatar-initial-0')).toBeNull();
+  });
+
+  it('falls back to the initial when no photoUrl is provided', () => {
+    render(
+      <GridRoom cells={[{ name: '도경', uploadTime: '14:02' }]} />,
+    );
+    expect(screen.queryByTestId('gridroom-avatar-photo-0')).toBeNull();
+    expect(screen.getByTestId('gridroom-avatar-initial-0')).toBeTruthy();
+    expect(screen.getByText('도')).toBeTruthy();
+  });
+
   it('forwards ref to the root View', () => {
     const ref = { current: null as View | null };
     render(<GridRoom ref={ref} cells={cells} />);

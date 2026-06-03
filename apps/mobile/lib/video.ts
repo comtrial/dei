@@ -330,10 +330,17 @@ async function readQueue(): Promise<QueueEntry[]> {
     if (!info.exists) return [];
     const raw = await FileSystem.readAsStringAsync(queueFilePath());
     return JSON.parse(raw) as QueueEntry[];
-  } catch {
+  } catch (err) {
+    // 큐 파일 JSON 손상 → 대기 중인 업로드 전부를 조용히 잃는다(사용자 영향). 캡처.
+    logger.captureException(err, {
+      tags: { feature: 'video-upload', step: 'queue-read' },
+    });
     return [];
   }
 }
+
+// 큐 항목이 이 시간을 넘겨도 계속 재시도 실패하면 '영구 실패' 신호로 본다.
+const QUEUE_STUCK_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 async function writeQueue(entries: QueueEntry[]): Promise<void> {
   await FileSystem.writeAsStringAsync(
@@ -376,8 +383,21 @@ export async function retryQueuedUploads(): Promise<void> {
         capturedAtIso: entry.capturedAtIso,
         muted: entry.muted,
       });
-    } catch {
+    } catch (err) {
       remaining.push(entry);
+      // 단발 일시 실패는 재큐로 회복되므로 캡처 안 함. 다만 임계 시간을 넘겨도
+      // 계속 실패하면 영구 실패(사용자 영상 영구 유실)로 보고 1회 경고한다.
+      const enqueuedAtMs = Date.parse(entry.enqueuedAt);
+      if (Number.isFinite(enqueuedAtMs) && Date.now() - enqueuedAtMs > QUEUE_STUCK_THRESHOLD_MS) {
+        logger.captureMessage('video upload retry stuck', 'warning', {
+          tags: { feature: 'video-upload', step: 'retry-queue' },
+          extra: {
+            videoId: entry.videoId,
+            enqueuedAt: entry.enqueuedAt,
+            detail: err instanceof Error ? err.message : String(err),
+          },
+        });
+      }
     }
   }
 
