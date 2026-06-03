@@ -20,7 +20,7 @@ import {
   repairProfileIdentityFromVerification,
   VERIFIED_IDENTITY_SELECT,
 } from '@/lib/identity-profile';
-import { enqueueMatchQueue, isMatchQueueErrorCode } from '@/lib/matching';
+import { enqueueMatchQueue, isMatchQueueError, isMatchQueueErrorCode } from '@/lib/matching';
 import { getAppNotificationEnabled, registerPushToken } from '@/lib/notifications.stub';
 import { requestPermission } from '@/lib/permissions';
 import { ROUTES } from '@/lib/routes';
@@ -40,6 +40,10 @@ type HomeProfile = {
 
 function signedPhotoUrl(path: string) {
   return supabase.storage.from('profile-photos').createSignedUrl(path, 60 * 60);
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export default function HomeScreen() {
@@ -188,9 +192,8 @@ export default function HomeScreen() {
       return;
     }
 
-    void logger.withErrorCapture(
-      'home.start-solo',
-      async () => {
+    void (async () => {
+      try {
         analytics.capture(ANALYTICS_EVENTS.team_queue_registered, {
           mode: 'solo',
           source: 'home',
@@ -214,8 +217,9 @@ export default function HomeScreen() {
         }
 
         await registerPushToken(user.id).catch((error) => {
-          logger.captureException(error, {
+          logger.captureMessage('push token registration skipped', 'warning', {
             tags: { screen: 'home', action: 'register-push-token' },
+            extra: { reason: getErrorMessage(error) },
           });
         });
 
@@ -231,19 +235,30 @@ export default function HomeScreen() {
         }
 
         router.replace(ROUTES.queue);
-      },
-      { tags: { screen: 'home', action: 'start-solo' } },
-    ).catch((error) => {
-      if (isMatchQueueErrorCode(error, 'REMATCH_RESTRICTED')) {
-        router.push(ROUTES.booster);
-        return;
-      }
+      } catch (error) {
+        if (isMatchQueueErrorCode(error, 'REMATCH_RESTRICTED')) {
+          router.push(ROUTES.booster);
+          return;
+        }
 
-      logger.captureException(error, {
-        tags: { screen: 'home', action: 'start-solo-catch' },
-      });
-      setQueueFailed(true);
-    });
+        if (isMatchQueueError(error)) {
+          logger.captureMessage(error.message, 'warning', {
+            tags: {
+              screen: 'home',
+              action: 'start-solo',
+              code: error.code ?? 'UNKNOWN',
+            },
+          });
+          setQueueFailed(true);
+          return;
+        }
+
+        logger.captureException(error, {
+          tags: { screen: 'home', action: 'start-solo-catch' },
+        });
+        setQueueFailed(true);
+      }
+    })();
   };
 
   const startTeam = () => {

@@ -383,6 +383,9 @@ deno_version = 2
 [functions.send-message]
 verify_jwt = true
 
+[functions.room-members]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327

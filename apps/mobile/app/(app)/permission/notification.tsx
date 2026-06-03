@@ -15,6 +15,10 @@ import { getPermissionState, openSystemSettings, requestPermission } from '@/lib
 import { ROUTES } from '@/lib/routes';
 import { useAuth } from '@/providers/auth-provider';
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export default function NotificationPermissionScreen() {
   const router = useRouter();
   const { memberIds } = useLocalSearchParams<{ memberIds?: string }>();
@@ -42,8 +46,9 @@ export default function NotificationPermissionScreen() {
     if (user?.id) {
       await setAppNotificationEnabled(user.id, true);
       await registerPushToken(user.id).catch((error) => {
-        logger.captureException(error, {
+        logger.captureMessage('push token registration skipped', 'warning', {
           tags: { screen: 'permission-notification', action: 'register-push-token' },
+          extra: { reason: getErrorMessage(error) },
         });
       });
     }

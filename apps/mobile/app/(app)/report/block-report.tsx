@@ -11,74 +11,126 @@ import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { roomRoutes, ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
+import { getMemberProfile } from '@/lib/room-rpc';
+import {
+  getCachedProfilePhotoUrl,
+  resolveProfilePhotoUrl,
+} from '@/lib/profile-photo-cache';
 
 type TargetMember = {
   id: string;
   initial: string;
   nickname: string;
+  photoUrl?: string;
 };
+
+function paramValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
 
 export default function BlockReportSheetScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const params = useLocalSearchParams<{ roomId?: string; targetId?: string }>();
+  const params = useLocalSearchParams<{
+    roomId?: string;
+    targetAvatarUrl?: string;
+    targetId?: string;
+    targetNickname?: string;
+  }>();
+  const targetId = useMemo(() => paramValue(params.targetId), [params.targetId]);
+  const roomIdValue = useMemo(() => paramValue(params.roomId), [params.roomId]);
+  const paramNickname = useMemo(() => paramValue(params.targetNickname), [params.targetNickname]);
+  const paramAvatarUrl = useMemo(() => paramValue(params.targetAvatarUrl), [params.targetAvatarUrl]);
+  const activeRoomId = roomIdValue && isUuidLike(roomIdValue) ? roomIdValue : null;
+  const validTargetId = targetId && isUuidLike(targetId) ? targetId : null;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [askReport, setAskReport] = useState(false);
   const [complete, setComplete] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [targetMember, setTargetMember] = useState<TargetMember>({
-    id: '',
-    initial: '?',
-    nickname: '상대',
+  const [sheetVisible, setSheetVisible] = useState(true);
+  const [targetMember, setTargetMember] = useState<TargetMember>(() => {
+    const nickname = paramNickname?.trim() || '상대';
+    return {
+      id: targetId ?? '',
+      initial: toInitial(nickname),
+      nickname,
+      photoUrl: paramAvatarUrl,
+    };
   });
 
-  const targetId = useMemo(() => Array.isArray(params.targetId) ? params.targetId[0] : params.targetId, [params.targetId]);
-  const roomId = useMemo(() => params.roomId, [params.roomId]);
-  const roomIdValue = useMemo(() => Array.isArray(roomId) ? roomId[0] : roomId, [roomId]);
-  const canUseTarget = isUuidLike(targetId);
+  const canUseTarget = validTargetId != null;
   const returnAfterComplete = useCallback(() => {
-    if (isUuidLike(roomIdValue)) {
-      router.replace(roomRoutes.index(roomIdValue));
+    if (activeRoomId) {
+      router.replace(roomRoutes.index(activeRoomId));
       return;
     }
 
     router.replace(ROUTES.home);
-  }, [roomIdValue, router]);
+  }, [activeRoomId, router]);
 
   const close = () => router.back();
+
+  const reportRoute = useCallback(() => ({
+    pathname: '/(app)/report/[targetId]' as const,
+    params: {
+      targetId: validTargetId ?? '',
+      ...(activeRoomId ? { roomId: activeRoomId } : {}),
+      ...(targetMember.nickname ? { targetNickname: targetMember.nickname } : {}),
+      ...(targetMember.photoUrl ? { targetAvatarUrl: targetMember.photoUrl } : {}),
+    },
+  }), [activeRoomId, validTargetId, targetMember.nickname, targetMember.photoUrl]);
 
   useEffect(() => {
     analytics.capture(ANALYTICS_EVENTS.room_overflow_menu_opened);
   }, []);
 
   const openReportCategory = () => {
-    if (!canUseTarget || !targetId) {
+    if (!validTargetId) {
       setFailed(true);
       return;
     }
 
-    router.push({
-      pathname: '/(app)/report/[targetId]',
-      params: {
-        targetId,
-        ...(isUuidLike(roomIdValue) ? { roomId: roomIdValue } : {}),
-      },
-    });
+    setSheetVisible(false);
+    router.replace(reportRoute());
   };
 
   useEffect(() => {
-    if (!isUuidLike(targetId)) {
+    if (!validTargetId) {
       return;
     }
 
     void logger.withErrorCapture(
       'safety.load-target-profile',
       async () => {
+        if (activeRoomId) {
+          const result = await getMemberProfile(validTargetId, activeRoomId);
+          if (result?.profile?.nickname) {
+            const photoUrl =
+              result.profile.avatar_url ??
+              getCachedProfilePhotoUrl(validTargetId, result.profile.photo_url) ??
+              (result.profile.photo_url
+                ? await resolveProfilePhotoUrl(
+                    { path: result.profile.photo_url, userId: validTargetId },
+                    { screen: 'block-report', roomId: activeRoomId },
+                  )
+                : null);
+
+            setTargetMember({
+              id: validTargetId,
+              initial: toInitial(result.profile.nickname),
+              nickname: result.profile.nickname,
+              photoUrl: photoUrl ?? undefined,
+            });
+            return;
+          }
+        }
+
         const { data, error } = await supabase
           .from('profile')
-          .select('nickname')
-          .eq('user_id', targetId)
+          .select('nickname, photo_url')
+          .eq('user_id', validTargetId)
           .maybeSingle();
 
         if (error) {
@@ -86,16 +138,26 @@ export default function BlockReportSheetScreen() {
         }
 
         if (data?.nickname) {
+          const photoUrl = data.photo_url
+            ? await resolveProfilePhotoUrl(
+                { path: data.photo_url, userId: validTargetId },
+                activeRoomId
+                  ? { screen: 'block-report', roomId: activeRoomId }
+                  : { screen: 'block-report' },
+              )
+            : null;
+
           setTargetMember({
-            id: targetId,
+            id: validTargetId,
             initial: toInitial(data.nickname),
             nickname: data.nickname,
+            photoUrl: photoUrl ?? undefined,
           });
         }
       },
       { tags: { screen: 'block-report', action: 'load-target' } },
     );
-  }, [targetId]);
+  }, [activeRoomId, validTargetId]);
 
   useEffect(() => {
     if (!complete) {
@@ -112,12 +174,12 @@ export default function BlockReportSheetScreen() {
       async () => {
         setIsSubmitting(true);
 
-        if (user && canUseTarget && targetId) {
+        if (user && validTargetId) {
           const { error } = await supabase.from('block').upsert(
             {
-              blocked_user_id: targetId,
+              blocked_user_id: validTargetId,
               blocker_user_id: user.id,
-              room_id: isUuidLike(roomIdValue) ? roomIdValue : null,
+              room_id: activeRoomId,
               unblocked_at: null,
             },
             { onConflict: 'blocker_user_id,blocked_user_id' },
@@ -143,12 +205,13 @@ export default function BlockReportSheetScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <BottomSheet visible onClose={close} heightPct={56}>
+      <BottomSheet visible={sheetVisible} onClose={close} heightPct={56}>
         <View className="flex-1 px-[24px] pb-[18px] pt-[8px]">
           <SettingsRow
             variant="member"
             label={targetMember.nickname}
             initial={targetMember.initial}
+            photoUrl={targetMember.photoUrl}
             className="px-0"
           />
 
@@ -157,13 +220,18 @@ export default function BlockReportSheetScreen() {
               label="신고하기"
               disabled={!canUseTarget}
               onPress={openReportCategory}
+              testID="block-report-open-report"
               className="px-[18px]"
             />
             <SettingsRow
               variant="danger"
               label={isSubmitting ? '차단 중' : '차단하기'}
               disabled={isSubmitting}
-              onPress={() => setConfirmBlock(true)}
+              onPress={() => {
+                setSheetVisible(false);
+                setConfirmBlock(true);
+              }}
+              testID="block-report-open-block-confirm"
               className="px-[18px]"
             />
           </View>
@@ -187,17 +255,28 @@ export default function BlockReportSheetScreen() {
         title="정말 차단할까요?"
         description="차단은 영구 적용되며 해제할 수 없어요. 서로의 영상과 채팅이 보이지 않습니다."
         actions={[
-          { label: '취소', variant: 'tertiary', onPress: () => setConfirmBlock(false) },
+          {
+            label: '취소',
+            variant: 'tertiary',
+            onPress: () => {
+              setConfirmBlock(false);
+              setSheetVisible(true);
+            },
+          },
           {
             label: '차단하기',
             variant: 'ink',
+            testID: 'block-report-confirm-submit',
             onPress: () => {
               setConfirmBlock(false);
               handleBlock();
             },
           },
         ]}
-        onDismiss={() => setConfirmBlock(false)}
+        onDismiss={() => {
+          setConfirmBlock(false);
+          setSheetVisible(true);
+        }}
       />
 
       <AlertDialog
@@ -210,25 +289,23 @@ export default function BlockReportSheetScreen() {
           {
             label: '신고하기',
             variant: 'ink',
+            testID: 'block-report-after-block-report',
             onPress: () => {
-              if (!canUseTarget || !targetId) {
+              if (!validTargetId) {
                 setAskReport(false);
                 setFailed(true);
                 return;
               }
 
-              router.replace({
-                pathname: '/(app)/report/[targetId]',
-                params: {
-                  targetId,
-                  ...(isUuidLike(roomIdValue) ? { roomId: roomIdValue } : {}),
-                },
-              });
+              setAskReport(false);
+              setSheetVisible(false);
+              router.replace(reportRoute());
             },
           },
           {
             label: '괜찮아요',
             variant: 'secondary',
+            testID: 'block-report-after-block-skip',
             onPress: () => {
               setAskReport(false);
               setComplete(true);
@@ -257,8 +334,20 @@ export default function BlockReportSheetScreen() {
         icon="!"
         title="차단하지 못했어요"
         description="네트워크 상태를 확인한 뒤 다시 시도해주세요."
-        actions={[{ label: '확인', variant: 'ink', onPress: () => setFailed(false) }]}
-        onDismiss={() => setFailed(false)}
+        actions={[
+          {
+            label: '확인',
+            variant: 'ink',
+            onPress: () => {
+              setFailed(false);
+              setSheetVisible(true);
+            },
+          },
+        ]}
+        onDismiss={() => {
+          setFailed(false);
+          setSheetVisible(true);
+        }}
       />
     </SafeAreaView>
   );

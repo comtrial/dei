@@ -6,6 +6,17 @@ export interface RoomMemberLite {
   avatarBg?: string;
   /** 프로필 이미지 URL. Avatar/ChatBubble 로 전달돼 이니셜 대신 원형 이미지 렌더. */
   photoUrl?: string;
+  /** 프로필 상세 스냅샷. 상세 화면 첫 렌더 캐시용이며 진입 후 최신값으로 보정된다. */
+  profile?: {
+    avatar_url?: string | null;
+    bio: string | null;
+    birth_year: number | null;
+    gender: string | null;
+    mbti: string | null;
+    nickname: string | null;
+    photo_url: string | null;
+    region: string | null;
+  };
 }
 
 /**

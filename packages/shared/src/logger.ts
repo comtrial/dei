@@ -24,8 +24,9 @@ export interface LoggerTransport {
 
 const consoleTransport: LoggerTransport = {
   captureException(error, context) {
+    // console.error opens React Native LogBox even for handled logger events.
     // eslint-disable-next-line no-console
-    console.error('[logger] exception:', error, context ?? '');
+    console.warn('[logger] exception:', error, context ?? '');
   },
   captureMessage(message, level = 'info', context) {
     // eslint-disable-next-line no-console

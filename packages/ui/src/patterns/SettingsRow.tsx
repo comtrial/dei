@@ -55,6 +55,8 @@ export interface SettingsRowProps extends Omit<PressableProps, 'children'> {
   right?: ReactNode;
   /** member 변형 아바타 이니셜(예: '도'). */
   initial?: string;
+  /** member 변형 아바타 이미지 URL. 있으면 이니셜 대신 사진을 표시한다. */
+  photoUrl?: string;
   /** member 변형 아바타 배경 className(per-user identity 색, §3A). 기본 peer 색. */
   avatarBg?: string;
   /** master 변형 Toggle on/off 상태. */
@@ -83,6 +85,7 @@ export const SettingsRow = forwardRef<View, SettingsRowProps>(function SettingsR
     value,
     right,
     initial,
+    photoUrl,
     avatarBg = 'bg-[#7A8DB8]',
     toggleValue = false,
     onToggleChange,
@@ -128,7 +131,13 @@ export const SettingsRow = forwardRef<View, SettingsRowProps>(function SettingsR
         className={cn(CONTAINER.member, className)}
         {...rest}
       >
-        <Avatar initial={initial} size={36} bg={avatarBg} textClassName="text-[13px] font-bold" />
+        <Avatar
+          initial={initial}
+          photoUrl={photoUrl}
+          size={36}
+          bg={avatarBg}
+          textClassName="text-[13px] font-bold"
+        />
         <View className="flex-1">
           {/* .nm: 13.5px/700 ink */}
           {label ? (

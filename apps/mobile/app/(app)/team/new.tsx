@@ -44,6 +44,10 @@ const SELF_MEMBER: SearchMember = {
   nickname: '나',
 };
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 type SearchProfile = Pick<Tables<'profile'>, 'is_in_active_room' | 'nickname' | 'user_id'>;
 
 export default function TeamNewScreen() {
@@ -210,8 +214,9 @@ export default function TeamNewScreen() {
 
         if (user?.id) {
           await registerPushToken(user.id).catch((error) => {
-            logger.captureException(error, {
+            logger.captureMessage('push token registration skipped', 'warning', {
               tags: { screen: 'team-new', action: 'register-push-token' },
+              extra: { reason: getErrorMessage(error) },
             });
           });
         }
