@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -14,6 +14,7 @@ import { POLICY, analytics, formatTimeStripSlots, getCurrentHourSlotKst, isQuiet
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { getCachedVideoUri, getCachedThumbnailUri } from '@/lib/video';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 import { useRoomVideos } from '@/hooks/useRoomVideos';
 import { useRoomMembers } from '@/hooks/useRoomMembers';
@@ -118,6 +119,7 @@ function buildCells(
   blockedUserIds: Set<string>,
   selfUserId: string | null,
   nowHour: number,
+  photoUrlByUser: Map<string, string>,
 ): GridRoomCell[] {
   const hourVideos = videosByHour[currentHour] ?? [];
   const videoByUser = new Map<string, VideoRow>();
@@ -177,6 +179,7 @@ function buildCells(
       uploadTime: uploadHour,
       videoId: video.id,
       present: onlineUserIds.has(member.user_id),
+      photoUrl: photoUrlByUser.get(member.user_id),
       media: video.storage_path ? (
         <CellVideoMedia
           videoId={video.id}
@@ -197,11 +200,11 @@ export default function RoomScreen() {
   const [selfGender, setSelfGender] = useState<string | null>(null);
   const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
   const [membersWithProfile, setMembersWithProfile] = useState<RoomMemberWithProfile[]>([]);
+  const [photoUrlByUser, setPhotoUrlByUser] = useState<Map<string, string>>(new Map());
   const [memberLeftMsg, setMemberLeftMsg] = useState<string | null>(null);
   const memberLeftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showExpiryBanner, setShowExpiryBanner] = useState(false);
   const expiryCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   const { currentHour, setCurrentHour } = useHourSlot();
   const hourRange = POLICY.gridPerformance.prefetchHourRange;
@@ -281,6 +284,57 @@ export default function RoomScreen() {
       .catch(() => {});
   }, [roomId, user?.id, members]);
 
+  // 멤버 프로필 사진 서명 + 선로드(prefetch). photo_url 은 profile-photos 버킷
+  // 경로라 서명 URL 이 필요하다. 멤버 목록이 갱신될 때 사진 보유 멤버를 한 번에
+  // 서명하고, expo-image 디스크/메모리 캐시에 미리 적재(Image.prefetch)해 그리드가
+  // 뜰 때 아바타가 네트워크 왕복 없이 즉시 보이게 한다(UX 최적화). 새로 들어온
+  // photo_url 만 추가 서명 — 이미 서명한 멤버는 재서명·재prefetch 안 함.
+  useEffect(() => {
+    const pending = membersWithProfile.filter(
+      (m) => m.profile?.photo_url && !photoUrlByUser.has(m.user_id),
+    );
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const signed = await Promise.all(
+        pending.map(async (m) => {
+          const path = m.profile!.photo_url as string;
+          const { data, error } = await supabase.storage
+            .from('profile-photos')
+            .createSignedUrl(path, 60 * 60);
+          if (error) {
+            logger.captureException(error, {
+              tags: { screen: 'room', feature: 'avatar-photo-sign', room_id: roomId },
+              extra: { user_id: m.user_id },
+            });
+            return null;
+          }
+          return { userId: m.user_id, url: data?.signedUrl ?? null };
+        }),
+      );
+      if (cancelled) return;
+
+      const fresh = signed.filter(
+        (s): s is { userId: string; url: string } => s != null && s.url != null,
+      );
+      if (fresh.length === 0) return;
+
+      // expo-image 캐시에 선적재(병렬). 실패해도 렌더에는 영향 없음(렌더 시 재요청).
+      for (const s of fresh) Image.prefetch(s.url);
+
+      setPhotoUrlByUser((prev) => {
+        const next = new Map(prev);
+        for (const s of fresh) next.set(s.userId, s.url);
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [membersWithProfile, photoUrlByUser, roomId]);
+
   useEffect(() => {
     if (!user?.id || !roomId) return;
 
@@ -315,9 +369,9 @@ export default function RoomScreen() {
   const cells = useMemo(
     () => {
       const nowHour = getCurrentHourSlotKst();
-      return buildCells(membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id ?? null, nowHour);
+      return buildCells(membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id ?? null, nowHour, photoUrlByUser);
     },
-    [membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id],
+    [membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id, photoUrlByUser],
   );
 
   const timeStrip = useMemo<GridRoomTimeSlot[]>(() => {
@@ -348,12 +402,6 @@ export default function RoomScreen() {
     () => formatTimeStripSlots(currentHour, hourRange),
     [currentHour, hourRange],
   );
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await Promise.all([refetchVideos(), refetchMembers()]);
-    setRefreshing(false);
-  }, [refetchVideos, refetchMembers]);
 
   if (!gateChecked) {
     return (
@@ -401,9 +449,13 @@ export default function RoomScreen() {
       <ScrollView
         className="flex-1"
         contentContainerClassName="pb-8"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
-        }
+        // 위아래 드래그 잠금: pull-to-refresh·바운스 제거. 새 영상은 realtime
+        // (useRoomVideos 구독)으로 자동 추가되므로 수동 새로고침이 불필요하다.
+        // 콘텐츠가 화면을 넘기는 경우(최대 8셀)에만 스크롤되고, 평상시엔 드래그
+        // 반응이 없다(바운스/overscroll 차단).
+        bounces={false}
+        alwaysBounceVertical={false}
+        overScrollMode="never"
       >
         {showExpiryBanner ? (
           <View className="px-4 pt-3">
