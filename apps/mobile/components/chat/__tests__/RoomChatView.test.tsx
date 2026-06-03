@@ -179,6 +179,17 @@ describe('RoomChatView', () => {
     expect(screen.getByTestId('chat-stream').props.keyboardShouldPersistTaps).toBe('handled');
   });
 
+  // 오버레이 모드: 영상 위 dim scrim 렌더 / legacy 면 없음(피처 플래그 분기).
+  it('renders a dim scrim only in overlay mode', () => {
+    setup({ overlay: true });
+    expect(screen.getByTestId('room-chat-scrim')).toBeTruthy();
+  });
+
+  it('no scrim in legacy mode (default)', () => {
+    setup();
+    expect(screen.queryByTestId('room-chat-scrim')).toBeNull();
+  });
+
   // ★신규2: 아바타 탭 → onAvatarPress(메시지 발신자 userId).
   it('tapping a them-bubble avatar fires onAvatarPress with the message userId', () => {
     const props = setup({

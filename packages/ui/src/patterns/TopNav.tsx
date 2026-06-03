@@ -76,6 +76,12 @@ export interface TopNavProps extends ViewProps {
   leftAccessory?: ReactNode;
   /** 우측 액션 slot — IconButton/Badge(count)/Avatar/Button 등을 caller 가 조립. */
   rightActions?: ReactNode;
+  /**
+   * 어두운 표면(영상 위 scrim 오버레이) 위에 얹힐 때 true.
+   * 제목/부제/뒤로 글리프를 흰색으로, 기본 paper 표면·하단 라인을 투명/흰계열로 바꾼다.
+   * (caller 가 className 으로 dark band 배경을 직접 줄 때 텍스트 대비 보정용)
+   */
+  onDark?: boolean;
   className?: string;
 }
 
@@ -89,6 +95,7 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
     subtitle,
     leftAccessory,
     rightActions,
+    onDark = false,
     className,
     ...rest
   },
@@ -102,7 +109,8 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
     leftNode = (
       <IconButton
         glyph={LEFT_GLYPH[left]}
-        variant="ghost"
+        // onDark(영상 위 scrim) 에선 glass variant 로 흰 글리프 — ghost(ink)는 안 보임.
+        variant={onDark ? 'glass' : 'ghost'}
         size={32}
         accessibilityLabel={leftAccessibilityLabel ?? LEFT_LABEL[left]}
         onPress={onLeftPress}
@@ -119,7 +127,9 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
       // .nav: align-items center, padding 14px 16px 6px. surface 는 매트릭스 X1
       // 지정값(bg-paper + border-b border-line). 정렬은 좌측·타이틀 | 우측 분리.
       className={cn(
-        'flex-row items-center justify-between bg-paper border-b border-line px-[16px] pt-[14px] pb-[6px]',
+        'flex-row items-center justify-between px-[16px] pt-[14px] pb-[6px]',
+        // onDark: 표면은 caller(dark band)가 담당 → 투명 + 흰계열 하단 라인.
+        onDark ? 'border-b border-[rgba(255,255,255,0.12)]' : 'bg-paper border-b border-line',
         className,
       )}
       accessibilityRole="header"
@@ -131,12 +141,20 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
         {title != null || subtitle != null ? (
           <View className={cn('min-w-0', titleHasLeading && 'ml-[6px]')}>
             {title != null ? (
-              <Text tone="ink" numberOfLines={1} className={TITLE_CLASS}>
+              <Text
+                tone={onDark ? undefined : 'ink'}
+                numberOfLines={1}
+                className={cn(TITLE_CLASS, onDark && 'text-white')}
+              >
                 {title}
               </Text>
             ) : null}
             {subtitle != null ? (
-              <Text tone="ink-3" numberOfLines={1} className="text-[11px] font-semibold">
+              <Text
+                tone={onDark ? undefined : 'ink-3'}
+                numberOfLines={1}
+                className={cn('text-[11px] font-semibold', onDark && 'text-[rgba(255,255,255,0.85)]')}
+              >
                 {subtitle}
               </Text>
             ) : null}

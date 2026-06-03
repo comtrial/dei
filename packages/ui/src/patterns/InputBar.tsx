@@ -77,6 +77,11 @@ export interface InputBarProps extends Omit<ViewProps, 'children'> {
   whisperTarget?: { name: string; avatarInitial?: string; avatarBg?: string } | null;
   /** 귓속말 대상 칩 × 탭 — 귓속말 모드 해제. */
   onClearWhisper?: () => void;
+  /**
+   * 어두운 표면(영상 위 scrim 오버레이) 위에 얹힐 때 true. 바 표면을 투명으로
+   * (dark band 는 caller 가 줌) + 상단 라인을 흰계열로. 입력 pill(bg-2)은 불투명 유지.
+   */
+  onDark?: boolean;
   className?: string;
 }
 
@@ -115,6 +120,7 @@ export const InputBar = forwardRef<View, InputBarProps>(function InputBar(
     inputRef,
     whisperTarget = null,
     onClearWhisper,
+    onDark = false,
     className,
     ...rest
   },
@@ -137,6 +143,8 @@ export const InputBar = forwardRef<View, InputBarProps>(function InputBar(
       ref={ref}
       className={cn(
         BAR_CLASS,
+        // onDark(영상 위 오버레이): 바 표면 투명(dark band 는 caller) + 흰계열 상단 라인.
+        onDark && 'border-[rgba(255,255,255,0.12)] bg-transparent',
         // 귓속말 모드 시 accent 톤으로 강조(보더+soft 배경). 색은 토큰 className 만.
         whisperActive && 'border-accent bg-accent-soft',
         className,
@@ -167,9 +175,9 @@ export const InputBar = forwardRef<View, InputBarProps>(function InputBar(
             // 매트릭스 X9 charcount — 입력 위 우측 정렬 meta ('N / max').
             <Text
               variant="meta"
-              tone="ink-3"
+              tone={onDark ? undefined : 'ink-3'}
               tabularNums
-              className="mb-[4px] self-end"
+              className={cn('mb-[4px] self-end', onDark && 'text-[rgba(255,255,255,0.7)]')}
               testID="input-bar-charcount"
             >
               {`${charcount.count} / ${charcount.max}`}
