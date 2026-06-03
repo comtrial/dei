@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getAppGateRoute,
   getVerifiedIdentityFromVerification,
   getAuthGateRoute,
   hasCompletedProfile,
@@ -55,6 +56,37 @@ describe('auth-flow', () => {
     expect(getAuthGateRoute(profile)).toBeNull();
     expect(hasVerifiedIdentity(profile)).toBe(true);
     expect(hasCompletedProfile(profile)).toBe(true);
+  });
+
+  it('blocks app routes unless a verified identity record and current terms exist', () => {
+    const completeProfile = {
+      is_adult: true,
+      birth_year: 2001,
+      gender: 'female',
+      nickname: '하루산책',
+      onboarding_completed_at: '2026-05-30T00:00:00.000Z',
+      photo_url: 'user/profile.jpg',
+    };
+
+    expect(getAppGateRoute(completeProfile, {
+      hasCurrentTermsAgreement: true,
+      hasVerifiedIdentityRecord: false,
+    })).toBe('terms');
+    expect(getAppGateRoute(completeProfile, {
+      hasCurrentTermsAgreement: false,
+      hasVerifiedIdentityRecord: true,
+    })).toBe('terms');
+    expect(getAppGateRoute({
+      ...completeProfile,
+      photo_url: null,
+    }, {
+      hasCurrentTermsAgreement: true,
+      hasVerifiedIdentityRecord: true,
+    })).toBe('profileStep2');
+    expect(getAppGateRoute(completeProfile, {
+      hasCurrentTermsAgreement: true,
+      hasVerifiedIdentityRecord: true,
+    })).toBeNull();
   });
 
   it('recovers verified identity from auth_verification metadata when profile identity fields are missing', () => {
