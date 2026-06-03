@@ -95,6 +95,15 @@ describe('GridRoom (X10)', () => {
     expect(onAvatarPress).toHaveBeenCalledWith(cells[1], 1);
   });
 
+  // 회귀: 영상 없는 empty('Zzz..') 셀의 아바타+이름 탭도 프로필 진입(멤버 프로필 S14).
+  it('fires onAvatarPress for empty cells (Zzz.. 셀도 프로필 진입)', () => {
+    const onAvatarPress = jest.fn();
+    render(<GridRoom cells={cells} onAvatarPress={onAvatarPress} />);
+    // cells[0] = { kind: 'empty', name: '동현' }
+    fireEvent.press(screen.getByTestId('gridroom-avatar-0'));
+    expect(onAvatarPress).toHaveBeenCalledWith(cells[0], 0);
+  });
+
   it('falls back to a token solid (bg-bg-2) cell background without a GradientComponent', () => {
     render(<GridRoom cells={[cells[0]]} />);
     // §3B: 그라데이션 미주입 시 토큰 단색 폴백, raw hex 배경 금지.

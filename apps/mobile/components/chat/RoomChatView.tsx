@@ -224,8 +224,10 @@ export function RoomChatView(props: RoomChatViewProps) {
             />
           )}
 
-          {/* 컴포저 영역 — 하단 SafeArea(홈 인디케이터) 인셋 흡수. 오버레이면 dark band(.62). */}
-          <SafeAreaView edges={['bottom']} className={o ? bandClass : undefined}>
+          {/* 컴포저 영역 — 입력창↔키보드 간격 축소: 하단 SafeArea(홈 인디케이터)
+              인셋(~34px) 대신 작은 고정 패딩(pb-2=8px). 키보드가 뜨면 컴포저가
+              키보드에 가깝게 붙는다(참고 디자인). 오버레이면 dark band(.62). */}
+          <View className={cn('pb-2', o ? bandClass : undefined)}>
             <NewMessageJumpButton count={props.newCount} onPress={handleJump} />
             <MentionAutocomplete
               candidates={candidates}
@@ -253,7 +255,7 @@ export function RoomChatView(props: RoomChatViewProps) {
               }
               onClearWhisper={props.onClearWhisper}
             />
-          </SafeAreaView>
+          </View>
         </View>
         </View>
       </SafeAreaView>

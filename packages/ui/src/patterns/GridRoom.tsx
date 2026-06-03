@@ -67,6 +67,8 @@ export interface GradientComponentProps {
 export interface GridRoomFilledCell {
   kind?: 'filled';
   name: string;
+  /** 멤버 user_id — 아바타 탭 → 멤버 프로필(S14) 정확 매칭용(이름 문자열 매칭 대체). */
+  userId?: string;
   initial?: string;
   uploadTime: string;
   gradient?: CellGradient;
@@ -114,7 +116,8 @@ export interface GridRoomProps extends ViewProps {
   cells: GridRoomCell[];
   GradientComponent?: ComponentType<GradientComponentProps>;
   onCellPress?: (cell: GridRoomCell, index: number) => void;
-  onAvatarPress?: (cell: GridRoomFilledCell, index: number) => void;
+  /** 아바타+이름 영역 탭(→ 멤버 프로필). filled·empty 셀 모두 발생(둘 다 userId 보유). */
+  onAvatarPress?: (cell: GridRoomCell, index: number) => void;
   onTimeSlotPress?: (slotIndex: number, slot: GridRoomTimeSlot) => void;
   className?: string;
 }
@@ -298,10 +301,12 @@ const EmptyCell = memo(function EmptyCell({
   cell,
   index,
   onCellPress,
+  onAvatarPress,
 }: {
   cell: GridRoomEmptyCell;
   index: number;
   onCellPress?: GridRoomProps['onCellPress'];
+  onAvatarPress?: GridRoomProps['onAvatarPress'];
 }) {
   const initial = cell.name.charAt(0);
   return (
@@ -312,10 +317,18 @@ const EmptyCell = memo(function EmptyCell({
       onPress={onCellPress ? () => onCellPress(cell, index) : undefined}
       className="relative aspect-[3/4] overflow-hidden rounded-md bg-[#1A1A1A]"
     >
-      <View className="absolute left-[8px] top-[8px] flex-row items-center gap-[5px]">
+      {/* 아바타+이름 영역 탭 → 멤버 프로필(filled 셀과 동일). 영상 없는 'Zzz..'
+          셀에서도 프로필 진입이 되도록 별도 Pressable 로 묶는다. */}
+      <Pressable
+        testID={`gridroom-avatar-${index}`}
+        accessibilityRole="button"
+        accessibilityLabel={`${cell.name} 프로필`}
+        onPress={onAvatarPress ? () => onAvatarPress(cell, index) : undefined}
+        className="absolute left-[8px] top-[8px] flex-row items-center gap-[5px]"
+      >
         <PresenceAvatar initial={initial} present={false} />
         <Text className="text-2xs font-bold text-paper">{cell.name}</Text>
-      </View>
+      </Pressable>
       <View className="absolute inset-0 items-center justify-center">
         {cell.canRecord ? (
           <EmptyBlob tone="purple" size={120} />
@@ -383,6 +396,7 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
                     cell={cell}
                     index={index}
                     onCellPress={onCellPress}
+                    onAvatarPress={onAvatarPress}
                   />
                 ) : (
                   <FilledCell
