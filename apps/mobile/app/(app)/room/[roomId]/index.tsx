@@ -17,7 +17,7 @@ import { Image } from 'expo-image';
 import { LinearGradient, type LinearGradientProps } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { MessageCircle, MoreHorizontal } from 'lucide-react-native';
+import { Calendar as CalendarIcon, MessageCircle, MoreHorizontal } from 'lucide-react-native';
 
 import { avatarColorFor, Banner, GridRoom, IconButton, Badge, Text, TopNav } from '@dei/ui';
 import type { GridRoomCell, GridRoomFilledCell, GradientComponentProps } from '@dei/ui';
@@ -42,6 +42,7 @@ import { resolveProfilePhotoUrls } from '@/lib/profile-photo-cache';
 import { setCachedRoomChatMembers } from '@/lib/chat/member-cache';
 import type { RoomMemberLite } from '@/lib/chat/mention';
 import { MatchingWaitingView } from '@/components/matching/MatchingWaitingView';
+import { CalendarSheet } from '@/components/calendar-sheet';
 
 const ROOM_PREPARE_MIN_MS = 700;
 const ROOM_PREPARE_SETTLE_MS = 350;
@@ -63,6 +64,14 @@ function getTimeStripTargetOffset(event: NativeSyntheticEvent<NativeScrollEvent>
     targetContentOffset?: { x?: number };
   };
   return native.targetContentOffset?.x ?? native.contentOffset.x;
+}
+
+function isSameDay(d1: Date, d2: Date): boolean {
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
 }
 
 function CellVideoMedia({
@@ -146,6 +155,7 @@ function buildCells(
   blockedUserIds: Set<string>,
   selfUserId: string | null,
   nowHour: number,
+  isViewingToday: boolean,
   photoUrlByUser: Map<string, string>,
   mediaUriByVideo: Map<string, CellMediaUri>,
 ): GridRoomCell[] {
@@ -155,7 +165,7 @@ function buildCells(
     if (!videoByUser.has(v.user_id)) videoByUser.set(v.user_id, v);
   }
 
-  const isCurrentSlot = currentHour === nowHour;
+  const isCurrentSlot = isViewingToday && currentHour === nowHour;
 
   const sameGender = selfGender
     ? members.filter((m) => m.profile?.gender === selfGender)
@@ -296,11 +306,19 @@ export default function RoomScreen() {
 
   const { currentHour, setCurrentHour } = useHourSlot();
   const hourRange = POLICY.gridPerformance.prefetchHourRange;
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarMinDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - POLICY.room.autoExpireDays);
+    return d;
+  }, []);
 
   const { videosByHour, loading: videosLoading, refetch: refetchVideos } = useRoomVideos(
     roomId,
     currentHour,
     hourRange,
+    selectedDate,
   );
   const { members, refetch: refetchMembers } = useRoomMembers(roomId, {
     onMemberLeft: (userId, status) => {
@@ -531,12 +549,37 @@ export default function RoomScreen() {
     };
   }, [currentHour, videosByHour, videosLoading]);
 
+  const nowHour = getCurrentHourSlotKst();
+  const isViewingToday = useMemo(() => isSameDay(selectedDate, new Date()), [selectedDate]);
+
   const cells = useMemo(
-    () => {
-      const nowHour = getCurrentHourSlotKst();
-      return buildCells(membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id ?? null, nowHour, photoUrlByUser, mediaUriByVideo);
-    },
-    [membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id, photoUrlByUser, mediaUriByVideo],
+    () =>
+      buildCells(
+        membersWithProfile,
+        videosByHour,
+        currentHour,
+        onlineUserIds,
+        selfGender,
+        blockedUserIds,
+        user?.id ?? null,
+        nowHour,
+        isViewingToday,
+        photoUrlByUser,
+        mediaUriByVideo,
+      ),
+    [
+      membersWithProfile,
+      videosByHour,
+      currentHour,
+      onlineUserIds,
+      selfGender,
+      blockedUserIds,
+      user?.id,
+      nowHour,
+      isViewingToday,
+      photoUrlByUser,
+      mediaUriByVideo,
+    ],
   );
 
   const firstRenderRef = useRef(false);
@@ -561,8 +604,9 @@ export default function RoomScreen() {
       Array.from({ length: 24 }, (_, hour) => ({
         hour,
         label: hourSlotLabel(hour),
+        isFuture: isViewingToday && hour > nowHour,
       })),
-    [],
+    [isViewingToday, nowHour],
   );
   const activeTimeSlotIndex = clampTimeSlotIndex(currentHour, slots.length);
   const timeStripScrollRef = useRef<ElementRef<typeof ScrollView>>(null);
@@ -610,11 +654,26 @@ export default function RoomScreen() {
     }
   }, []);
 
+  const scrollToCommittedTimeSlot = useCallback(
+    (animated = true) => {
+      timeStripScrollRef.current?.scrollTo({
+        animated,
+        x: timeStripCommittedHourRef.current * TIME_SLOT_STEP,
+        y: 0,
+      });
+    },
+    [],
+  );
+
   const commitTimeSlot = useCallback(
     (slotIndex: number) => {
       const nextIndex = clampTimeSlotIndex(slotIndex, slots.length);
       const slot = slots[nextIndex];
       if (!slot) return;
+      if (slot.isFuture) {
+        scrollToCommittedTimeSlot();
+        return;
+      }
       if (slot.hour === timeStripCommittedHourRef.current) return;
 
       void Haptics.selectionAsync().catch(() => {});
@@ -629,7 +688,35 @@ export default function RoomScreen() {
       timeStripCommittedHourRef.current = slot.hour;
       setCurrentHour(slot.hour);
     },
-    [setCurrentHour, slots, videosByHour],
+    [scrollToCommittedTimeSlot, setCurrentHour, slots, videosByHour],
+  );
+
+  const handleSelectDate = useCallback(
+    (date: Date) => {
+      setSelectedDate(date);
+      setCurrentHour(getCurrentHourSlotKst());
+      setCalendarOpen(false);
+    },
+    [setCurrentHour],
+  );
+
+  const shiftHour = useCallback(
+    (direction: -1 | 1) => {
+      const target = (((currentHour + direction) % 24) + 24) % 24;
+      if (isViewingToday && target > nowHour) return;
+      const fromHour = prevHourRef.current;
+      const cacheHit = target in videosByHour;
+      analytics.capture(ANALYTICS_EVENTS.room_timestrip_swipe, {
+        from_hour: fromHour,
+        to_hour: target,
+        cache_hit: cacheHit,
+      });
+      void Haptics.selectionAsync().catch(() => {});
+      prevHourRef.current = target;
+      timeStripCommittedHourRef.current = target;
+      setCurrentHour(target);
+    },
+    [currentHour, isViewingToday, nowHour, setCurrentHour, videosByHour],
   );
 
   const scheduleTimeSlotCommit = useCallback(
@@ -681,210 +768,233 @@ export default function RoomScreen() {
   return (
     <View className="flex-1 bg-bg">
       {showRoomShell ? (
-      <SafeAreaView className="flex-1 bg-bg">
-        <TopNav
-          left="none"
-          title="dei"
-          rightActions={
-            <>
-              <View>
+        <SafeAreaView className="flex-1 bg-bg">
+          <TopNav
+            left="none"
+            title="dei"
+            rightActions={
+              <>
                 <IconButton
-                  glyph={MessageCircle}
+                  glyph={CalendarIcon}
                   variant="ghost"
                   size={32}
-                  accessibilityLabel="채팅"
+                  accessibilityLabel="날짜 선택"
+                  onPress={() => setCalendarOpen(true)}
+                />
+                <View>
+                  <IconButton
+                    glyph={MessageCircle}
+                    variant="ghost"
+                    size={32}
+                    accessibilityLabel="채팅"
+                    onPress={() => {
+                      analytics.capture(ANALYTICS_EVENTS.room_chat_opened, { room_id: roomId });
+                      setCachedRoomChatMembers(roomId, buildChatMembers(membersWithProfile, photoUrlByUser));
+                      router.push(`/room/${roomId}/chat`);
+                    }}
+                  />
+                  <View className="absolute top-[2px] right-[2px]">
+                    <Badge variant="dot" />
+                  </View>
+                </View>
+                <IconButton
+                  glyph={MoreHorizontal}
+                  variant="ghost"
+                  size={32}
+                  accessibilityLabel="더보기"
                   onPress={() => {
-                    analytics.capture(ANALYTICS_EVENTS.room_chat_opened, { room_id: roomId });
-                    setCachedRoomChatMembers(roomId, buildChatMembers(membersWithProfile, photoUrlByUser));
-                    router.push(`/room/${roomId}/chat`);
+                    analytics.capture(ANALYTICS_EVENTS.leave_room_menu_opened, { room_id: roomId });
+                    router.push(`/room/${roomId}/leave-confirm`);
                   }}
                 />
-                <View className="absolute top-[2px] right-[2px]">
-                  <Badge variant="dot" />
+              </>
+            }
+          />
+          <ScrollView
+            className="flex-1"
+            contentContainerClassName="pb-8"
+            // 위아래 드래그 잠금: pull-to-refresh·바운스 제거. 새 영상은 realtime
+            // (useRoomVideos 구독)으로 자동 추가되므로 수동 새로고침이 불필요하다.
+            // 콘텐츠가 화면을 넘기는 경우(최대 8셀)에만 스크롤되고, 평상시엔 드래그
+            // 반응이 없다(바운스/overscroll 차단).
+            bounces={false}
+            alwaysBounceVertical={false}
+            overScrollMode="never"
+          >
+            {showExpiryBanner ? (
+              <View className="px-4 pt-3">
+                <Banner tone="warn" icon="⏰">
+                  곧 영상이 잠겨요
+                </Banner>
+              </View>
+            ) : null}
+            {memberLeftMsg ? (
+              <View className="px-4 pt-3">
+                <Banner tone="info">{memberLeftMsg}</Banner>
+              </View>
+            ) : null}
+            {videosLoading ? (
+              <View className="flex-1 items-center justify-center py-16">
+                <ActivityIndicator />
+              </View>
+            ) : (
+              <>
+                <View className="relative mx-[8px] px-0 pb-[14px] pt-[6px]">
+                  <View className="absolute left-[6px] top-[6px] bottom-[14px] justify-center">
+                    <Text className="text-2xs text-ink-4">‹</Text>
+                  </View>
+                  <View className="absolute right-[6px] top-[6px] bottom-[14px] justify-center">
+                    <Text className="text-2xs text-ink-4">›</Text>
+                  </View>
+                  <Animated.ScrollView
+                    ref={timeStripScrollRef}
+                    testID="room-timestrip-scroll"
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    bounces={false}
+                    decelerationRate="fast"
+                    disableIntervalMomentum
+                    snapToOffsets={timeStripSnapOffsets}
+                    scrollEventThrottle={16}
+                    onScroll={handleTimeStripScroll}
+                    contentOffset={{ x: activeTimeSlotIndex * TIME_SLOT_STEP, y: 0 }}
+                    onScrollBeginDrag={(event) => {
+                      timeStripInteractingRef.current = true;
+                      timeStripHapticIndexRef.current = offsetToTimeSlotIndex(
+                        event.nativeEvent.contentOffset.x,
+                        slots.length,
+                      );
+                    }}
+                    onScrollEndDrag={(event) => {
+                      scheduleTimeSlotCommit(
+                        offsetToTimeSlotIndex(getTimeStripTargetOffset(event), slots.length),
+                      );
+                    }}
+                    onMomentumScrollBegin={() => {
+                      clearScheduledTimeStripCommit();
+                      timeStripInteractingRef.current = true;
+                    }}
+                    onMomentumScrollEnd={(event) => {
+                      clearScheduledTimeStripCommit();
+                      timeStripInteractingRef.current = false;
+                      commitTimeSlot(
+                        offsetToTimeSlotIndex(event.nativeEvent.contentOffset.x, slots.length),
+                      );
+                    }}
+                    contentContainerStyle={{
+                      alignItems: 'center',
+                      paddingHorizontal: timeStripSidePadding,
+                    }}
+                  >
+                    {slots.map((slot, i) => {
+                      const scale = timeStripScrollX.interpolate({
+                        inputRange: [
+                          (i - 1) * TIME_SLOT_STEP,
+                          i * TIME_SLOT_STEP,
+                          (i + 1) * TIME_SLOT_STEP,
+                        ],
+                        outputRange: [0.72, 1.68, 0.72],
+                        extrapolate: 'clamp',
+                      });
+                      const opacity = timeStripScrollX.interpolate({
+                        inputRange: [
+                          (i - 1) * TIME_SLOT_STEP,
+                          i * TIME_SLOT_STEP,
+                          (i + 1) * TIME_SLOT_STEP,
+                        ],
+                        outputRange: [0.28, 1, 0.28],
+                        extrapolate: 'clamp',
+                      });
+                      const animatedSlotStyle = {
+                        opacity,
+                        transform: [{ scale }],
+                      };
+                      return (
+                        <Pressable
+                          key={`${slot.hour}-${i}`}
+                          testID={`room-time-slot-${i}`}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${slot.label} 시간대`}
+                          disabled={slot.isFuture}
+                          onPress={() => {
+                            timeStripScrollRef.current?.scrollTo({
+                              animated: true,
+                              x: i * TIME_SLOT_STEP,
+                              y: 0,
+                            });
+                            commitTimeSlot(i);
+                          }}
+                          className="mr-[10px] w-[60px]"
+                        >
+                          <Animated.View
+                            className="h-[48px] items-center justify-center px-[8px]"
+                            style={animatedSlotStyle}
+                          >
+                            <Text
+                              className={
+                                slot.isFuture
+                                  ? 'text-base font-black text-ink-4 opacity-40 tracking-tight'
+                                  : 'text-base font-black text-ink tracking-tight'
+                              }
+                              tabularNums
+                            >
+                              {slot.label}
+                            </Text>
+                          </Animated.View>
+                        </Pressable>
+                      );
+                    })}
+                  </Animated.ScrollView>
                 </View>
-              </View>
-              <IconButton
-                glyph={MoreHorizontal}
-                variant="ghost"
-                size={32}
-                accessibilityLabel="더보기"
-                onPress={() => {
-                  analytics.capture(ANALYTICS_EVENTS.leave_room_menu_opened, { room_id: roomId });
-                  router.push(`/room/${roomId}/leave-confirm`);
-                }}
-              />
-            </>
-          }
-        />
-        <ScrollView
-          className="flex-1"
-          contentContainerClassName="pb-8"
-          // 위아래 드래그 잠금: pull-to-refresh·바운스 제거. 새 영상은 realtime
-          // (useRoomVideos 구독)으로 자동 추가되므로 수동 새로고침이 불필요하다.
-          // 콘텐츠가 화면을 넘기는 경우(최대 8셀)에만 스크롤되고, 평상시엔 드래그
-          // 반응이 없다(바운스/overscroll 차단).
-          bounces={false}
-          alwaysBounceVertical={false}
-          overScrollMode="never"
-        >
-          {showExpiryBanner ? (
-            <View className="px-4 pt-3">
-              <Banner tone="warn" icon="⏰">
-                곧 영상이 잠겨요
-              </Banner>
-            </View>
-          ) : null}
-          {memberLeftMsg ? (
-            <View className="px-4 pt-3">
-              <Banner tone="info">{memberLeftMsg}</Banner>
-            </View>
-          ) : null}
-          {videosLoading ? (
-            <View className="flex-1 items-center justify-center py-16">
-              <ActivityIndicator />
-            </View>
-          ) : (
-            <>
-            <View className="relative mx-[8px] px-0 pb-[14px] pt-[6px]">
-              <View className="absolute left-[6px] top-[6px] bottom-[14px] justify-center">
-                <Text className="text-2xs text-ink-4">‹</Text>
-              </View>
-              <View className="absolute right-[6px] top-[6px] bottom-[14px] justify-center">
-                <Text className="text-2xs text-ink-4">›</Text>
-              </View>
-              <Animated.ScrollView
-                ref={timeStripScrollRef}
-                testID="room-timestrip-scroll"
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                bounces={false}
-                decelerationRate="fast"
-                disableIntervalMomentum
-                snapToOffsets={timeStripSnapOffsets}
-                scrollEventThrottle={16}
-                onScroll={handleTimeStripScroll}
-                contentOffset={{ x: activeTimeSlotIndex * TIME_SLOT_STEP, y: 0 }}
-                onScrollBeginDrag={(event) => {
-                  timeStripInteractingRef.current = true;
-                  timeStripHapticIndexRef.current = offsetToTimeSlotIndex(
-                    event.nativeEvent.contentOffset.x,
-                    slots.length,
-                  );
-                }}
-                onScrollEndDrag={(event) => {
-                  scheduleTimeSlotCommit(
-                    offsetToTimeSlotIndex(getTimeStripTargetOffset(event), slots.length),
-                  );
-                }}
-                onMomentumScrollBegin={() => {
-                  clearScheduledTimeStripCommit();
-                  timeStripInteractingRef.current = true;
-                }}
-                onMomentumScrollEnd={(event) => {
-                  clearScheduledTimeStripCommit();
-                  timeStripInteractingRef.current = false;
-                  commitTimeSlot(
-                    offsetToTimeSlotIndex(event.nativeEvent.contentOffset.x, slots.length),
-                  );
-                }}
-                contentContainerStyle={{
-                  alignItems: 'center',
-                  paddingHorizontal: timeStripSidePadding,
-                }}
-              >
-                {slots.map((slot, i) => {
-                  const scale = timeStripScrollX.interpolate({
-                    inputRange: [
-                      (i - 1) * TIME_SLOT_STEP,
-                      i * TIME_SLOT_STEP,
-                      (i + 1) * TIME_SLOT_STEP,
-                    ],
-                    outputRange: [0.72, 1.68, 0.72],
-                    extrapolate: 'clamp',
-                  });
-                  const opacity = timeStripScrollX.interpolate({
-                    inputRange: [
-                      (i - 1) * TIME_SLOT_STEP,
-                      i * TIME_SLOT_STEP,
-                      (i + 1) * TIME_SLOT_STEP,
-                    ],
-                    outputRange: [0.28, 1, 0.28],
-                    extrapolate: 'clamp',
-                  });
-                  const animatedSlotStyle = {
-                    opacity,
-                    transform: [{ scale }],
-                  };
-                  return (
-                    <Pressable
-                      key={`${slot.hour}-${i}`}
-                      testID={`room-time-slot-${i}`}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${slot.label} 시간대`}
-                      onPress={() => {
-                        timeStripScrollRef.current?.scrollTo({
-                          animated: true,
-                          x: i * TIME_SLOT_STEP,
-                          y: 0,
-                        });
-                        commitTimeSlot(i);
-                      }}
-                      className="mr-[10px] w-[60px]"
-                    >
-                      <Animated.View
-                        className="h-[48px] items-center justify-center px-[8px]"
-                        style={animatedSlotStyle}
-                      >
-                        <Text className="text-base font-black text-ink tracking-tight" tabularNums>
-                          {slot.label}
-                        </Text>
-                      </Animated.View>
-                    </Pressable>
-                  );
-                })}
-              </Animated.ScrollView>
-            </View>
-            <GridRoom
-              cells={cells}
-              GradientComponent={GradientWrapper}
-              onCellPress={(cell) => {
-                if (cell.kind === 'empty') {
-                  if (cell.canRecord) {
-                    router.push(`/(app)/room/${roomId}/upload`);
-                  }
-                  return;
-                }
-                const videoId = (cell as GridRoomFilledCell).videoId;
-                if (!videoId) return;
-                router.push(`/room/${roomId}/video/${videoId}`);
-              }}
-              onAvatarPress={(cell) => {
-                // 셀이 직접 들고 있는 userId 로 멤버 프로필(S14) 이동. 닉네임 문자열
-                // 매칭은 동명이인·표시 truncation 에 취약 → fallback 으로만.
-                const userId =
-                  cell.userId
-                  ?? membersWithProfile.find(
-                    (m) => m.profile?.nickname === cell.name || m.user_id.slice(0, 6) === cell.name,
-                  )?.user_id;
-                if (!userId) return;
-                const member = membersWithProfile.find((m) => m.user_id === userId);
-                const name = member?.profile?.nickname ?? cell.name;
-                const photoUrl = photoUrlByUser.get(userId) ?? member?.profile?.avatar_url ?? undefined;
-                router.push({
-                  pathname: '/(app)/room/[roomId]/members',
-                  params: {
-                    roomId,
-                    userId,
-                    ...(name ? { targetNickname: name } : {}),
-                    ...(photoUrl ? { targetAvatarUrl: photoUrl } : {}),
-                  },
-                } as never);
-              }}
-            />
-            </>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+                <GridRoom
+                  cells={cells}
+                  GradientComponent={GradientWrapper}
+                  onCellPress={(cell) => {
+                    if (cell.kind === 'empty') {
+                      if (cell.canRecord) {
+                        router.push(`/(app)/room/${roomId}/upload`);
+                      }
+                      return;
+                    }
+                    const videoId = (cell as GridRoomFilledCell).videoId;
+                    if (!videoId) return;
+                    router.push(`/room/${roomId}/video/${videoId}`);
+                  }}
+                  onAvatarPress={(cell) => {
+                    // 셀이 직접 들고 있는 userId 로 멤버 프로필(S14) 이동. 닉네임 문자열
+                    // 매칭은 동명이인·표시 truncation 에 취약 → fallback 으로만.
+                    const userId =
+                      cell.userId
+                      ?? membersWithProfile.find(
+                        (m) => m.profile?.nickname === cell.name || m.user_id.slice(0, 6) === cell.name,
+                      )?.user_id;
+                    if (!userId) return;
+                    const member = membersWithProfile.find((m) => m.user_id === userId);
+                    const name = member?.profile?.nickname ?? cell.name;
+                    const photoUrl = photoUrlByUser.get(userId) ?? member?.profile?.avatar_url ?? undefined;
+                    router.push({
+                      pathname: '/(app)/room/[roomId]/members',
+                      params: {
+                        roomId,
+                        userId,
+                        ...(name ? { targetNickname: name } : {}),
+                        ...(photoUrl ? { targetAvatarUrl: photoUrl } : {}),
+                      },
+                    } as never);
+                  }}
+                  onHourShift={shiftHour}
+                />
+              </>
+            )}
+          </ScrollView>
+          <CalendarSheet
+            visible={calendarOpen}
+            onClose={() => setCalendarOpen(false)}
+            selectedDate={selectedDate}
+            onSelect={handleSelectDate}
+            minDate={calendarMinDate}
+          />
+        </SafeAreaView>
       ) : null}
 
       {showPreparingOverlay ? (

@@ -15,6 +15,7 @@ export function useRoomVideos(
   roomId: string,
   currentHour: number,
   hourRange: number,
+  selectedDate?: Date,
 ): {
   videosByHour: VideoCache;
   loading: boolean;
@@ -28,11 +29,24 @@ export function useRoomVideos(
   const hourFrom = Math.max(0, currentHour - hourRange);
   const hourTo = Math.min(23, currentHour + hourRange);
 
+  const dayStartMs = selectedDate
+    ? new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).getTime()
+    : null;
+  const dayEndMs = dayStartMs !== null ? dayStartMs + 24 * 60 * 60 * 1000 : null;
+
   const fetchVideos = useCallback(async () => {
     try {
       const rows = await getRoomVideos(roomId, hourFrom, hourTo);
+      const filtered =
+        dayStartMs !== null && dayEndMs !== null
+          ? rows.filter((r) => {
+              if (!r.created_at) return false;
+              const t = new Date(r.created_at).getTime();
+              return t >= dayStartMs && t < dayEndMs;
+            })
+          : rows;
       const byHour: VideoCache = {};
-      for (const row of rows) {
+      for (const row of filtered) {
         const slot = row.hour_slot ?? currentHour;
         if (!byHour[slot]) byHour[slot] = [];
         byHour[slot].push(row);
@@ -43,7 +57,7 @@ export function useRoomVideos(
     } finally {
       setLoading(false);
     }
-  }, [roomId, hourFrom, hourTo, currentHour]);
+  }, [roomId, hourFrom, hourTo, currentHour, dayStartMs, dayEndMs]);
 
   const flushPatch = useCallback(() => {
     const patches = pendingPatchRef.current.splice(0);
@@ -51,6 +65,10 @@ export function useRoomVideos(
     setVideosByHour((prev) => {
       const next = { ...prev };
       for (const v of patches) {
+        if (dayStartMs !== null && dayEndMs !== null && v.created_at) {
+          const t = new Date(v.created_at).getTime();
+          if (t < dayStartMs || t >= dayEndMs) continue;
+        }
         const slot = v.hour_slot ?? 0;
         const existing = next[slot] ?? [];
         const idx = existing.findIndex((x) => x.id === v.id);
@@ -64,7 +82,7 @@ export function useRoomVideos(
       }
       return next;
     });
-  }, []);
+  }, [dayStartMs, dayEndMs]);
 
   useEffect(() => {
     setLoading(true);

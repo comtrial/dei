@@ -3,6 +3,7 @@ import {
   memo,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ComponentType,
   type ReactNode,
@@ -10,13 +11,18 @@ import {
 import {
   Image,
   Pressable,
+  ScrollView,
   View,
   type ViewProps,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 
 import { Text } from '../primitives/Text';
 import { EmptyBlob, type EmptyBlobTone } from '../primitives/EmptyBlob';
 import { cn } from '../lib/cn';
+
+const CHIP_WIDTH = 48;
 
 /**
  * GridRoom (X10) — ★시그니처 패턴. 매칭 후 홈 ③b 언블러 모드(JSON `S13`).
@@ -122,6 +128,8 @@ export interface GridRoomTimeSlot {
   label: string;
   /** 현재 시간대 여부(ink 채움 pill). */
   isNow?: boolean;
+  /** 선택 불가(미래 시간대 등) — opacity 15% + tap 무시. */
+  disabled?: boolean;
 }
 
 export interface GridRoomProps extends ViewProps {
@@ -136,6 +144,8 @@ export interface GridRoomProps extends ViewProps {
   onTimeSlotPreview?: (slotIndex: number, slot: GridRoomTimeSlot) => void;
   /** 손을 떼거나 momentum 이 끝나 가운데 슬롯 선택이 확정될 때 발생. */
   onTimeSlotPress?: (slotIndex: number, slot: GridRoomTimeSlot) => void;
+  /** 셀 영역 좌우 swipe(50px+) → -1 (이전 hour) / +1 (다음 hour). */
+  onHourShift?: (direction: -1 | 1) => void;
   className?: string;
 }
 
@@ -161,7 +171,7 @@ function TimeChip({ active, slot }: { active: boolean; slot: GridRoomTimeSlot })
     return (
       <View
         testID="gridroom-now-pill"
-        className="rounded-full bg-ink px-[14px] py-[7px]"
+        className="rounded-full bg-ink px-[12px] py-[6px]"
         accessibilityRole="text"
       >
         <Text
@@ -174,7 +184,7 @@ function TimeChip({ active, slot }: { active: boolean; slot: GridRoomTimeSlot })
     );
   }
   return (
-    <View className="rounded-full px-[8px] py-[4px]">
+    <View className={cn('rounded-full px-[8px] py-[4px]', slot.disabled && 'opacity-15')}>
       <Text className="text-sm font-bold text-ink-4" tabularNums>
         {slot.label}
       </Text>
@@ -377,34 +387,126 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
     onAvatarPress,
     onTimeSlotPreview,
     onTimeSlotPress,
+    onHourShift,
     className,
     ...rest
   },
   ref,
 ) {
   const pairs = useMemo(() => chunkPairs(cells), [cells]);
+  const cellGridPan = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-30, 30])
+        .failOffsetY([-15, 15])
+        .onEnd((event) => {
+          'worklet';
+          const dx = event.translationX;
+          if (Math.abs(dx) < 50) return;
+          const direction: -1 | 1 = dx > 0 ? -1 : 1;
+          if (onHourShift) runOnJS(onHourShift)(direction);
+        }),
+    [onHourShift],
+  );
+  const scrollRef = useRef<ScrollView>(null);
+  const programmaticScrollRef = useRef(false);
+  const programmaticClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [stripWidth, setStripWidth] = useState(0);
+  const sidePadding = stripWidth > 0 ? Math.max((stripWidth - CHIP_WIDTH) / 2, 0) : 0;
+
+  const markProgrammaticScroll = () => {
+    programmaticScrollRef.current = true;
+    if (programmaticClearRef.current) clearTimeout(programmaticClearRef.current);
+    programmaticClearRef.current = setTimeout(() => {
+      programmaticScrollRef.current = false;
+      programmaticClearRef.current = null;
+    }, 500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (programmaticClearRef.current) clearTimeout(programmaticClearRef.current);
+    };
+  }, []);
+
+  const nowIndex = useMemo(
+    () => (timeStrip ? timeStrip.findIndex((s) => s.isNow) : -1),
+    [timeStrip],
+  );
+
+  const prevNowIndexRef = useRef(nowIndex);
+  useEffect(() => {
+    if (nowIndex < 0 || stripWidth === 0) return;
+    const distance = Math.abs(nowIndex - prevNowIndexRef.current);
+    const animated = distance > 0 && distance <= 3;
+    prevNowIndexRef.current = nowIndex;
+    const id = requestAnimationFrame(() => {
+      markProgrammaticScroll();
+      scrollRef.current?.scrollTo({ x: nowIndex * CHIP_WIDTH, animated });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [nowIndex, stripWidth]);
+
+  const handleTimeSlotPress = (slotIndex: number, slot: GridRoomTimeSlot) => {
+    if (slot.disabled) return;
+    onTimeSlotPreview?.(slotIndex, slot);
+    markProgrammaticScroll();
+    scrollRef.current?.scrollTo({ x: slotIndex * CHIP_WIDTH, animated: false });
+    onTimeSlotPress?.(slotIndex, slot);
+  };
 
   return (
     <View ref={ref} testID="gridroom" className={cn('bg-bg', className)} {...rest}>
       {timeStrip && timeStrip.length > 0 ? (
-        <View className="relative mx-[8px] px-0 pb-[14px] pt-[6px]">
-          <View className="absolute left-[6px] top-[6px] bottom-[14px] justify-center">
+        <View
+          className="relative mx-[8px] px-0 pb-[14px] pt-[6px]"
+          onLayout={(e) => setStripWidth(e.nativeEvent.layout.width)}
+        >
+          <View className="absolute left-[6px] top-[6px] bottom-[14px] justify-center z-10">
             <Text className="text-2xs text-ink-4">‹</Text>
           </View>
-          <View className="absolute right-[6px] top-[6px] bottom-[14px] justify-center">
+          <View className="absolute right-[6px] top-[6px] bottom-[14px] justify-center z-10">
             <Text className="text-2xs text-ink-4">›</Text>
           </View>
-          <View className="flex-row items-center justify-center gap-[6px]">
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={CHIP_WIDTH}
+            decelerationRate="fast"
+            contentContainerStyle={{ paddingHorizontal: sidePadding }}
+            onMomentumScrollEnd={(e) => {
+              if (programmaticScrollRef.current) {
+                programmaticScrollRef.current = false;
+                return;
+              }
+              const offset = e.nativeEvent.contentOffset.x;
+              const index = Math.round(offset / CHIP_WIDTH);
+              const slot = timeStrip[index];
+              if (!slot) return;
+              if (slot.disabled) {
+                if (nowIndex >= 0) {
+                  markProgrammaticScroll();
+                  requestAnimationFrame(() => {
+                    scrollRef.current?.scrollTo({ x: nowIndex * CHIP_WIDTH, animated: false });
+                  });
+                }
+                return;
+              }
+              if (slot.isNow) return;
+              onTimeSlotPreview?.(index, slot);
+              onTimeSlotPress?.(index, slot);
+            }}
+          >
             {timeStrip.map((slot, i) => (
               <Pressable
                 key={`${slot.label}-${i}`}
                 testID={`gridroom-time-slot-${i}`}
-                onPress={() => {
-                  onTimeSlotPreview?.(i, slot);
-                  onTimeSlotPress?.(i, slot);
-                }}
+                onPress={() => handleTimeSlotPress(i, slot)}
+                disabled={slot.disabled}
                 accessibilityRole="button"
                 accessibilityLabel={`${slot.label} 시간대`}
+                accessibilityState={{ disabled: !!slot.disabled, selected: !!slot.isNow }}
                 className={cn(
                   'items-center justify-center py-[4px]',
                   slot.isNow && 'scale-110',
@@ -413,7 +515,7 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
                 <TimeChip active={slot.isNow === true} slot={slot} />
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
           {timeHint ? (
             <Text className="mt-[8px] text-center text-2xs text-ink-4 tracking-wide">
               {timeHint}
@@ -422,32 +524,34 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
         </View>
       ) : null}
 
-      <View className="gap-[4px] px-[12px]">
-        {pairs.map((pair, rowIndex) => (
-          <View key={rowIndex} className="flex-row gap-[4px]">
-            {pair.map(({ cell, index }) => (
-              <View key={index} className="flex-1">
-                {isEmpty(cell) ? (
-                  <EmptyCell
-                    cell={cell}
-                    index={index}
-                    onCellPress={onCellPress}
-                    onAvatarPress={onAvatarPress}
-                  />
-                ) : (
-                  <FilledCell
-                    cell={cell}
-                    index={index}
-                    GradientComponent={GradientComponent}
-                    onCellPress={onCellPress}
-                    onAvatarPress={onAvatarPress}
-                  />
-                )}
-              </View>
-            ))}
-          </View>
-        ))}
-      </View>
+      <GestureDetector gesture={cellGridPan}>
+        <View className="gap-[4px] px-[12px]">
+          {pairs.map((pair, rowIndex) => (
+            <View key={rowIndex} className="flex-row gap-[4px]">
+              {pair.map(({ cell, index }) => (
+                <View key={index} className="flex-1">
+                  {isEmpty(cell) ? (
+                    <EmptyCell
+                      cell={cell}
+                      index={index}
+                      onCellPress={onCellPress}
+                      onAvatarPress={onAvatarPress}
+                    />
+                  ) : (
+                    <FilledCell
+                      cell={cell}
+                      index={index}
+                      GradientComponent={GradientComponent}
+                      onCellPress={onCellPress}
+                      onAvatarPress={onAvatarPress}
+                    />
+                  )}
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      </GestureDetector>
     </View>
   );
 });

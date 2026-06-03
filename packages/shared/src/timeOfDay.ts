@@ -23,11 +23,20 @@ export function hourSlotLabel(hour: number): string {
   return String(hour).padStart(2, '0');
 }
 
+export interface TimeStripSlot {
+  hour: number;
+  label: string;
+  isNow: boolean;
+  isQuiet: boolean;
+  isFuture: boolean;
+}
+
 export function formatTimeStripSlots(
   currentHour: number,
   range: number,
-): Array<{ hour: number; label: string; isNow: boolean; isQuiet: boolean }> {
-  const slots: Array<{ hour: number; label: string; isNow: boolean; isQuiet: boolean }> = [];
+  nowHour?: number,
+): TimeStripSlot[] {
+  const slots: TimeStripSlot[] = [];
   for (let offset = -range; offset <= range; offset++) {
     const raw = currentHour + offset;
     const hour = ((raw % 24) + 24) % 24;
@@ -36,6 +45,7 @@ export function formatTimeStripSlots(
       label: hourSlotLabel(hour),
       isNow: offset === 0,
       isQuiet: isQuietHourKst(hour),
+      isFuture: nowHour !== undefined && hour > nowHour,
     });
   }
   return slots;

@@ -35,6 +35,7 @@ export default function VideoFullscreenScreen() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [memberNickname, setMemberNickname] = useState<string>('');
+  const [memberPhotoUrl, setMemberPhotoUrl] = useState<string | null>(null);
   const [memberUserId, setMemberUserId] = useState<string>('');
   const [capturedAtLabel, setCapturedAtLabel] = useState<string | null>(null);
   const [siblings, setSiblings] = useState<{ id: string; url: string; thumbnail: string | null }[]>([]);
@@ -128,6 +129,7 @@ export default function VideoFullscreenScreen() {
       const members = await getRoomMembersWithProfile(roomId);
       const member = members.find((m) => m.user_id === video.user_id);
       setMemberNickname(member?.profile?.nickname ?? '');
+      setMemberPhotoUrl(member?.profile?.photo_url ?? null);
 
       if (video.hour_slot != null) {
         const siblingRows = await getSiblingVideos(roomId, video.hour_slot);
@@ -310,7 +312,16 @@ export default function VideoFullscreenScreen() {
       testID="member-chip"
       variant="default"
       label={memberNickname || '멤버'}
-      avatar={<Avatar initial={memberInitial} size={24} bg="bg-[#7A8DB8]" />}
+      avatar={
+        <Avatar
+          initial={memberInitial}
+          photoUrl={memberPhotoUrl ?? undefined}
+          size={24}
+          bg="bg-accent"
+        />
+      }
+      className="border-transparent bg-black/55"
+      textClassName="text-paper"
       onStartShouldSetResponder={() => true}
       onResponderRelease={() => {
         router.push(

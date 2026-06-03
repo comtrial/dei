@@ -30,23 +30,30 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-jest.mock('react-native-orientation-turbo', () => ({
-  lockToLandscape: jest.fn(),
-  lockToPortrait: jest.fn(),
-  unlockAllOrientations: jest.fn(),
-  startOrientationTracking: jest.fn(),
-  stopOrientationTracking: jest.fn(),
-  getCurrentOrientation: jest.fn(() => 'PORTRAIT'),
-  isLocked: jest.fn(() => false),
-  onLockOrientationChange: jest.fn(() => ({ remove: jest.fn() })),
-  onOrientationChange: jest.fn(() => ({ remove: jest.fn() })),
-  LandscapeDirection: { LEFT: 'LEFT', RIGHT: 'RIGHT' },
-  PortraitDirection: { UP: 'UP', UPSIDE_DOWN: 'UPSIDE_DOWN' },
+jest.mock('expo-screen-orientation', () => ({
+  lockAsync: jest.fn(() => Promise.resolve()),
+  unlockAsync: jest.fn(() => Promise.resolve()),
+  getOrientationAsync: jest.fn(() => Promise.resolve(1)),
+  addOrientationChangeListener: jest.fn(() => ({ remove: jest.fn() })),
+  removeOrientationChangeListeners: jest.fn(),
+  removeOrientationChangeListener: jest.fn(),
+  OrientationLock: {
+    DEFAULT: 0,
+    ALL: 1,
+    PORTRAIT: 2,
+    PORTRAIT_UP: 3,
+    PORTRAIT_DOWN: 4,
+    LANDSCAPE: 5,
+    LANDSCAPE_LEFT: 6,
+    LANDSCAPE_RIGHT: 7,
+    OTHER: 8,
+    UNKNOWN: 9,
+  },
   Orientation: {
-    PORTRAIT: 'PORTRAIT',
-    LANDSCAPE_LEFT: 'LANDSCAPE_LEFT',
-    LANDSCAPE_RIGHT: 'LANDSCAPE_RIGHT',
-    FACE_UP: 'FACE_UP',
-    FACE_DOWN: 'FACE_DOWN',
+    UNKNOWN: 0,
+    PORTRAIT_UP: 1,
+    PORTRAIT_DOWN: 2,
+    LANDSCAPE_LEFT: 3,
+    LANDSCAPE_RIGHT: 4,
   },
 }));
