@@ -26,59 +26,106 @@ import {
 import { roomRoutes, ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
+import { getMemberProfile } from '@/lib/room-rpc';
+import {
+  getCachedProfilePhotoUrl,
+  resolveProfilePhotoUrl,
+} from '@/lib/profile-photo-cache';
 
 type TargetMember = {
   id: string;
   initial: string;
   nickname: string;
+  photoUrl?: string;
 };
+
+function paramValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
 
 export default function ReportCategoryScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { targetId, roomId } = useLocalSearchParams<{ roomId?: string; targetId?: string }>();
+  const params = useLocalSearchParams<{
+    roomId?: string;
+    targetAvatarUrl?: string;
+    targetId?: string;
+    targetNickname?: string;
+  }>();
+  const targetIdValue = paramValue(params.targetId);
+  const roomIdValue = paramValue(params.roomId);
+  const paramNickname = paramValue(params.targetNickname);
+  const paramAvatarUrl = paramValue(params.targetAvatarUrl);
+  const activeRoomId = roomIdValue && isUuidLike(roomIdValue) ? roomIdValue : null;
+  const validTargetId = targetIdValue && isUuidLike(targetIdValue) ? targetIdValue : null;
   const [category, setCategory] = useState<string | null>(null);
   const [detail, setDetail] = useState('');
-  const [blockToo, setBlockToo] = useState(true);
+  const [blockToo, setBlockToo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [complete, setComplete] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [targetMember, setTargetMember] = useState<TargetMember>({
-    id: '',
-    initial: '?',
-    nickname: '상대',
+  const [targetMember, setTargetMember] = useState<TargetMember>(() => {
+    const nickname = paramNickname?.trim() || '상대';
+    return {
+      id: targetIdValue ?? '',
+      initial: toInitial(nickname),
+      nickname,
+      photoUrl: paramAvatarUrl,
+    };
   });
 
   const needsDetail = category === 'other';
-  const targetIdValue = Array.isArray(targetId) ? targetId[0] : targetId;
-  const roomIdValue = Array.isArray(roomId) ? roomId[0] : roomId;
-  const canUseTarget = isUuidLike(targetIdValue);
+  const canUseTarget = validTargetId != null;
   const canSubmit = canUseTarget && !!category && (!needsDetail || detail.trim().length > 0);
   const returnAfterComplete = useCallback(() => {
-    if (isUuidLike(roomIdValue)) {
-      router.replace(roomRoutes.index(roomIdValue));
+    if (activeRoomId) {
+      router.replace(roomRoutes.index(activeRoomId));
       return;
     }
 
     router.replace(ROUTES.home);
-  }, [roomIdValue, router]);
+  }, [activeRoomId, router]);
 
   useEffect(() => {
     analytics.capture(ANALYTICS_EVENTS.report_category_entered);
   }, []);
 
   useEffect(() => {
-    if (!isUuidLike(targetIdValue)) {
+    if (!validTargetId) {
       return;
     }
 
     void logger.withErrorCapture(
       'safety.load-report-target',
       async () => {
+        if (activeRoomId) {
+          const result = await getMemberProfile(validTargetId, activeRoomId);
+          if (result?.profile?.nickname) {
+            const photoUrl =
+              result.profile.avatar_url ??
+              getCachedProfilePhotoUrl(validTargetId, result.profile.photo_url) ??
+              (result.profile.photo_url
+                ? await resolveProfilePhotoUrl(
+                    { path: result.profile.photo_url, userId: validTargetId },
+                    { screen: 'report-category', roomId: activeRoomId },
+                  )
+                : null);
+
+            setTargetMember({
+              id: validTargetId,
+              initial: toInitial(result.profile.nickname),
+              nickname: result.profile.nickname,
+              photoUrl: photoUrl ?? undefined,
+            });
+            return;
+          }
+        }
+
         const { data, error } = await supabase
           .from('profile')
-          .select('nickname')
-          .eq('user_id', targetIdValue)
+          .select('nickname, photo_url')
+          .eq('user_id', validTargetId)
           .maybeSingle();
 
         if (error) {
@@ -86,16 +133,26 @@ export default function ReportCategoryScreen() {
         }
 
         if (data?.nickname) {
+          const photoUrl = data.photo_url
+            ? await resolveProfilePhotoUrl(
+                { path: data.photo_url, userId: validTargetId },
+                activeRoomId
+                  ? { screen: 'report-category', roomId: activeRoomId }
+                  : { screen: 'report-category' },
+              )
+            : null;
+
           setTargetMember({
-            id: targetIdValue,
+            id: validTargetId,
             initial: toInitial(data.nickname),
             nickname: data.nickname,
+            photoUrl: photoUrl ?? undefined,
           });
         }
       },
       { tags: { screen: 'report-category', action: 'load-target' } },
     );
-  }, [targetIdValue]);
+  }, [activeRoomId, validTargetId]);
 
   useEffect(() => {
     if (!complete) {
@@ -116,14 +173,11 @@ export default function ReportCategoryScreen() {
       async () => {
         setIsSubmitting(true);
 
-        if (user && canUseTarget && targetIdValue) {
-          const reportedUserId = targetIdValue;
-          const activeRoomId = isUuidLike(roomIdValue) ? roomIdValue : null;
-
+        if (user && validTargetId) {
           const { error: reportError } = await supabase.from('report').insert({
             category: category!,
             detail: detail.trim() || null,
-            reported_user_id: reportedUserId,
+            reported_user_id: validTargetId,
             reporter_user_id: user.id,
             room_id: activeRoomId,
           });
@@ -135,7 +189,7 @@ export default function ReportCategoryScreen() {
           if (blockToo) {
             const { error: blockError } = await supabase.from('block').upsert(
               {
-                blocked_user_id: reportedUserId,
+                blocked_user_id: validTargetId,
                 blocker_user_id: user.id,
                 room_id: activeRoomId,
                 unblocked_at: null,
@@ -176,6 +230,7 @@ export default function ReportCategoryScreen() {
             variant="member"
             label={targetMember.nickname}
             initial={targetMember.initial}
+            photoUrl={targetMember.photoUrl}
             className="mb-[22px] px-0"
           />
 
@@ -207,6 +262,7 @@ export default function ReportCategoryScreen() {
           />
 
           <Pressable
+            testID="report-block-too-toggle"
             accessibilityRole="checkbox"
             accessibilityState={{ checked: blockToo }}
             onPress={() => setBlockToo((value) => !value)}
@@ -225,7 +281,12 @@ export default function ReportCategoryScreen() {
       </ScrollView>
 
       <BottomActionBar fixed>
-        <Button fullWidth disabled={!canSubmit || isSubmitting} onPress={handleSubmit}>
+        <Button
+          testID="report-submit"
+          fullWidth
+          disabled={!canSubmit || isSubmitting}
+          onPress={handleSubmit}
+        >
           {isSubmitting ? '제출 중' : '신고 제출'}
         </Button>
       </BottomActionBar>

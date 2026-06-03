@@ -1,5 +1,5 @@
 import { View } from 'react-native';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { Avatar, avatarColorFor } from '../Avatar';
 
@@ -90,11 +90,17 @@ describe('Avatar (P6)', () => {
     expect(cls).toContain('rounded-full');
   });
 
-  it('caches the photo (memory-disk) + per-url recyclingKey for no-leadtime reloads', () => {
+  it('renders the photo with cover resize mode', () => {
     render(<Avatar testID="av" photoUrl="https://cdn.test/u/me.jpg" />);
     const img = screen.getByTestId('av-photo');
-    expect(img.props.cachePolicy).toBe('memory-disk');
-    expect(img.props.recyclingKey).toBe('https://cdn.test/u/me.jpg');
+    expect(img.props.resizeMode).toBe('cover');
+  });
+
+  it('uses a neutral loading background while a photo is present', () => {
+    render(<Avatar testID="av" bg="bg-[#7A8DB8]" photoUrl="https://cdn.test/u/me.jpg" />);
+    const container = screen.getByTestId('av').props.className as string;
+    expect(container).toContain('bg-bg-2');
+    expect(container).not.toContain('bg-[#7A8DB8]');
   });
 
   it('avatarColorFor is deterministic and returns a peer bg token', () => {
@@ -113,5 +119,14 @@ describe('Avatar (P6)', () => {
       <Avatar testID="av" initial="수" photoUrl="https://cdn.test/u/me.jpg" accessibilityLabel="수아 아바타" />,
     );
     expect(screen.getByLabelText('수아 아바타')).toBeTruthy();
+  });
+
+  it('falls back to the initial if the photo fails to load', () => {
+    render(<Avatar testID="av" initial="수" photoUrl="https://cdn.test/u/me.jpg" />);
+
+    fireEvent(screen.getByTestId('av-photo'), 'error');
+
+    expect(screen.queryByTestId('av-photo')).toBeNull();
+    expect(screen.getByText('수')).toBeTruthy();
   });
 });

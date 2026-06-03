@@ -51,6 +51,21 @@ describe('SettingsRow (X12)', () => {
     expect(screen.getByText('방금 전 입장')).toBeTruthy();
   });
 
+  it('member: renders photoUrl instead of the initial when provided', () => {
+    render(
+      <SettingsRow
+        variant="member"
+        label="익명의 토끼"
+        initial="익"
+        photoUrl="https://cdn.test/profile.jpg"
+      />,
+    );
+    expect(screen.queryByText('익')).toBeNull();
+    expect(screen.getByTestId('av-photo').props.source).toEqual({
+      uri: 'https://cdn.test/profile.jpg',
+    });
+  });
+
   it('right slot overrides default chevron/toggle', () => {
     const { getByText } = render(
       <SettingsRow label="언어" right={<Text>커스텀</Text>} />,

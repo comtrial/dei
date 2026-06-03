@@ -47,6 +47,19 @@ function getExpoProjectId() {
   );
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+export function isPushTokenRegistrationUnavailable(error: unknown) {
+  const message = getErrorMessage(error);
+  return message.includes('aps-environment');
+}
+
 /** 디바이스 Expo push token 을 Supabase push_token 테이블에 저장한다. */
 export async function registerPushToken(userId: string): Promise<void> {
   const permission = await getNotificationPermissionState();
@@ -55,9 +68,22 @@ export async function registerPushToken(userId: string): Promise<void> {
   }
 
   const projectId = getExpoProjectId();
-  const token = await Notifications.getExpoPushTokenAsync(
-    projectId ? { projectId } : undefined,
-  );
+  let token: Notifications.ExpoPushToken;
+  try {
+    token = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined,
+    );
+  } catch (error) {
+    if (isPushTokenRegistrationUnavailable(error)) {
+      logger.captureMessage('push token registration unavailable for this build', 'warning', {
+        tags: { feature: 'notifications', action: 'register-push-token' },
+        extra: { reason: getErrorMessage(error) },
+      });
+      return;
+    }
+
+    throw error;
+  }
 
   const { error } = await supabase.from('push_token').upsert(
     {
@@ -70,9 +96,6 @@ export async function registerPushToken(userId: string): Promise<void> {
   );
 
   if (error) {
-    logger.captureException(error, {
-      tags: { feature: 'notifications', action: 'register-push-token' },
-    });
     throw error;
   }
 }

@@ -1,11 +1,10 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { BackHandler, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { BackHandler } from 'react-native';
 
 import { logger } from '@dei/shared';
-import { Button, Card, PulseRing, Text } from '@dei/ui';
 
+import { MatchingWaitingView } from '@/components/matching/MatchingWaitingView';
 import { expireMatchQueue, isQueueExpired } from '@/lib/matching';
 import { ROUTES, roomRoutes } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
@@ -191,49 +190,16 @@ export default function QueueScreen() {
   }, [router, user]);
 
   return (
-    <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 px-[24px] pb-[36px] pt-[64px]">
-        <View className="items-center">
-          <PulseRing
-            className="mb-[32px]"
-            core={<Text className="text-[24px] font-black text-white">dei</Text>}
-          />
-          <Text variant="h1" className="text-center text-[25px] leading-[33px]">
-            곧 만날 사람들을{'\n'}찾고 있어요
-          </Text>
-          <Text className="mt-[10px] text-center text-[13.5px] leading-[21px] text-ink-3">
-            앱을 닫아도 매칭되면{'\n'}알림으로 알려드려요.
-          </Text>
-        </View>
-
-        <Card className="mt-[34px] items-center rounded-md border-0 bg-bg-2 px-[22px] py-[14px]">
-          <Text className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-3">
-            평균 대기 시간
-          </Text>
-          <Text className="mt-[4px] text-[19px] font-extrabold text-ink">
-            {queue ? '2 ~ 6 시간' : '확인 중'}
-          </Text>
-        </Card>
-
-        <Button
-          variant="secondary"
-          className="mt-auto self-end rounded-full border border-line bg-paper px-[20px] py-[12px]"
-          textClassName="text-[13px] font-bold"
-          onPress={() => router.push(ROUTES.matchCancelConfirm)}
-        >
-          매칭 취소
-        </Button>
-      </View>
-
-      {showFreeRematchNotice ? (
-        <View className="absolute bottom-[34px] left-0 right-0 items-center px-[24px]">
-          <View className="rounded-full bg-ink px-[16px] py-[10px]">
-            <Text className="text-center text-[12.5px] font-bold text-white">
-              바로 매칭 시작할게요
-            </Text>
-          </View>
-        </View>
-      ) : null}
-    </SafeAreaView>
+    <MatchingWaitingView
+      action={{
+        label: '매칭 취소',
+        onPress: () => router.push(ROUTES.matchCancelConfirm),
+      }}
+      cardLabel="평균 대기 시간"
+      cardValue={queue ? '2 ~ 6 시간' : '확인 중'}
+      description={`앱을 닫아도 매칭되면\n알림으로 알려드려요.`}
+      title={`곧 만날 사람들을\n찾고 있어요`}
+      toast={showFreeRematchNotice ? '바로 매칭 시작할게요' : null}
+    />
   );
 }

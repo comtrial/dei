@@ -54,6 +54,10 @@ function formatAvailableAt(remainingMs: number) {
   return `${dayLabel} ${hours}:${minutes} 가능`;
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export default function BoosterScreen() {
   const router = useRouter();
   const { memberIds } = useLocalSearchParams<{ memberIds?: string }>();
@@ -186,8 +190,9 @@ export default function BoosterScreen() {
         }
 
         await registerPushToken(user.id).catch((error) => {
-          logger.captureException(error, {
+          logger.captureMessage('push token registration skipped', 'warning', {
             tags: { screen: 'booster', action: 'register-push-token' },
+            extra: { reason: getErrorMessage(error) },
           });
         });
         await enqueueMatchQueue(queueMemberIds);
