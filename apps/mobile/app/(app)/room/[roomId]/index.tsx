@@ -5,7 +5,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient, type LinearGradientProps } from 'expo-linear-gradient';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { MessageCircle, MoreHorizontal } from 'lucide-react-native';
+import { Calendar as CalendarIcon, MessageCircle, MoreHorizontal } from 'lucide-react-native';
 
 import { Banner, GridRoom, IconButton, Badge, TopNav } from '@dei/ui';
 import type { GridRoomCell, GridRoomFilledCell, GridRoomTimeSlot, GradientComponentProps } from '@dei/ui';
@@ -27,6 +27,15 @@ import {
   getBlockedUserIds,
   type RoomMemberWithProfile,
 } from '@/lib/room-rpc';
+import { CalendarSheet } from '@/components/calendar-sheet';
+
+function isSameDay(d1: Date, d2: Date): boolean {
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+}
 
 function CellVideoMedia({
   videoId,
@@ -79,7 +88,7 @@ function CellVideoMedia({
           source={{ uri: thumbnailUri }}
           contentFit="cover"
           cachePolicy="memory-disk"
-          transition={100}
+          transition={220}
           style={StyleSheet.absoluteFillObject}
         />
       ) : null}
@@ -118,6 +127,7 @@ function buildCells(
   blockedUserIds: Set<string>,
   selfUserId: string | null,
   nowHour: number,
+  isViewingToday: boolean,
 ): GridRoomCell[] {
   const hourVideos = videosByHour[currentHour] ?? [];
   const videoByUser = new Map<string, VideoRow>();
@@ -125,7 +135,7 @@ function buildCells(
     if (!videoByUser.has(v.user_id)) videoByUser.set(v.user_id, v);
   }
 
-  const isCurrentSlot = currentHour === nowHour;
+  const isCurrentSlot = isViewingToday && currentHour === nowHour;
 
   const sameGender = selfGender
     ? members.filter((m) => m.profile?.gender === selfGender)
@@ -205,12 +215,24 @@ export default function RoomScreen() {
 
   const { currentHour, setCurrentHour } = useHourSlot();
   const hourRange = POLICY.gridPerformance.prefetchHourRange;
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarMinDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - POLICY.room.autoExpireDays);
+    return d;
+  }, []);
 
   const { videosByHour, loading: videosLoading, refetch: refetchVideos } = useRoomVideos(
     roomId,
     currentHour,
     hourRange,
+    selectedDate,
   );
+  const [firstLoadDone, setFirstLoadDone] = useState(false);
+  useEffect(() => {
+    if (!videosLoading) setFirstLoadDone(true);
+  }, [videosLoading]);
   const { members, refetch: refetchMembers } = useRoomMembers(roomId, {
     onMemberLeft: (userId, status) => {
       const found = membersWithProfile.find((m) => m.user_id === userId);
@@ -294,15 +316,24 @@ export default function RoomScreen() {
     };
   }, []);
 
-  const cells = useMemo(
-    () => {
-      const nowHour = getCurrentHourSlotKst();
-      return buildCells(membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id ?? null, nowHour);
-    },
-    [membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id],
-  );
-
   const nowHour = getCurrentHourSlotKst();
+  const isViewingToday = useMemo(() => isSameDay(selectedDate, new Date()), [selectedDate]);
+
+  const cells = useMemo(
+    () =>
+      buildCells(
+        membersWithProfile,
+        videosByHour,
+        currentHour,
+        onlineUserIds,
+        selfGender,
+        blockedUserIds,
+        user?.id ?? null,
+        nowHour,
+        isViewingToday,
+      ),
+    [membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id, nowHour, isViewingToday],
+  );
 
   const slots = useMemo(
     () =>
@@ -311,10 +342,30 @@ export default function RoomScreen() {
         label: String(h).padStart(2, '0'),
         isNow: h === currentHour,
         isQuiet: isQuietHourKst(h),
-        isFuture: h > nowHour,
+        isFuture: isViewingToday && h > nowHour,
       })),
-    [currentHour, nowHour],
+    [currentHour, nowHour, isViewingToday],
   );
+
+  const handleSelectDate = useCallback((date: Date) => {
+    setSelectedDate(date);
+    setCurrentHour(getCurrentHourSlotKst());
+    setCalendarOpen(false);
+  }, [setCurrentHour]);
+
+  const shiftHour = useCallback((direction: -1 | 1) => {
+    const target = (((currentHour + direction) % 24) + 24) % 24;
+    if (isViewingToday && direction > 0 && target > nowHour) return;
+    const fromHour = prevHourRef.current;
+    const cacheHit = target in videosByHour;
+    analytics.capture(ANALYTICS_EVENTS.room_timestrip_swipe, {
+      from_hour: fromHour,
+      to_hour: target,
+      cache_hit: cacheHit,
+    });
+    prevHourRef.current = target;
+    setCurrentHour(target);
+  }, [currentHour, isViewingToday, nowHour, videosByHour, setCurrentHour]);
 
   const timeStrip = useMemo<GridRoomTimeSlot[]>(
     () =>
@@ -366,6 +417,13 @@ export default function RoomScreen() {
         title="dei"
         rightActions={
           <>
+            <IconButton
+              glyph={CalendarIcon}
+              variant="ghost"
+              size={32}
+              accessibilityLabel="날짜 선택"
+              onPress={() => setCalendarOpen(true)}
+            />
             <View>
               <IconButton
                 glyph={MessageCircle}
@@ -413,7 +471,7 @@ export default function RoomScreen() {
             <Banner tone="info">{memberLeftMsg}</Banner>
           </View>
         ) : null}
-        {videosLoading ? (
+        {!firstLoadDone ? (
           <View className="flex-1 items-center justify-center py-16">
             <ActivityIndicator />
           </View>
@@ -452,9 +510,17 @@ export default function RoomScreen() {
               prevHourRef.current = slot.hour;
               setCurrentHour(slot.hour);
             }}
+            onHourShift={shiftHour}
           />
         )}
       </ScrollView>
+      <CalendarSheet
+        visible={calendarOpen}
+        onClose={() => setCalendarOpen(false)}
+        selectedDate={selectedDate}
+        onSelect={handleSelectDate}
+        minDate={calendarMinDate}
+      />
     </SafeAreaView>
   );
 }
