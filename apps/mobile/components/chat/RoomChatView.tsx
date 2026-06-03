@@ -13,6 +13,7 @@ import {
   TopNav,
   type MentionCandidate,
 } from '@dei/ui';
+import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/lib/chat/message-merge';
 import type { RoomMemberLite } from '@/lib/chat/mention';
 import { filterCandidates, parseMentionQuery } from '@/lib/chat/mention';
@@ -71,6 +72,12 @@ export interface RoomChatViewProps {
   visible: boolean;
   blockedIds?: Set<string>;
   roomEnded?: boolean;
+  /**
+   * 오버레이 모드(피처 플래그 'overlay'): 매칭된 방 영상 위 반투명 레이어.
+   * 루트 배경 투명 + 영상 dim scrim(rgba .45) + 헤더/컴포저 dark band(.62),
+   * 본문 transparent(영상 비침). 기본 false = 기존 불투명 화면(legacy).
+   */
+  overlay?: boolean;
 }
 
 export function RoomChatView(props: RoomChatViewProps) {
@@ -119,6 +126,12 @@ export function RoomChatView(props: RoomChatViewProps) {
 
   if (!props.visible) return null;
 
+  // 오버레이 모드 표면(UX 스펙 2026-06-03): 영상 위 dim scrim(.45) + 본문 transparent
+  // + 헤더/컴포저 dark band(.62). 기본(legacy)은 불투명 bg-bg.
+  const o = props.overlay === true;
+  const rootBg = o ? 'bg-transparent' : 'bg-bg';
+  const bandClass = o ? 'bg-[rgba(0,0,0,0.62)]' : 'bg-paper';
+
   return (
     // KeyboardAvoidingView 를 최상위로 — 키보드가 올라오면 화면 전체 높이를 줄여
     // 컴포저가 키보드 위로 정확히 따라붙는다(이전: SafeArea bottom 과 padding 이
@@ -126,17 +139,21 @@ export function RoomChatView(props: RoomChatViewProps) {
     // top 만 SafeArea(노치) — 하단 인셋은 컴포저가 자체 padding 으로 처리.
     <KeyboardAvoidingView
       testID="room-chat-kav"
-      className="flex-1 bg-bg"
+      className={cn('flex-1', rootBg)}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <SafeAreaView edges={['top']} className="flex-1 bg-bg">
+      {/* 오버레이 모드: 뒤 영상을 누르는 dim scrim(rgba .45). 본문은 이 위에 transparent. */}
+      {o ? <View testID="room-chat-scrim" className="absolute inset-0 bg-[rgba(0,0,0,0.45)]" /> : null}
+      <SafeAreaView edges={['top']} className={cn('flex-1', rootBg)}>
         <View className="flex-1" testID="room-chat-screen">
           <TopNav
             left="back"
+            onDark={o}
             onLeftPress={props.onClose}
             leftAccessibilityLabel="뒤로"
             subtitle={`멤버 ${props.memberCount}명`}
-            // 좌측(부제 옆): 방 참여 멤버 아바타 스택(프로필 사진). 우측: 내 프로필.
+            // 오버레이면 헤더 dark band(.62), 아니면 paper. 좌:멤버 스택 / 우:내 프로필.
+            className={o ? bandClass : undefined}
             leftAccessory={stackItems.length > 0 ? <AvatarStack items={stackItems} max={3} size={28} /> : undefined}
             rightActions={
               <Avatar
@@ -207,8 +224,8 @@ export function RoomChatView(props: RoomChatViewProps) {
             />
           )}
 
-          {/* 컴포저 영역 — 하단 SafeArea(홈 인디케이터) 인셋을 여기서 흡수. */}
-          <SafeAreaView edges={['bottom']}>
+          {/* 컴포저 영역 — 하단 SafeArea(홈 인디케이터) 인셋 흡수. 오버레이면 dark band(.62). */}
+          <SafeAreaView edges={['bottom']} className={o ? bandClass : undefined}>
             <NewMessageJumpButton count={props.newCount} onPress={handleJump} />
             <MentionAutocomplete
               candidates={candidates}
@@ -219,6 +236,7 @@ export function RoomChatView(props: RoomChatViewProps) {
               }}
             />
             <InputBar
+              onDark={o}
               value={input}
               onChange={props.onChangeInput}
               onSend={props.onSend}
