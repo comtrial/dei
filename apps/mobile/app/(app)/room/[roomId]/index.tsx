@@ -176,6 +176,7 @@ function buildCells(
     return {
       kind: undefined,
       name: displayName,
+      userId: member.user_id,
       uploadTime: uploadHour,
       videoId: video.id,
       present: onlineUserIds.has(member.user_id),
@@ -501,9 +502,15 @@ export default function RoomScreen() {
               router.push(`/room/${roomId}/video/${videoId}`);
             }}
             onAvatarPress={(cell) => {
-              const found = membersWithProfile.find((m) => m.profile?.nickname === cell.name || m.user_id.slice(0, 6) === cell.name);
-              if (!found) return;
-              router.push(`/room/${roomId}/members?userId=${found.user_id}`);
+              // 셀이 직접 들고 있는 userId 로 멤버 프로필(S14) 이동. 닉네임 문자열
+              // 매칭은 동명이인·표시 truncation 에 취약 → fallback 으로만.
+              const userId =
+                cell.userId
+                ?? membersWithProfile.find(
+                  (m) => m.profile?.nickname === cell.name || m.user_id.slice(0, 6) === cell.name,
+                )?.user_id;
+              if (!userId) return;
+              router.push(`/room/${roomId}/members?userId=${userId}`);
             }}
             onTimeSlotPress={(slotIndex) => {
               const slot = slots[slotIndex];
