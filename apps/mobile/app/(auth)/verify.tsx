@@ -10,7 +10,6 @@ import { analytics, logger } from '@dei/shared';
 import {
   AlertDialog,
   BrandTransitionFrame,
-  Button,
   IconButton,
   Spinner,
   Text,
@@ -25,12 +24,7 @@ import {
   startIdentityVerification,
 } from '@/lib/portone.stub';
 import { ROUTES } from '@/lib/routes';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
-
-const DEV_IDENTITY_BYPASS_ENABLED = ['1', 'true', 'TRUE', 'yes'].includes(
-  process.env.EXPO_PUBLIC_ENABLE_DEV_IDENTITY_BYPASS ?? '',
-);
 
 /**
  * S03 — 본인인증 진행 중 (PortOne)
@@ -222,19 +216,6 @@ export default function VerifyScreen() {
 
     hasStartedRef.current = true;
 
-    // 개발용 바이패스가 켜진 환경(PortOne 미연동)에서는 진입 시 PortOne 자동호출을
-    // 하지 않는다. 자동호출이 실패하면 '시작 못했어요' 다이얼로그→terms 로 튕겨
-    // 바이패스 버튼을 쓰기도 전에 막히기 때문. BYPASS 일 땐 익명 세션만 만들고
-    // '개발용 본인인증 완료' 버튼으로 진행한다.
-    if (DEV_IDENTITY_BYPASS_ENABLED) {
-      void ensureAnonymousSession().catch((error) => {
-        logger.captureException(error, {
-          tags: { feature: 'identity-verification', action: 'dev-bypass-ensure-session' },
-        });
-      });
-      return;
-    }
-
     const start = async () => {
       setStartFailed(false);
 
@@ -265,49 +246,6 @@ export default function VerifyScreen() {
     setStartAttempt((attempt) => attempt + 1);
   };
 
-  const completeDevIdentityBypass = useCallback(() => {
-    if (!DEV_IDENTITY_BYPASS_ENABLED) {
-      return;
-    }
-
-    void logger.withErrorCapture(
-      'identity.dev-bypass',
-      async () => {
-        const session = await ensureAnonymousSession();
-        const userId = session.user.id;
-        const { error } = await supabase
-          .from('profile')
-          .update({
-            birth_date: '2000-01-01',
-            birth_year: 2000,
-            gender: 'female',
-            is_adult: true,
-          })
-          .eq('user_id', userId);
-
-        if (error) {
-          throw error;
-        }
-
-        // 개발용 바이패스는 약관 동의 화면(S02)을 건너뛰므로 terms_agreement 행이 없다.
-        // 그러면 app/index.tsx 부트스트랩의 `if (!termsAgreement) → terms` 가드가
-        // 닉네임(step1) 진입 전에 약관으로 튕긴다(이 버그). 바이패스에서도 약관 동의를
-        // 기록해 부트스트랩이 정상적으로 step1 로 보내게 한다(FALLBACK 동의값 사용).
-        await ensureLatestTermsAgreementForCurrentUser();
-
-        setVerificationRequest(null);
-        verificationRequestRef.current = null;
-        router.replace(ROUTES.profileStep1);
-      },
-      { tags: { feature: 'identity-verification', action: 'dev-bypass' } },
-    ).catch((error) => {
-      logger.captureException(error, {
-        tags: { feature: 'identity-verification', action: 'dev-bypass-catch' },
-      });
-      setStartFailed(true);
-    });
-  }, [ensureAnonymousSession, router]);
-
   if (verificationRequest) {
     return (
       <SafeAreaView className="flex-1 bg-bg">
@@ -331,14 +269,6 @@ export default function VerifyScreen() {
             setSupportMultipleWindows={false}
           />
         </View>
-
-        {DEV_IDENTITY_BYPASS_ENABLED ? (
-          <View className="absolute bottom-[28px] left-0 right-0 px-[24px]">
-            <Button fullWidth variant="secondary" onPress={completeDevIdentityBypass}>
-              개발용 본인인증 완료
-            </Button>
-          </View>
-        ) : null}
 
         {isConfirming ? (
           <View className="absolute inset-0 items-center justify-center bg-bg/80 px-[32px]">
@@ -394,17 +324,6 @@ export default function VerifyScreen() {
         >
           인증이 끝나면 자동으로 진행돼요
         </Text>
-
-        {DEV_IDENTITY_BYPASS_ENABLED ? (
-          <Button
-            fullWidth
-            variant="secondary"
-            className="mt-[18px]"
-            onPress={completeDevIdentityBypass}
-          >
-            개발용 본인인증 완료
-          </Button>
-        ) : null}
       </View>
 
       <AlertDialog
