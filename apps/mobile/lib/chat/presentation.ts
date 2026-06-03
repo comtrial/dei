@@ -8,7 +8,9 @@
 // (string: 'legacy'|'overlay' 또는 boolean: true=overlay). 운영/관리자/AB 에서
 // 이 플래그만 바꾸면 화면 노출이 전환된다. 안전 기본값은 'legacy'(검증된 기존 동작) —
 // 플래그 미수신·롤백 시 기존 화면으로 폴백된다.
-import { getFeatureFlag } from '@/lib/posthog';
+import { useEffect, useState } from 'react';
+
+import { getFeatureFlag, onFeatureFlags } from '@/lib/posthog';
 
 export type ChatPresentationMode = 'legacy' | 'overlay';
 
@@ -37,4 +39,22 @@ function normalize(flag: boolean | string | undefined): ChatPresentationMode | u
 export function resolveChatPresentationMode(): ChatPresentationMode {
   if (ENV_OVERRIDE === 'legacy' || ENV_OVERRIDE === 'overlay') return ENV_OVERRIDE;
   return normalize(getFeatureFlag(CHAT_OVERLAY_FLAG)) ?? 'legacy';
+}
+
+/**
+ * 반응형 훅 — 현재 채팅 프레젠테이션 모드. PostHog 플래그는 **비동기**로 도착하므로
+ * 첫 렌더 시 legacy 로 떨어졌다가, 플래그가 로드/갱신되면(onFeatureFlags) 재평가해
+ * overlay 로 전환된다(Bug3: 디바이스에 플래그 반영 안 되던 문제). env override 가
+ * 있으면 그 값으로 고정(구독 불필요).
+ */
+export function useChatPresentationMode(): ChatPresentationMode {
+  const [mode, setMode] = useState<ChatPresentationMode>(resolveChatPresentationMode);
+  useEffect(() => {
+    if (ENV_OVERRIDE === 'legacy' || ENV_OVERRIDE === 'overlay') return;
+    // 마운트 직후 한 번 재평가(이미 캐시된 플래그 반영) + 이후 변경 구독.
+    setMode(resolveChatPresentationMode());
+    const unsub = onFeatureFlags(() => setMode(resolveChatPresentationMode()));
+    return unsub;
+  }, []);
+  return mode;
 }

@@ -10,8 +10,13 @@ import { useRoomChat } from '@/hooks/useRoomChat';
 import { RoomChatView } from '@/components/chat/RoomChatView';
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { countNewMessages, isNearBottom } from '@/lib/chat/scroll';
-import { parseMentionQuery, resolveTailMention, type RoomMemberLite } from '@/lib/chat/mention';
-import { resolveChatPresentationMode } from '@/lib/chat/presentation';
+import {
+  parseMentionQuery,
+  resolveTailMention,
+  resolveLeadingMention,
+  type RoomMemberLite,
+} from '@/lib/chat/mention';
+import { useChatPresentationMode } from '@/lib/chat/presentation';
 
 /** 방이 종료/삭제됐는지(읽기전용 전환 신호). status active 가 아니거나 ended_at 존재. */
 function isRoomEnded(row: { status?: string | null; ended_at?: string | null } | null): boolean {
@@ -54,7 +59,7 @@ export default function RoomChatScreen() {
 
   // 채팅 진입 방식(피처 플래그). 'overlay' 면 영상 위 반투명 레이어(scrim/dark band),
   // 아니면 기존 불투명 화면. 라우트 presentation 은 (app)/_layout 이 같은 플래그로 결정.
-  const overlay = resolveChatPresentationMode() === 'overlay';
+  const overlay = useChatPresentationMode() === 'overlay';
 
   const { messages, send, retry } = useRoomChat({ roomId: roomId ?? '', selfId });
 
@@ -116,11 +121,35 @@ export default function RoomChatScreen() {
                 error: null,
               };
           if (profilesError) throw profilesError;
-          // user_id → { name, photoUrl } 결합용 맵.
+          // photo_url 은 profile-photos 버킷의 **저장 경로**라 그대로는 못 띄운다(Bug2).
+          // room/index 와 동일하게 createSignedUrl 로 서명 URL 을 만들어야 expo-image 가
+          // 로드한다. 사진 보유 멤버만 일괄 서명(1h).
+          const photoPaths = (profiles ?? [])
+            .filter((p) => p.photo_url)
+            .map((p) => ({ userId: p.user_id, path: p.photo_url as string }));
+          const signedByUser = new Map<string, string>();
+          if (photoPaths.length) {
+            await Promise.all(
+              photoPaths.map(async ({ userId, path }) => {
+                const { data, error } = await supabase.storage
+                  .from('profile-photos')
+                  .createSignedUrl(path, 60 * 60);
+                if (error) {
+                  logger.captureException(error, {
+                    tags: { screen: 'room-chat', feature: 'avatar-photo-sign', room_id: roomId },
+                    extra: { user_id: userId },
+                  });
+                  return;
+                }
+                if (data?.signedUrl) signedByUser.set(userId, data.signedUrl);
+              }),
+            );
+          }
+          // user_id → { name, photoUrl(서명됨) } 결합용 맵.
           const profileByUser = new Map(
             (profiles ?? []).map((p) => [
               p.user_id,
-              { name: p.nickname ?? '익명', photoUrl: p.photo_url ?? undefined },
+              { name: p.nickname ?? '익명', photoUrl: signedByUser.get(p.user_id) },
             ]),
           );
           if (alive) {
@@ -138,7 +167,7 @@ export default function RoomChatScreen() {
               };
             });
             setMembers(mapped);
-            // 멤버 프로필 사진을 미리 디코딩·캐시 → 헤더 스택/버블 노출 시 리드타임 0.
+            // 서명된 사진을 미리 디코딩·캐시 → 헤더 스택/버블 노출 시 리드타임 0.
             const urls = mapped.map((m) => m.photoUrl).filter((u): u is string => Boolean(u));
             if (urls.length) void Image.prefetch(urls, { cachePolicy: 'memory-disk' });
           }
@@ -215,19 +244,28 @@ export default function RoomChatScreen() {
   const onSend = () => {
     if (!roomId || roomEnded) return; // concurrency-misc-9: 종료된 방은 클라 선차단.
 
-    // G-A: 칩 미확정인데 입력 끝이 @토큰이면 재파싱해 누설 차단.
-    if (whisperTarget == null && parseMentionQuery(input).active) {
-      const res = resolveTailMention(input, members, { selfId, blockedIds });
-      if (res.kind === 'confirmed' && res.target) {
-        // 완전일치 && 유일 → 자동 귓속말. tail @토큰 strip 한 본문으로 전송.
-        dispatchSend(res.strippedInput ?? input, res.target.userId);
-        return;
+    if (whisperTarget == null) {
+      // Bug4: '@풀네임 본문' 인라인 멘션(이름 뒤에 본문) — 완전·유일 일치면 귓속말.
+      if (input.trimStart().startsWith('@')) {
+        const lead = resolveLeadingMention(input, members, { selfId, blockedIds });
+        if (lead.kind === 'confirmed' && lead.target) {
+          dispatchSend(lead.strippedInput ?? input, lead.target.userId);
+          return;
+        }
+        if (lead.kind === 'ambiguous') return; // 평문 오발신 차단(명시 선택 유도).
+        // none → 아래 tail/평문 분기로.
       }
-      if (res.kind === 'ambiguous') {
-        // 후보 다수 / prefix-만-일치 → send 보류(드롭다운 유지, 평문 오발신 차단).
-        return;
+
+      // G-A: 칩 미확정인데 입력 끝이 @토큰이면 재파싱해 누설 차단(tail 케이스).
+      if (parseMentionQuery(input).active) {
+        const res = resolveTailMention(input, members, { selfId, blockedIds });
+        if (res.kind === 'confirmed' && res.target) {
+          dispatchSend(res.strippedInput ?? input, res.target.userId);
+          return;
+        }
+        if (res.kind === 'ambiguous') return;
+        // none → 평문.
       }
-      // res.kind === 'none' → 평문 전송으로 진행(아래).
     }
 
     dispatchSend(input, whisperTarget?.userId ?? null);

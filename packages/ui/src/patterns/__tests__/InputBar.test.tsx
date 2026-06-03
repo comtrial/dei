@@ -65,6 +65,29 @@ describe('InputBar (X9)', () => {
     expect(style?.height).toBe(40);
   });
 
+  // Bug1: 높이 흔들림 방지 — 콘텐츠 높이를 그대로 반영(+상수 fudge 없음), 같은
+  // contentSize 가 반복 보고돼도 height 가 진동(re-set)하지 않아야 한다.
+  it('auto-grow height reflects measured contentSize without a compounding fudge', () => {
+    render(<InputBar />);
+    const input = screen.getByTestId('input-bar-input');
+    const h = () => {
+      const s = Array.isArray(input.props.style) ? Object.assign({}, ...input.props.style) : input.props.style;
+      return s?.height;
+    };
+    // 한 줄(작은 contentSize) → 최소 40 으로 clamp.
+    fireEvent(input, 'contentSizeChange', { nativeEvent: { contentSize: { height: 24, width: 100 } } });
+    expect(h()).toBe(40);
+    // 3줄 정도(72px) → 그 값으로 grow (이전엔 +16 더해 88 로 부풀고 재측정 진동).
+    fireEvent(input, 'contentSizeChange', { nativeEvent: { contentSize: { height: 72, width: 100 } } });
+    expect(h()).toBe(72);
+    // 동일 contentSize 재보고 → height 동일(진동 없음).
+    fireEvent(input, 'contentSizeChange', { nativeEvent: { contentSize: { height: 72, width: 100 } } });
+    expect(h()).toBe(72);
+    // 상한 초과(200) → 120 으로 clamp + 내부 스크롤.
+    fireEvent(input, 'contentSizeChange', { nativeEvent: { contentSize: { height: 200, width: 100 } } });
+    expect(h()).toBe(120);
+  });
+
   it('charcount renders "N / max" meta when provided, omitted otherwise', () => {
     const { rerender } = render(<InputBar />);
     expect(screen.queryByTestId('input-bar-charcount')).toBeNull();
