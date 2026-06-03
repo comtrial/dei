@@ -24,9 +24,9 @@ CLI 를 쓰더라도 같은 규칙을 따라야 합니다 — 그래서 내용�
 6. **DB/realtime 연동 변경은 push 전 실DB e2e 로 관통 검증** (unit/component/
    e2e-web 은 전부 mock — 통과해도 실제 동작·realtime 왕복·RLS 가시성은
    보장 안 됨). 전용 테스트 유저(`e2e-*@example.test`)만 쓰고 `try/finally`
-   로 전량 cleanup. 자세한 규칙은 `CLAUDE.md` Testing 규칙 7, 기준 구현·
-   리포트는 `docs/chat-spec/e2e-realdb-report.md`. "테스트 다 통과" 를 실DB
-   동작 검증으로 보고하지 말 것.
+   로 전량 cleanup. 자세한 규칙은 `CLAUDE.md` Testing 규칙 7. 기준 패턴은
+   `feat/chat-system` git history (rooms-pivot zero-base 후 rooms e2e 로
+   재정립 예정). "테스트 다 통과" 를 실DB 동작 검증으로 보고하지 말 것.
 7. **마이그레이션 ≠ Edge Function 배포 (별개 경로, 실제로 놓쳤던 항목).**
    `supabase db push` 는 테이블/RLS/RPC 만 반영 — Edge Function 은
    `supabase functions deploy <name>` 별도 필수. 백엔드 완료 = 마이그레이션
@@ -34,26 +34,26 @@ CLI 를 쓰더라도 같은 규칙을 따라야 합니다 — 그래서 내용�
    우선/RPC 폴백)로 e2e 검증**. 실DB e2e 는 RPC 직접 호출만 하지 말고
    `supabase.functions.invoke` 경로도 포함. 자세히는 `CLAUDE.md` Testing
    규칙 8 (배포 산출물 체크리스트).
-8. **협업·브랜치 거버넌스 (AI 가 개발·충돌해결을 많이 담당하므로).** 어느
-   에이전트(Claude / Codex / Cursor 등)든 동일 적용. 자세히는 `CLAUDE.md`
-   **협업·브랜치 거버넌스** 섹션.
-   - **브랜치:** `git fetch` 후 최신 `origin/main` 기준 새 브랜치.
-     이름 = `feature/{담당자}/{YYYYMMDD}-{작업범위}`. 작게(1~2일), 큰 충돌은
-     억지 merge 말고 최신 main 에서 새로 따기. 기존 브랜치는 전체 merge 금지
-     → diff 선별 이식.
-   - **PR:** 한 커밋 한 의도. 본문에 **AI 변경 파일 / 변경 이유 / 사람이
-     확인해야 할 부분 + 영향 범위 + 검증 결과** 명시.
-   - **사람 승인 지점(★):** 수정 착수 전 건드릴 파일·위험 포인트 먼저 보고 →
-     수정 후 파일별 요약·검증결과·임의판단 보고. **충돌 해결은 자동으로 하지
-     말고 충돌 리포트 후 사람 승인.** main 직접 push·머지·배포·외부 전송은
-     사람 확인 후.
-   - **검증:** "작업 완료"(구현·연결·placeholder 제거) ≠ "검증 완료"
-     (typecheck+lint+test+필요시 실경로). 분리 보고. DB/Auth/Edge/결제/알림/
-     Realtime 은 별도 체크리스트(규칙 6·7).
+8. **브랜치 / 커밋 / PR 규약** — 새 작업은 `git fetch` 후 최신 `origin/main`
+   에서 `feature/{담당자}/{YYYYMMDD}-{범위}` 형태로 새 브랜치 생성. 작게
+   (1~2일), 큰 충돌은 억지 merge 말고 최신 main 에서 새로 따기. 기존 브랜치는
+   전체 merge 금지 → diff 선별 이식. 커밋은 작게·한 의도만. PR 본문에 **변경
+   내용 + 영향 범위 + 검증 결과 + AI 변경 파일 / 임의 판단** 필수. **사용자
+   명시 지시 없이 `git push` · `--force` · `gh pr create/merge` 금지.** 자세한
+   규약은 `CLAUDE.md` 의 **Branch / Commit / PR 규약 (CRITICAL)** 섹션.
+9. **사람 승인 지점(★) — AI 가 개발·충돌해결을 많이 담당하므로.** 수정 착수
+   전 건드릴 파일·위험 포인트 먼저 보고 → 수정 후 파일별 요약·검증결과·임의
+   판단 보고. **충돌 해결은 자동으로 하지 말고 충돌 리포트(어느 파일·hunk·
+   의도가 부딪쳤는지) 후 사람 승인.** main 직접 push·머지·배포·외부 전송은
+   사람 확인 후. 어느 에이전트(Claude / Codex / Cursor 등)든 동일 적용.
+10. **"작업 완료" 와 "검증 완료" 분리.** 작업 완료 = 코드 구현 + 화면 연결 +
+   placeholder 제거. 검증 완료 = typecheck + lint + test + 필요 시 실DB / 실
+   Edge Function 까지. DB/Auth/Edge/결제/알림/Realtime 변경은 별도 체크리스트
+   (CLAUDE.md Testing 규칙 8·9).
 
 전체 규칙은 `CLAUDE.md` 를 읽어주세요.
 
-> **Codex CLI 사용자 주의:** Codex 는 이 `AGENTS.md` 를 우선 읽습니다. 위 8개
+> **Codex CLI 사용자 주의:** Codex 는 이 `AGENTS.md` 를 우선 읽습니다. 위 10개
 > 핵심 원칙은 요약본이며, **반드시 `CLAUDE.md` 본문의 해당 섹션(특히 협업·
 > 브랜치 거버넌스 / Testing / Error Logging)을 함께 적용**하세요. 두 파일이
 > 어긋나면 `CLAUDE.md` 가 우선합니다(단일 source of truth).

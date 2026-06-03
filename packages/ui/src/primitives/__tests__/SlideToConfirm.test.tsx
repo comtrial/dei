@@ -73,6 +73,20 @@ describe('SlideToConfirm (P18)', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
+  it('fires onConfirm on press (탭 확정 경로 — 단일 탭으로도 확정)', () => {
+    const onConfirm = jest.fn();
+    render(<SlideToConfirm testID="stc" onConfirm={onConfirm} />);
+    fireEvent.press(screen.getByTestId('stc'));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire onConfirm on press when disabled', () => {
+    const onConfirm = jest.fn();
+    render(<SlideToConfirm testID="stc" onConfirm={onConfirm} disabled />);
+    fireEvent.press(screen.getByTestId('stc'));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it('merges custom className onto container', () => {
     render(<SlideToConfirm testID="stc" className="mt-3" />);
     expect(cls('stc')).toContain('mt-3');

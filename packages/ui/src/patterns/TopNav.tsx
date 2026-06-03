@@ -64,8 +64,24 @@ export interface TopNavProps extends ViewProps {
   leftSlot?: ReactNode;
   /** 가운데/좌측 타이틀 텍스트. 없으면 타이틀 자리를 비운다. */
   title?: string;
+  /**
+   * 타이틀 아래(또는 단독) 부제. S13a 처럼 제목 없이 부제만(`멤버 N명`)도 가능.
+   * title 과 함께 주면 2단(제목 위 / 부제 아래)으로 렌더한다.
+   */
+  subtitle?: string;
+  /**
+   * 좌측 그룹(컨트롤+타이틀) 옆에 붙는 보조 노드 — 예: 참여 멤버 AvatarStack.
+   * rightActions(우측 끝)와 달리 타이틀 바로 옆(좌측 정렬)에 온다.
+   */
+  leftAccessory?: ReactNode;
   /** 우측 액션 slot — IconButton/Badge(count)/Avatar/Button 등을 caller 가 조립. */
   rightActions?: ReactNode;
+  /**
+   * 어두운 표면(영상 위 scrim 오버레이) 위에 얹힐 때 true.
+   * 제목/부제/뒤로 글리프를 흰색으로, 기본 paper 표면·하단 라인을 투명/흰계열로 바꾼다.
+   * (caller 가 className 으로 dark band 배경을 직접 줄 때 텍스트 대비 보정용)
+   */
+  onDark?: boolean;
   className?: string;
 }
 
@@ -76,7 +92,10 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
     leftAccessibilityLabel,
     leftSlot,
     title,
+    subtitle,
+    leftAccessory,
     rightActions,
+    onDark = false,
     className,
     ...rest
   },
@@ -90,7 +109,8 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
     leftNode = (
       <IconButton
         glyph={LEFT_GLYPH[left]}
-        variant="ghost"
+        // onDark(영상 위 scrim) 에선 glass variant 로 흰 글리프 — ghost(ink)는 안 보임.
+        variant={onDark ? 'glass' : 'ghost'}
         size={32}
         accessibilityLabel={leftAccessibilityLabel ?? LEFT_LABEL[left]}
         onPress={onLeftPress}
@@ -107,24 +127,41 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
       // .nav: align-items center, padding 14px 16px 6px. surface 는 매트릭스 X1
       // 지정값(bg-paper + border-b border-line). 정렬은 좌측·타이틀 | 우측 분리.
       className={cn(
-        'flex-row items-center justify-between bg-paper border-b border-line px-[16px] pt-[14px] pb-[6px]',
+        'flex-row items-center justify-between px-[16px] pt-[14px] pb-[6px]',
+        // onDark: 표면은 caller(dark band)가 담당 → 투명 + 흰계열 하단 라인.
+        onDark ? 'border-b border-[rgba(255,255,255,0.12)]' : 'bg-paper border-b border-line',
         className,
       )}
       accessibilityRole="header"
       {...rest}
     >
-      {/* 좌측 그룹: 컨트롤 + 타이틀 (HTML .nav 의 좌측 정렬) */}
+      {/* 좌측 그룹: 컨트롤 + (타이틀/부제 2단) (HTML .nav 의 좌측 정렬) */}
       <View className="flex-1 flex-row items-center">
         {leftNode}
-        {title ? (
-          <Text
-            tone="ink"
-            numberOfLines={1}
-            className={cn(TITLE_CLASS, titleHasLeading && 'ml-[6px]')}
-          >
-            {title}
-          </Text>
+        {title != null || subtitle != null ? (
+          <View className={cn('min-w-0', titleHasLeading && 'ml-[6px]')}>
+            {title != null ? (
+              <Text
+                tone={onDark ? undefined : 'ink'}
+                numberOfLines={1}
+                className={cn(TITLE_CLASS, onDark && 'text-white')}
+              >
+                {title}
+              </Text>
+            ) : null}
+            {subtitle != null ? (
+              <Text
+                tone={onDark ? undefined : 'ink-3'}
+                numberOfLines={1}
+                className={cn('text-[11px] font-semibold', onDark && 'text-[rgba(255,255,255,0.85)]')}
+              >
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
+        {/* 좌측 보조 노드(참여 멤버 아바타 스택 등) — 타이틀 옆. */}
+        {leftAccessory != null ? <View className="ml-[10px]">{leftAccessory}</View> : null}
       </View>
 
       {/* 우측 액션 slot — 간격 8px 로 나열(HTML 우측 액션 gap 분포). */}

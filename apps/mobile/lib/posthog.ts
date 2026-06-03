@@ -20,6 +20,33 @@ function toEventProps(props?: Record<string, unknown>): EventProps | undefined {
 }
 
 let initialized = false;
+/** 등록된 PostHog 클라이언트(피처 플래그 조회용). 미초기화 시 null. */
+let client: PostHog | null = null;
+
+/**
+ * PostHog 피처 플래그 값을 읽는다(원격 제어 — 앱 재배포 없이 분기). 클라이언트가
+ * 없거나(키 미설정) 아직 플래그를 못 받았으면 undefined. 호출부는 fallback 을 둔다.
+ */
+export function getFeatureFlag(key: string): boolean | string | undefined {
+  return client?.getFeatureFlag(key) as boolean | string | undefined;
+}
+
+/**
+ * 플래그 로드/갱신 시 콜백(반응형 구독). PostHog SDK 는 플래그를 **비동기**로
+ * 받으므로 첫 렌더 시점엔 getFeatureFlag 가 undefined 일 수 있다. 이 구독으로
+ * 플래그가 도착/변경되면 UI 가 재평가하도록 한다. 해제 함수를 반환.
+ * 클라이언트 미초기화 시 no-op.
+ */
+export function onFeatureFlags(cb: () => void): () => void {
+  if (!client) return () => {};
+  // SDK 의 onFeatureFlags 는 flags 인자를 주지만 여기선 트리거만 필요.
+  return client.onFeatureFlags(() => cb());
+}
+
+/** 플래그를 강제 재요청(예: identify 직후 — 로그인 유저 기준 재평가). */
+export function reloadFeatureFlags(): void {
+  client?.reloadFeatureFlags();
+}
 
 /**
  * PostHog SDK를 초기화하고 @dei/shared 의 analytics transport 로 등록한다.
@@ -45,6 +72,7 @@ export function initPostHog(): void {
   }
 
   const posthog = new PostHog(apiKey, { host });
+  client = posthog;
 
   const transport: AnalyticsTransport = {
     capture(event, props) {
@@ -52,6 +80,9 @@ export function initPostHog(): void {
     },
     identify(distinctId, props) {
       posthog.identify(distinctId, toEventProps(props));
+      // 로그인(특정 user) 으로 distinct_id 가 바뀌었으니 플래그를 재평가한다
+      // — distinct_id 타겟팅(overlay 등)이 익명→유저 전환 후에도 반영되게.
+      posthog.reloadFeatureFlags();
     },
     screen(name, props) {
       posthog.screen(name, toEventProps(props));

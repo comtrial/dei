@@ -883,6 +883,7 @@ export type Database = {
           duration_ms: number | null
           hour_slot: number | null
           id: string
+          muted: boolean
           room_id: string
           status: string
           storage_path: string | null
@@ -894,6 +895,7 @@ export type Database = {
           duration_ms?: number | null
           hour_slot?: number | null
           id?: string
+          muted?: boolean
           room_id: string
           status?: string
           storage_path?: string | null
@@ -905,6 +907,7 @@ export type Database = {
           duration_ms?: number | null
           hour_slot?: number | null
           id?: string
+          muted?: boolean
           room_id?: string
           status?: string
           storage_path?: string | null

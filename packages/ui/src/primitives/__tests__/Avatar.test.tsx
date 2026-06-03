@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 
-import { Avatar } from '../Avatar';
+import { Avatar, avatarColorFor } from '../Avatar';
 
 describe('Avatar (P6)', () => {
   it('renders the initial centered inside a rounded-full View', () => {
@@ -18,6 +18,14 @@ describe('Avatar (P6)', () => {
     const container = screen.getByTestId('av').props.className as string;
     expect(container).toContain('w-[38px]');
     expect(container).toContain('h-[38px]');
+  });
+
+  it('stays a circle inside flex rows (shrink-0 — Chip/스택에서 가로 압축 방지)', () => {
+    // flex-row 부모(Chip 등)에서 라벨이 공간을 요구하면 아바타 width 만 줄어
+    // 타원이 되는 회귀가 있었다. shrink-0 으로 정사각 치수를 강제 보존.
+    render(<Avatar testID="av" initial="최" size={24} />);
+    const container = screen.getByTestId('av').props.className as string;
+    expect(container).toContain('shrink-0');
   });
 
   it('falls back to the §3A self bg when no bg prop is given', () => {
@@ -67,5 +75,43 @@ describe('Avatar (P6)', () => {
     const ref = { current: null as View | null };
     render(<Avatar ref={ref} testID="av" initial="수" />);
     expect(ref.current).not.toBeNull();
+  });
+
+  it('renders a circular Image when photoUrl is given (size-matched, no initial)', () => {
+    render(<Avatar testID="av" initial="수" size={28} photoUrl="https://cdn.test/u/me.jpg" />);
+    // photoUrl wins over the initial fallback — the letter is not rendered
+    expect(screen.queryByText('수')).toBeNull();
+    const img = screen.getByTestId('av-photo');
+    expect(img.props.source).toEqual({ uri: 'https://cdn.test/u/me.jpg' });
+    // image fills the circular container (size 28) and is clipped to a circle
+    const cls = img.props.className as string;
+    expect(cls).toContain('w-[28px]');
+    expect(cls).toContain('h-[28px]');
+    expect(cls).toContain('rounded-full');
+  });
+
+  it('caches the photo (memory-disk) + per-url recyclingKey for no-leadtime reloads', () => {
+    render(<Avatar testID="av" photoUrl="https://cdn.test/u/me.jpg" />);
+    const img = screen.getByTestId('av-photo');
+    expect(img.props.cachePolicy).toBe('memory-disk');
+    expect(img.props.recyclingKey).toBe('https://cdn.test/u/me.jpg');
+  });
+
+  it('avatarColorFor is deterministic and returns a peer bg token', () => {
+    expect(avatarColorFor('user-1')).toBe(avatarColorFor('user-1'));
+    expect(avatarColorFor('user-1')).toMatch(/^bg-\[#[0-9A-Fa-f]{6}\]$/);
+  });
+
+  it('falls back to the initial when photoUrl is not given', () => {
+    render(<Avatar testID="av" initial="수" />);
+    expect(screen.queryByTestId('av-photo')).toBeNull();
+    expect(screen.getByText('수')).toBeTruthy();
+  });
+
+  it('keeps the accessibilityLabel when rendering a photo', () => {
+    render(
+      <Avatar testID="av" initial="수" photoUrl="https://cdn.test/u/me.jpg" accessibilityLabel="수아 아바타" />,
+    );
+    expect(screen.getByLabelText('수아 아바타')).toBeTruthy();
   });
 });

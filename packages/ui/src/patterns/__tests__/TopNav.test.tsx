@@ -56,6 +56,32 @@ describe('TopNav (X1)', () => {
     expect(screen.queryByLabelText('뒤로')).toBeNull();
   });
 
+  it('renders subtitle without a title (S13a: 멤버 N명 only)', () => {
+    render(<TopNav left="back" subtitle="멤버 8명" rightActions={null} />);
+    expect(screen.getByText('멤버 8명')).toBeTruthy();
+    // 제목이 없어도 정상 렌더(부제 단독).
+    expect(screen.getByLabelText('뒤로')).toBeTruthy();
+  });
+
+  it('still renders title when provided (regression)', () => {
+    render(<TopNav left="back" title="프로필" />);
+    expect(screen.getByText('프로필')).toBeTruthy();
+  });
+
+  it('renders both title and subtitle when given', () => {
+    render(<TopNav left="back" title="합정 모임" subtitle="멤버 8명" />);
+    expect(screen.getByText('합정 모임')).toBeTruthy();
+    expect(screen.getByText('멤버 8명')).toBeTruthy();
+  });
+
+  it('renders leftAccessory next to the title group', () => {
+    render(
+      <TopNav left="back" subtitle="멤버 8명" leftAccessory={<View testID="member-stack" />} />,
+    );
+    expect(screen.getByTestId('member-stack')).toBeTruthy();
+    expect(screen.getByText('멤버 8명')).toBeTruthy();
+  });
+
   it('has header accessibility role and forwards ref', () => {
     const ref = { current: null as RNView | null };
     render(<TopNav ref={ref} testID="nav" title="제목" />);

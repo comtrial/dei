@@ -6,16 +6,16 @@ name: Verify
 # 직렬 needs: 체인 — 하나라도 실패하면 머지 차단. 집계 잡 `verify` 가
 # branch protection 의 required status check 다.
 #
-#   ds-enforce(DS 강제 lint) → typecheck → unit → component → integration
+#   ds-enforce(DS 강제 lint) → typecheck → unit → component → integration → e2e-web
 #
 # ds-enforce = 사용자 요구 "DS 안 쓰면 PR 이 CI 에서 튕기게". app/ 의 raw 스타일
 # (inline style / raw hex / StyleSheet.create)을 ESLint 가 error 로 막고,
 # --max-warnings=0 이라 경고도 통과 못 한다.
 #
-# e2e-web(Playwright)은 이번 셋팅에서 제외한다 — 화면이 스캐폴딩 단계라
-# 화면 e2e 는 후속(spec §9)이고, 남아있는 e2e 하네스는 옛 채팅 도메인 참고용
-# 으로 현재 컴파일되지 않는다(apps/mobile/e2e/README 경고 참조). C 가 방/채팅
-# 화면을 구현하며 하네스를 재구성할 때 이 워크플로우에 e2e-web 잡을 추가한다.
+# e2e-web(Playwright)은 S13a 방 내부 채팅 화면 구현 완료로 재추가됐다. 하네스가
+# 프로덕션 view(RoomChatView)를 RN-web 으로 마운트해 전체화면 헤더·them/me/whisper
+# 버블·멘션·빈상태·방종료·컴포저 가림없음을 DOM 레벨로 검증한다
+# (apps/mobile/e2e/playwright/specs/s13a-room-chat.spec.ts).
 
 on:
   pull_request:
@@ -74,9 +74,10 @@ jobs:
           node-version: 20
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
-      # 토큰/로직/정책(vitest) + @dei/shared, @dei/api.
+      # 토큰/로직/정책(vitest) + @dei/shared + mobile lib(chat 멘션/길이/스크롤/머지).
       - run: pnpm --filter @dei/ui exec vitest run
       - run: pnpm --filter @dei/shared test
+      - run: pnpm --filter mobile test:unit
 
   component:
     name: component (jest)
@@ -90,8 +91,9 @@ jobs:
           node-version: 20
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
-      # @dei/ui 컴포넌트 테스트(jest-expo + RNTL).
+      # @dei/ui 컴포넌트 + mobile 컴포넌트(RoomChatView) 테스트(jest-expo + RNTL).
       - run: pnpm --filter @dei/ui exec jest
+      - run: pnpm --filter mobile test:component
 
   integration:
     name: integration (real Supabase)
@@ -114,15 +116,38 @@ jobs:
           STATUS=$(pnpm dlx supabase status -o env)
           export EXPO_PUBLIC_SUPABASE_URL=$(echo "$STATUS" | grep -E '^API_URL=' | cut -d= -f2- | tr -d '"')
           export EXPO_PUBLIC_SUPABASE_ANON_KEY=$(echo "$STATUS" | grep -E '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
+          # service-role 키 주입 — send-message-rpc.test.ts 가 makeServiceClient()/hasServiceRoleKey()
+          # 로 service-role 을 요구한다. 미주입 시 그 스위트가 통째로 SKIP → CLAUDE.md 룰3
+          # ("실행 0건이면 FAIL / skip=통과 금지") 위반. 반드시 export 해 실제 실행시킨다.
+          export SUPABASE_SERVICE_ROLE_KEY=$(echo "$STATUS" | grep -E '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '"')
           pnpm --filter mobile test:integration
       - name: Stop local Supabase
         if: always()
         run: pnpm dlx supabase stop || true
 
+  e2e-web:
+    name: e2e-web (Playwright)
+    needs: integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # Chromium 만 설치(하네스는 chromium 프로젝트 단일).
+      - name: Install Playwright Chromium
+        run: pnpm --filter mobile exec playwright install --with-deps chromium
+      # 프로덕션 view(RoomChatView)를 RN-web 하네스로 마운트해 DOM 레벨 검증.
+      - name: Run e2e-web
+        run: pnpm --filter mobile test:e2e:web
+
   # 집계 잡 — branch protection 의 required check 로 지정한다.
   verify:
     name: verify
-    needs: [ds-enforce, typecheck, unit, component, integration]
+    needs: [ds-enforce, typecheck, unit, component, integration, e2e-web]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -132,7 +157,8 @@ jobs:
             || [ "${{ needs.typecheck.result }}" != "success" ] \
             || [ "${{ needs.unit.result }}" != "success" ] \
             || [ "${{ needs.component.result }}" != "success" ] \
-            || [ "${{ needs.integration.result }}" != "success" ]; then
+            || [ "${{ needs.integration.result }}" != "success" ] \
+            || [ "${{ needs.e2e-web.result }}" != "success" ]; then
             echo "verify 게이트 실패 — 위 잡 중 하나 이상이 통과하지 못했습니다."
             exit 1
           fi

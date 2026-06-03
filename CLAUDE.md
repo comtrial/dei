@@ -42,6 +42,88 @@ dei/
 | `cd apps/mobile && pnpm start` | Expo dev server |
 | `cd apps/mobile && pnpm ios` | iOS 시뮬레이터 실행 |
 
+## Branch / Commit / PR 규약 (CRITICAL)
+
+> AI agent 가 개발·충돌 해결을 많이 담당하는 환경에서, **사람이 변경 맥락을
+> 놓치지 않도록** 브랜치 기준·PR 기록·검증 결과·사람 승인 지점을 남기는 규약.
+> 협업 agent 도 이 규약을 따른다 — `.local/` 외 모든 변경에 적용. PR #40
+> 이후의 baseline 부터 이 규약이 강제다.
+
+### 1. 브랜치 관리
+
+- **새 작업은 항상 `git fetch` 후 최신 `origin/main` 기준에서** 새 브랜치 생성.
+- 브랜치명: **`feature/{담당자}/{YYYYMMDD}-{작업범위}`** 형태로 통일.
+  - 예: `feature/b/20260530-portone-verify`
+  - 예: `feature/c/20260530-room-grid`
+- **PR #40 이후 기존 브랜치는 그대로 merge X — 참고용**으로만.
+- 기존 브랜치에서 필요한 코드가 있으면 **전체 merge 가 아니라 diff 확인 후
+  새 브랜치에 선별 이식**.
+- 브랜치는 작게 유지 — 가능하면 **1~2 일 안에 PR**.
+- **3 일 이상 열린 브랜치는 PR 전 `origin/main` 과 차이를 재확인**.
+- 충돌이 큰 브랜치는 억지 rebase/merge 보다 **최신 `origin/main` 에서 새
+  브랜치를 다시 따는 것** 우선.
+
+### 2. 커밋 / PR
+
+- **커밋은 작은 단위로 나누고, 한 커밋에는 한 의도만 담는다.**
+- PR 본문에는 **변경 내용 + 영향 범위 + 검증 결과** 필수.
+- PR 본문에 추가로 박을 항목: **AI 가 변경한 파일 / 변경 이유 / 사람이
+  확인해야 할 부분**.
+
+PR 본문 최소 템플릿:
+
+```md
+## 변경 내용
+- ...
+
+## 영향 범위
+- 화면: ...
+- DB / RPC: ...
+- Edge Function: ...
+- 정책 / 상수 (POLICY · taxonomy): ...
+
+## 검증
+- [ ] typecheck (`pnpm -F mobile exec tsc --noEmit` 등)
+- [ ] lint (`pnpm lint`)
+- [ ] test (`pnpm test`)
+- [ ] integration / e2e-web (해당 시 `pnpm verify`)
+- [ ] 실DB e2e (DB·realtime·Edge Function 변경 시 — Testing 규칙 7·8·9)
+
+## AI 변경
+- AI 가 건드린 파일:
+- 변경 이유:
+- 사람이 확인해야 할 부분 (임의 판단 / 임시 가정 / 외부 의존):
+```
+
+### 3. AI 작업물 관리
+
+- **AI 에게 바로 수정시키기 전에** → 건드릴 파일과 위험 포인트를 먼저 보고
+  받는다 (plan 단계 분리). `/task` 슬래시 커맨드(`.opencode/commands/task.md`
+  + `docs/c-tasks/`) 가 이 패턴을 강제한다: **planner → implementer →
+  verifier** 순차 호출, 각 단계마다 보고.
+- 수정 후에는 **변경 파일별 요약 / 검증 결과 / AI 가 임의 판단한 부분** 확인.
+- **충돌 해결도 AI 에게 바로 맡기지 않는다** — 먼저 충돌 리포트(어느 파일 ·
+  어느 hunk · 어느 의도가 부딪쳤는지)를 받은 뒤 사람이 승인.
+
+### 4. 검증 관리
+
+- **"작업 완료" 와 "검증 완료" 를 분리한다** — 서로 다른 단계로 보고.
+- **작업 완료** = 코드 구현 + 화면 연결 + placeholder 제거.
+- **검증 완료** = typecheck + lint + test + 필요 시 실제 경로 확인 (실기 ·
+  실DB · 실 Edge Function).
+- **DB / Auth / Edge Function / 결제 / 알림 / Realtime 변경은 별도
+  체크리스트** — 자세한 배포 산출물 체크리스트는 본 문서 Testing 규칙 8 ·
+  9 참조 (`supabase functions deploy <name>` 누락, ES256 토큰 검증, 빌드타임
+  env 임베드 등 실제로 놓쳤던 항목들).
+
+### 5. 사람 승인 게이트 (NEVER 위반)
+
+- 사용자 명시 지시 없이 **`git push` · `git push --force` · `git reset
+  --hard` · `gh pr create` · `gh pr merge` 금지**.
+- 협업 agent 가 충돌 자동 해소 시도 시 **사람 승인 전까지 push X**.
+- 본 규약의 핸드오프 산출물(변경 파일 요약 · AI 임의 판단 · 검증 결과)이
+  PR 본문에 박혀있지 않으면 **머지 차단 사유**.
+
 ## UI: RNR (React Native Reusables) + NativeWind (CRITICAL)
 
 이 프로젝트는 RNR(React Native Reusables) + NativeWind 사용.
@@ -221,8 +303,9 @@ logger.setUser({ id: session.user.id });
    `e2e-*@example.test`)만 생성·사용 → 원격/로컬 Supabase 에 실제 RPC·
    realtime 구독으로 흐름 관통 → `try/finally` 로 테스트 데이터 전량
    cleanup (기존 실데이터 무접촉, 시작=끝 카운트 동일 확인). 기준 구현·
-   리포트: `docs/chat-spec/e2e-realdb-report.md`, 스크립트 패턴은 거기
-   참조. **"단위/통합 테스트 다 통과" 를 실DB 동작 검증으로 보고하지 말 것**
+   리포트: 채팅 시스템 실DB e2e 패턴(`feat/chat-system` 브랜치 / git
+   history 참조 — rooms-pivot zero-base 후 rooms 모듈 e2e 로 재정립
+   예정). **"단위/통합 테스트 다 통과" 를 실DB 동작 검증으로 보고하지 말 것**
    — 통과율 ≠ 실제 동작. 협업 agent 는 DB/realtime 변경 PR 을 올리기 전
    해당 흐름의 실DB e2e 를 추가·실행하고 그 결과를 근거로 보고한다.
 8. **백엔드 변경은 "배포 산출물 체크리스트" 를 빠짐없이 — DB 마이그레이션과

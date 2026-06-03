@@ -1,6 +1,7 @@
 import { POLICY } from '../../../packages/shared/src/policy.ts';
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
+import { captureEdgeError, captureEdgeMessage } from '../_shared/log.ts';
 
 type EnqueueBody = {
   memberIds?: unknown;
@@ -23,8 +24,11 @@ type PassRow = {
   remaining: number;
 };
 
+// 표준 UUID(8-4-4-4-12). 직전 패턴은 variant 그룹의 dash·길이가 빠져
+// ([89ab][0-9a-f]{12}$ — 4번째 그룹 4자 + dash + 5번째 12자 누락) 어떤 실제 UUID 도
+// 매칭 못 해 enqueue 가 전 사용자를 INVALID_MEMBERS 로 거부하던 버그(B 원본, main 동일). 수정.
 const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function toMemberIds(body: EnqueueBody, currentUserId: string) {
   const rawIds = Array.isArray(body.memberIds)
@@ -69,10 +73,16 @@ Deno.serve(async (req) => {
     return errorResponse('method not allowed', 405, { code: 'METHOD_NOT_ALLOWED' });
   }
 
+  // catch 에서 식별자를 잃지 않도록 hoist(user/memberIds 는 try 내부 선언).
+  let userId: string | undefined;
+  let memberCount: number | undefined;
+
   try {
-    const { supabase, user } = await getAuthenticatedUser(req);
+    const { supabase, supabaseAsUser, user } = await getAuthenticatedUser(req);
+    userId = user.id;
     const body = await req.json().catch(() => ({})) as EnqueueBody;
     const memberIds = toMemberIds(body, user.id);
+    memberCount = memberIds.length;
 
     if (
       memberIds.length < POLICY.team.minMembers
@@ -251,6 +261,7 @@ Deno.serve(async (req) => {
       Date.now() + POLICY.matching.queueExpiryHours * 60 * 60 * 1000,
     ).toISOString();
 
+    const requiredGender = ownerProfile.gender === 'male' ? 'female' : 'male';
     const { data: queue, error: queueError } = await supabase
       .from('match_queue')
       .insert({
@@ -258,6 +269,7 @@ Deno.serve(async (req) => {
         expires_at: expiresAt,
         gender: ownerProfile.gender,
         region: ownerProfile.region,
+        required_gender: requiredGender,
         status: 'waiting',
         team_id: team.id,
       })
@@ -284,6 +296,80 @@ Deno.serve(async (req) => {
       }
     }
 
+    // 자동 즉시 매칭 (config 게이트 — 앱 재빌드 없이 DB 토글). 매칭 규칙·임계값은
+    // 전부 RPC(try_match) + match_config 에 있어 Edge 는 게이트만 본다.
+    const { data: cfg } = await supabase
+      .from('match_config')
+      .select('value')
+      .eq('key', 'automation')
+      .maybeSingle();
+    // match_config.value 는 jsonb — supabase-js 는 jsonb 문자열을 따옴표 포함
+    // (예: "\"auto_immediate\"") 또는 이미 파싱된 string 으로 줄 수 있다. 둘 다 정규화.
+    const rawAutomation = cfg?.value;
+    let automation = 'manual_admin_curation';
+    if (typeof rawAutomation === 'string') {
+      try {
+        const parsed = JSON.parse(rawAutomation);
+        automation = typeof parsed === 'string' ? parsed : rawAutomation;
+      } catch {
+        automation = rawAutomation; // 이미 plain string 이면 그대로
+      }
+    } else if (rawAutomation != null) {
+      automation = String(rawAutomation);
+    }
+
+    let matchId: string | null = null;
+    if (automation === 'auto_immediate' || automation === 'auto_scored') {
+      // SECURITY DEFINER RPC 를 호출 사용자 JWT(authenticated grant)로 트리거.
+      // try_match 호출 실패/누락(상대는 큐에 있는데 트리거만 실패한 좁은 케이스)에
+      // 대비해 1회 재시도(sweep cron 대체 — 명세 §8). 재시도도 실패하면 'queued'.
+      for (let attempt = 0; attempt < 2 && !matchId; attempt += 1) {
+        const { data: gm, error: matchError } = await supabaseAsUser.rpc('try_match', {
+          p_queue_id: queue.id,
+        });
+        if (!matchError && gm) {
+          matchId = gm as string;
+          break;
+        }
+        if (!matchError) break; // 정상 호출인데 매칭 미성사(null) → 재시도 불필요, 대기 잔류
+        // matchError 발생 — 마지막 시도까지 실패하면 조용한 매칭 실패(CLAUDE.md 경고).
+        if (attempt === 1) {
+          captureEdgeMessage('enqueue-match-queue', 'try_match RPC failed — queued fallback', {
+            stage: 'try_match',
+            level: 'warning',
+            userId: user.id,
+            tags: { feature: 'matching' },
+            extra: { attempt, queueId: queue.id, detail: matchError.message },
+          });
+        }
+      }
+    }
+
+    if (matchId) {
+      const { data: gm } = await supabase
+        .from('group_match')
+        .select('room_id')
+        .eq('id', matchId)
+        .maybeSingle();
+      return jsonResponse({
+        enqueuedAt: queue.enqueued_at,
+        expiresAt: queue.expires_at,
+        freeRematchWaived:
+          rematchRestriction.restricted
+          && ownerProfile.gender === 'female'
+          && POLICY.payment.femaleInstantRematchFree,
+        matched: true,
+        matchId,
+        memberCount: memberIds.length,
+        passConsumed: Boolean(passToConsume),
+        queueId: queue.id,
+        reused: false,
+        roomId: gm?.room_id ?? null,
+        status: 'matched',
+        teamId: team.id,
+      });
+    }
+
     return jsonResponse({
       enqueuedAt: queue.enqueued_at,
       expiresAt: queue.expires_at,
@@ -291,13 +377,24 @@ Deno.serve(async (req) => {
         rematchRestriction.restricted
         && ownerProfile.gender === 'female'
         && POLICY.payment.femaleInstantRematchFree,
+      matched: false,
       memberCount: memberIds.length,
       passConsumed: Boolean(passToConsume),
       queueId: queue.id,
       reused: false,
+      status: 'queued',
       teamId: team.id,
     });
   } catch (error) {
+    // team/match_queue/pass/profile/is_blocked_between 어디서 throw 하든 지금까지
+    // generic 400 으로 가려졌다. 실제 enqueue 파이프라인 실패를 기록.
+    captureEdgeError('enqueue-match-queue', error, {
+      stage: 'enqueue_pipeline',
+      status: 500,
+      userId,
+      tags: { feature: 'matching', code: 'BAD_REQUEST' },
+      extra: { memberCount },
+    });
     const message = error instanceof Error ? error.message : 'failed to enqueue match queue';
     return errorResponse(message, 400, { code: 'BAD_REQUEST' });
   }

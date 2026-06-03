@@ -1,5 +1,6 @@
 import { forwardRef } from 'react';
 import { View, Text, type ViewProps } from 'react-native';
+import { Image } from 'expo-image';
 
 import { cn } from '../lib/cn';
 
@@ -29,9 +30,32 @@ import { cn } from '../lib/cn';
 // §3A: 미승격 아바타 식별 색(HTML 값 그대로). 토큰 승격 시 여기만 교체한다.
 const DEFAULT_BG = 'bg-[#E07A4F]'; // self(내 아바타). peer(#7A8DB8)는 bg prop 으로.
 
+// peer 식별 팔레트(와이어프레임 §3A 분포색). photoUrl 없는 멤버의 이니셜 배경을
+// userId 해시로 결정적으로 배정 — 같은 사람은 항상 같은 색(세션·재렌더 안정).
+const PEER_BGS = [
+  'bg-[#7A8DB8]',
+  'bg-[#7A6CB8]',
+  'bg-[#A86B8A]',
+  'bg-[#6BA88A]',
+  'bg-[#C99A5B]',
+  'bg-[#5B9AC9]',
+] as const;
+
+/** userId(또는 임의 키) → 결정적 peer 아바타 bg className. 캐싱·재렌더에 안정. */
+export function avatarColorFor(key: string): string {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return PEER_BGS[h % PEER_BGS.length];
+}
+
 export interface AvatarProps extends ViewProps {
   /** 표시할 이니셜(보통 1글자). 예: '수'. */
   initial?: string;
+  /**
+   * 프로필 이미지 URL. 지정 시 이니셜 대신 원형(size) 이미지로 렌더하며,
+   * 미지정/로드 실패 전까지 `initial` 폴백을 사용한다. expo-image 로 디코딩.
+   */
+  photoUrl?: string;
   /** 원형 지름(px). 18~120. 기본 38 (S05 `.av-me`). */
   size?: number;
   /**
@@ -80,6 +104,7 @@ function initialClass(size: number): string {
 export const Avatar = forwardRef<View, AvatarProps>(function Avatar(
   {
     initial,
+    photoUrl,
     size = 38,
     bg,
     ring = false,
@@ -98,7 +123,9 @@ export const Avatar = forwardRef<View, AvatarProps>(function Avatar(
       accessibilityRole="image"
       accessibilityLabel={accessibilityLabel ?? (initial ? `${initial} 아바타` : undefined)}
       className={cn(
-        'relative items-center justify-center rounded-full',
+        // shrink-0: flex-row 부모(Chip·아바타 스택·헤더 등)에서 라벨/배지가 공간을
+        // 요구할 때 아바타 width 만 압축돼 타원으로 찌그러지는 것을 막는다(정사각 보존).
+        'relative shrink-0 items-center justify-center overflow-hidden rounded-full',
         `w-[${size}px] h-[${size}px]`,
         bg ?? DEFAULT_BG,
         // PresenceAvatar accent 링: 1.5px accent 보더(box-shadow 대체).
@@ -107,7 +134,21 @@ export const Avatar = forwardRef<View, AvatarProps>(function Avatar(
       )}
       {...rest}
     >
-      {initial != null ? (
+      {photoUrl != null ? (
+        // 프로필 이미지: 원형 컨테이너를 가득 채우는 cover 이미지(이니셜 폴백 대체).
+        // cachePolicy=memory-disk: 한 번 받은 아바타는 디스크+메모리 캐시 → 재진입/
+        // 재렌더 시 네트워크 왕복 없이 즉시 표시(리드타임 제거). recyclingKey 로
+        // url 별 캐시 분리. placeholder 가림 없이 부드럽게(짧은 transition).
+        <Image
+          testID="av-photo"
+          source={{ uri: photoUrl }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={photoUrl}
+          transition={120}
+          className={cn('rounded-full', `w-[${size}px] h-[${size}px]`)}
+        />
+      ) : initial != null ? (
         <Text className={cn(initialClass(size), textClassName)}>{initial}</Text>
       ) : null}
 

@@ -380,6 +380,9 @@ deno_version = 2
 # 예) PortOne 본인인증(B 영역): PORTONE_API_SECRET / PORTONE_IDENTITY_CHANNEL_KEY /
 #     PORTONE_STORE_ID / PHONE_HASH_SALT — env() 치환으로만, 평문 금지.
 
+[functions.send-message]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327

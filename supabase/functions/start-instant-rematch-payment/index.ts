@@ -1,5 +1,6 @@
 import { corsHeaders, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
+import { captureEdgeError } from '../_shared/log.ts';
 import {
   getInstantRematchProduct,
   getRequiredPaymentEnv,
@@ -18,8 +19,11 @@ Deno.serve(async (req) => {
     return errorResponse('method not allowed', 405);
   }
 
+  let userId: string | undefined;
+
   try {
     const { supabase, user } = await getAuthenticatedUser(req);
+    userId = user.id;
     const body = await req.json().catch(() => ({})) as StartPaymentBody;
     const productId = typeof body.productId === 'string' ? body.productId : null;
     const product = getInstantRematchProduct(productId);
@@ -67,6 +71,14 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
+    // env 누락(PORTONE_INSTANT_REMATCH_AMOUNT_* misconfig) 은 전 구매를 막는데
+    // 지금까지 완전히 invisible 했다. payment 행 insert throw 도 여기서 잡힌다.
+    captureEdgeError('start-instant-rematch-payment', error, {
+      stage: 'start_payment',
+      status: 500,
+      userId,
+      tags: { feature: 'payment', code: 'start_failed' },
+    });
     const message = error instanceof Error ? error.message : 'failed to start payment';
     return errorResponse(message, 400);
   }

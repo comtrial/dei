@@ -15,6 +15,9 @@ dist/
 opencode.json
 asset/
 
+# Local-only working space (개인 PRD / 세션 핸드오프 / 스크립트, repo 와 분리)
+.local/
+
 # Local screenshots, exports, and reference dumps (root only)
 /*.png
 /*.pdf
@@ -31,3 +34,11 @@ test-results/
 coverage/
 .claude/settings.local.json
 apps/mobile/e2e/screenshots/
+
+# dev env backup (local supabase 전환 시 백업)
+apps/mobile/.env.remote.bak
+
+# 로컬 툴 · 디자인 아티팩트
+.gstack/
+.lazyweb/
+.claude/

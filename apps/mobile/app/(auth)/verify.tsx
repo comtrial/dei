@@ -10,7 +10,6 @@ import { analytics, logger } from '@dei/shared';
 import {
   AlertDialog,
   BrandTransitionFrame,
-  Button,
   IconButton,
   Spinner,
   Text,
@@ -25,12 +24,7 @@ import {
   startIdentityVerification,
 } from '@/lib/portone.stub';
 import { ROUTES } from '@/lib/routes';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
-
-const DEV_IDENTITY_BYPASS_ENABLED = ['1', 'true', 'TRUE', 'yes'].includes(
-  process.env.EXPO_PUBLIC_ENABLE_DEV_IDENTITY_BYPASS ?? '',
-);
 
 /**
  * S03 — 본인인증 진행 중 (PortOne)
@@ -252,43 +246,6 @@ export default function VerifyScreen() {
     setStartAttempt((attempt) => attempt + 1);
   };
 
-  const completeDevIdentityBypass = useCallback(() => {
-    if (!DEV_IDENTITY_BYPASS_ENABLED) {
-      return;
-    }
-
-    void logger.withErrorCapture(
-      'identity.dev-bypass',
-      async () => {
-        const session = await ensureAnonymousSession();
-        const userId = session.user.id;
-        const { error } = await supabase
-          .from('profile')
-          .update({
-            birth_date: '2000-01-01',
-            birth_year: 2000,
-            gender: 'female',
-            is_adult: true,
-          })
-          .eq('user_id', userId);
-
-        if (error) {
-          throw error;
-        }
-
-        setVerificationRequest(null);
-        verificationRequestRef.current = null;
-        router.replace(ROUTES.profileStep1);
-      },
-      { tags: { feature: 'identity-verification', action: 'dev-bypass' } },
-    ).catch((error) => {
-      logger.captureException(error, {
-        tags: { feature: 'identity-verification', action: 'dev-bypass-catch' },
-      });
-      setStartFailed(true);
-    });
-  }, [ensureAnonymousSession, router]);
-
   if (verificationRequest) {
     return (
       <SafeAreaView className="flex-1 bg-bg">
@@ -312,14 +269,6 @@ export default function VerifyScreen() {
             setSupportMultipleWindows={false}
           />
         </View>
-
-        {DEV_IDENTITY_BYPASS_ENABLED ? (
-          <View className="absolute bottom-[28px] left-0 right-0 px-[24px]">
-            <Button fullWidth variant="secondary" onPress={completeDevIdentityBypass}>
-              개발용 본인인증 완료
-            </Button>
-          </View>
-        ) : null}
 
         {isConfirming ? (
           <View className="absolute inset-0 items-center justify-center bg-bg/80 px-[32px]">
@@ -375,17 +324,6 @@ export default function VerifyScreen() {
         >
           인증이 끝나면 자동으로 진행돼요
         </Text>
-
-        {DEV_IDENTITY_BYPASS_ENABLED ? (
-          <Button
-            fullWidth
-            variant="secondary"
-            className="mt-[18px]"
-            onPress={completeDevIdentityBypass}
-          >
-            개발용 본인인증 완료
-          </Button>
-        ) : null}
       </View>
 
       <AlertDialog
