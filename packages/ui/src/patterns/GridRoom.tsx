@@ -1,9 +1,11 @@
-import { forwardRef, memo, useMemo, type ComponentType, type ReactNode } from 'react';
-import { Pressable, View, type ViewProps } from 'react-native';
+import { forwardRef, memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { Pressable, ScrollView, View, type ViewProps } from 'react-native';
 
 import { Text } from '../primitives/Text';
 import { EmptyBlob, type EmptyBlobTone } from '../primitives/EmptyBlob';
 import { cn } from '../lib/cn';
+
+const CHIP_WIDTH = 48;
 
 /**
  * GridRoom (X10) — ★시그니처 패턴. 매칭 후 홈 ③b 언블러 모드(JSON `S13`).
@@ -99,6 +101,8 @@ export interface GridRoomTimeSlot {
   label: string;
   /** 현재 시간대 여부(ink 채움 pill). */
   isNow?: boolean;
+  /** 선택 불가(미래/quiet) — opacity 30% + tap 무시. */
+  disabled?: boolean;
 }
 
 export interface GridRoomProps extends ViewProps {
@@ -130,27 +134,31 @@ function chunkPairs(
 
 /** Timestrip 한 칸. now=ink 채움/white, default=ink-4. */
 function TimeChip({ slot }: { slot: GridRoomTimeSlot }) {
-  if (slot.isNow) {
-    return (
-      <View
-        testID="gridroom-now-pill"
-        className="rounded-full bg-ink px-[12px] py-[6px]"
-        accessibilityRole="text"
-      >
-        <Text
-          className="text-base font-extrabold text-paper tracking-tight"
-          tabularNums
-        >
-          {slot.label}
-        </Text>
-      </View>
-    );
-  }
   return (
-    <View className="rounded-full px-[8px] py-[4px]">
-      <Text className="text-sm font-bold text-ink-4" tabularNums>
-        {slot.label}
-      </Text>
+    <View
+      style={{ width: CHIP_WIDTH }}
+      className="items-center justify-center"
+    >
+      {slot.isNow ? (
+        <View
+          testID="gridroom-now-pill"
+          className="rounded-full bg-ink px-[12px] py-[6px]"
+          accessibilityRole="text"
+        >
+          <Text
+            className="text-base font-extrabold text-paper tracking-tight"
+            tabularNums
+          >
+            {slot.label}
+          </Text>
+        </View>
+      ) : (
+        <View className={cn('rounded-full px-[8px] py-[4px]', slot.disabled && 'opacity-30')}>
+          <Text className="text-sm font-bold text-ink-4" tabularNums>
+            {slot.label}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -302,29 +310,79 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
   ref,
 ) {
   const pairs = useMemo(() => chunkPairs(cells), [cells]);
+  const scrollRef = useRef<ScrollView>(null);
+  const [stripWidth, setStripWidth] = useState(0);
+  const sidePadding = stripWidth > 0 ? Math.max((stripWidth - CHIP_WIDTH) / 2, 0) : 0;
+
+  const nowIndex = useMemo(
+    () => (timeStrip ? timeStrip.findIndex((s) => s.isNow) : -1),
+    [timeStrip],
+  );
+
+  useEffect(() => {
+    if (nowIndex < 0 || stripWidth === 0) return;
+    const id = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ x: nowIndex * CHIP_WIDTH, animated: true });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [nowIndex, stripWidth]);
+
+  const handleTimeSlotPress = (slotIndex: number, slot: GridRoomTimeSlot) => {
+    if (slot.disabled || slot.isNow) return;
+    scrollRef.current?.scrollTo({ x: slotIndex * CHIP_WIDTH, animated: true });
+    onTimeSlotPress?.(slotIndex, slot);
+  };
 
   return (
     <View ref={ref} testID="gridroom" className={cn('bg-bg', className)} {...rest}>
       {timeStrip && timeStrip.length > 0 ? (
-        <View className="relative mx-[8px] px-0 pb-[14px] pt-[6px]">
-          <View className="absolute left-[6px] top-[6px] bottom-[14px] justify-center">
+        <View
+          className="relative pb-[14px] pt-[6px]"
+          onLayout={(e) => setStripWidth(e.nativeEvent.layout.width)}
+        >
+          <View className="absolute left-[6px] top-[6px] bottom-[14px] justify-center z-10">
             <Text className="text-2xs text-ink-4">‹</Text>
           </View>
-          <View className="absolute right-[6px] top-[6px] bottom-[14px] justify-center">
+          <View className="absolute right-[6px] top-[6px] bottom-[14px] justify-center z-10">
             <Text className="text-2xs text-ink-4">›</Text>
           </View>
-          <View className="flex-row items-center justify-center gap-[6px]">
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={CHIP_WIDTH}
+            decelerationRate="fast"
+            contentContainerStyle={{ paddingHorizontal: sidePadding }}
+            onMomentumScrollEnd={(e) => {
+              const offset = e.nativeEvent.contentOffset.x;
+              const index = Math.round(offset / CHIP_WIDTH);
+              const slot = timeStrip[index];
+              if (!slot) return;
+              if (slot.disabled) {
+                if (nowIndex >= 0) {
+                  requestAnimationFrame(() => {
+                    scrollRef.current?.scrollTo({ x: nowIndex * CHIP_WIDTH, animated: true });
+                  });
+                }
+                return;
+              }
+              if (slot.isNow) return;
+              onTimeSlotPress?.(index, slot);
+            }}
+          >
             {timeStrip.map((slot, i) => (
               <Pressable
                 key={`${slot.label}-${i}`}
-                onPress={onTimeSlotPress ? () => onTimeSlotPress(i, slot) : undefined}
+                onPress={() => handleTimeSlotPress(i, slot)}
+                disabled={slot.disabled}
                 accessibilityRole="button"
                 accessibilityLabel={`${slot.label} 시간대`}
+                accessibilityState={{ disabled: !!slot.disabled, selected: !!slot.isNow }}
               >
                 <TimeChip slot={slot} />
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
           {timeHint ? (
             <Text className="mt-[8px] text-center text-2xs text-ink-4 tracking-wide">
               {timeHint}

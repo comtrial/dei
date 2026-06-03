@@ -10,7 +10,7 @@ import { MessageCircle, MoreHorizontal } from 'lucide-react-native';
 import { Banner, GridRoom, IconButton, Badge, TopNav } from '@dei/ui';
 import type { GridRoomCell, GridRoomFilledCell, GridRoomTimeSlot, GradientComponentProps } from '@dei/ui';
 import type { Database } from '@dei/api';
-import { POLICY, analytics, formatTimeStripSlots, getCurrentHourSlotKst, isQuietHourKst } from '@dei/shared';
+import { POLICY, analytics, getCurrentHourSlotKst, isQuietHourKst } from '@dei/shared';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { getCachedVideoUri, getCachedThumbnailUri } from '@/lib/video';
@@ -302,12 +302,29 @@ export default function RoomScreen() {
     [membersWithProfile, videosByHour, currentHour, onlineUserIds, selfGender, blockedUserIds, user?.id],
   );
 
-  const timeStrip = useMemo<GridRoomTimeSlot[]>(() => {
-    return formatTimeStripSlots(currentHour, hourRange).map((s) => ({
-      label: s.label,
-      isNow: s.isNow,
-    }));
-  }, [currentHour, hourRange]);
+  const nowHour = getCurrentHourSlotKst();
+
+  const slots = useMemo(
+    () =>
+      Array.from({ length: 24 }, (_, h) => ({
+        hour: h,
+        label: String(h).padStart(2, '0'),
+        isNow: h === currentHour,
+        isQuiet: isQuietHourKst(h),
+        isFuture: h > nowHour,
+      })),
+    [currentHour, nowHour],
+  );
+
+  const timeStrip = useMemo<GridRoomTimeSlot[]>(
+    () =>
+      slots.map((s) => ({
+        label: s.label,
+        isNow: s.isNow,
+        disabled: s.isFuture,
+      })),
+    [slots],
+  );
 
   const firstRenderRef = useRef(false);
   const renderStartRef = useRef(Date.now());
@@ -326,10 +343,7 @@ export default function RoomScreen() {
 
   const prevHourRef = useRef(currentHour);
 
-  const slots = useMemo(
-    () => formatTimeStripSlots(currentHour, hourRange),
-    [currentHour, hourRange],
-  );
+
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -407,7 +421,6 @@ export default function RoomScreen() {
           <GridRoom
             cells={cells}
             timeStrip={timeStrip}
-            timeHint="시간대를 밀어서 회상"
             GradientComponent={GradientWrapper}
             onCellPress={(cell) => {
               if (cell.kind === 'empty') {
@@ -428,7 +441,7 @@ export default function RoomScreen() {
             onTimeSlotPress={(slotIndex) => {
               const slot = slots[slotIndex];
               if (!slot) return;
-              if (isQuietHourKst(slot.hour)) return;
+              if (slot.isFuture) return;
               const fromHour = prevHourRef.current;
               const cacheHit = slot.hour in videosByHour;
               analytics.capture(ANALYTICS_EVENTS.room_timestrip_swipe, {
