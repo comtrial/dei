@@ -220,15 +220,17 @@ export default function HomeScreen() {
         });
 
         const registration = await enqueueMatchQueue([user.id]);
+        // 큐 등록 = 커밋 상태(한 사람당 1개 큐). 홈을 스택에서 제거(replace)해야
+        // 뒤로가기 스와이프로 취소 없이 홈으로 빠져나가는 상태 불일치를 막는다.
         if (registration.freeRematchWaived) {
-          router.push({
+          router.replace({
             pathname: '/(app)/queue',
             params: { notice: 'free-rematch' },
           });
           return;
         }
 
-        router.push(ROUTES.queue);
+        router.replace(ROUTES.queue);
       },
       { tags: { screen: 'home', action: 'start-solo' } },
     ).catch((error) => {
