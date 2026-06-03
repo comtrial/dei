@@ -57,6 +57,11 @@ export default function UploadPreviewScreen() {
   );
 
   useEffect(() => {
+    player.volume = 1.0;
+    player.audioMixingMode = 'auto';
+  }, [player]);
+
+  useEffect(() => {
     player.muted = muted;
   }, [muted, player]);
 
