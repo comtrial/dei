@@ -39,7 +39,7 @@ export { Toggle } from './Toggle';
 export type { ToggleProps } from './Toggle';
 export { PhotoUpload } from './PhotoUpload';
 export type { PhotoUploadProps, PhotoUploadState } from './PhotoUpload';
-export { Avatar } from './Avatar';
+export { Avatar, avatarColorFor } from './Avatar';
 export type { AvatarProps } from './Avatar';
 export { AvatarStack } from './AvatarStack';
 export type { AvatarStackProps, AvatarStackItem } from './AvatarStack';

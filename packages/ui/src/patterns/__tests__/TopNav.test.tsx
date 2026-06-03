@@ -74,6 +74,14 @@ describe('TopNav (X1)', () => {
     expect(screen.getByText('멤버 8명')).toBeTruthy();
   });
 
+  it('renders leftAccessory next to the title group', () => {
+    render(
+      <TopNav left="back" subtitle="멤버 8명" leftAccessory={<View testID="member-stack" />} />,
+    );
+    expect(screen.getByTestId('member-stack')).toBeTruthy();
+    expect(screen.getByText('멤버 8명')).toBeTruthy();
+  });
+
   it('has header accessibility role and forwards ref', () => {
     const ref = { current: null as RNView | null };
     render(<TopNav ref={ref} testID="nav" title="제목" />);

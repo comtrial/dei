@@ -56,6 +56,12 @@ export interface InputProps extends Omit<TextInputProps, 'editable' | 'style'> {
   className?: string;
   /** TextInput 자체 className 머지. */
   inputClassName?: string;
+  /**
+   * TextInput style 머지 — **동적 치수 전용 escape**(예: multiline 자동높이).
+   * NativeWind 는 런타임 계산 높이를 className 으로 못 받으므로 DS 내부 컴포저
+   * (InputBar 등)에서만 측정 높이를 주입한다. 색/StyleSheet 용도 금지.
+   */
+  inputStyle?: TextInputProps['style'];
   /** helper 텍스트 className 머지 (예: 성공 시 success 색 — HTML `.helper{color:var(--success)}`). */
   helperClassName?: string;
 }
@@ -101,6 +107,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input(
     helper,
     className,
     inputClassName,
+    inputStyle,
     helperClassName: helperClassNameProp,
     placeholderTextColor,
     accessibilityRole = 'text',
@@ -147,6 +154,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input(
             prefixIcon && prefixPaddingClassName,
             inputClassName,
           )}
+          style={inputStyle}
           {...rest}
         />
       </View>

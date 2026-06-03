@@ -39,43 +39,39 @@ export type ChatBubbleVariant = 'them' | 'me' | 'whisper' | 'mention';
  *  me      : self-end (우측 정렬)
  *  whisper : self-stretch max-w-full (전폭)
  */
+// 행 컨테이너. 카톡 수준 가독성: gap 8, 폭 제한 78~84%.
+// 내 메시지(me)·내 귓속말(mine)은 아바타 없음 → 우측 정렬만.
 const ROW_CLASS: Record<Exclude<ChatBubbleVariant, 'mention'>, string> = {
-  // .s13a .msg: display flex; gap 8px; max-width 78%
   them: 'flex-row gap-[8px] max-w-[78%]',
-  // .s13a .msg.me: align-self flex-end
   me: 'flex-row gap-[8px] max-w-[78%] self-end',
   // 받은 귓속말: 보낸이 아바타(좌) + 버블. 좌측 정렬·폭 제한(them 과 동일 골격).
   whisper: 'flex-row gap-[8px] max-w-[84%] self-start',
 };
 
 /**
- * 내가 보낸 귓속말(mine) 발신측 행: me 처럼 우측정렬 + 아바타가 우측에 오도록
- * `flex-row-reverse`(아바타가 행 끝). 기본 whisper(수신/좌측 아바타)와 달리
- * self-end + max-w-78% 로 me 와 시각적으로 통일(귓속말 아바타 복원).
+ * 내가 보낸 귓속말(mine): 아바타 없이 me 처럼 우측 정렬(카톡 — 내 메시지엔 아바타 X).
+ * 라벨은 '귓속말' 태그 대신 수신자 @닉네임(누구에게 속삭였는지).
  */
-const WHISPER_MINE_ROW_CLASS = 'flex-row-reverse gap-[8px] max-w-[78%] self-end';
+const WHISPER_MINE_ROW_CLASS = 'flex-row gap-[8px] max-w-[78%] self-end';
 
 /**
- * `.bub` 버블 className.
- *  them    : bg-2, ink, padding 8/12, r-md, 13px/1.4 (기본)
+ * `.bub` 버블 className — 카톡 수준으로 키움(본문 15px / 패딩 14·9 / rounded-lg).
+ *  them    : bg-2, ink
  *  me      : bg-ink, white
- *  whisper : bg-accent-soft, accent-deep, 1px dashed accent, italic
+ *  whisper : bg-accent-soft, accent-deep, dashed accent, italic
  */
 const BUBBLE_CLASS: Record<Exclude<ChatBubbleVariant, 'mention'>, string> = {
-  // .s13a .msg .bub: background bg-2; padding 8px 12px; r-md; color ink; 13px
-  them: 'self-start rounded-md bg-bg-2 px-[12px] py-[8px]',
-  // .s13a .msg.me .bub: background ink; color white
-  me: 'self-end rounded-md bg-ink px-[12px] py-[8px]',
-  // .s13a .msg.whisper .bub: accent-soft bg; accent-deep text; dashed accent border; italic
-  whisper: 'self-start rounded-md border border-dashed border-accent bg-accent-soft px-[12px] py-[8px]',
+  them: 'self-start rounded-lg bg-bg-2 px-[14px] py-[9px]',
+  me: 'self-end rounded-lg bg-ink px-[14px] py-[9px]',
+  whisper: 'self-start rounded-lg border border-dashed border-accent bg-accent-soft px-[14px] py-[9px]',
 };
 
-/** 버블 본문 Text className (13px/1.4 + variant 별 색). HTML `.bub` color. */
+/** 버블 본문 Text className (15px/21 + variant 별 색). 카톡 수준 가독성. */
 const BUBBLE_TEXT_CLASS: Record<Exclude<ChatBubbleVariant, 'mention'>, string> = {
-  them: 'text-[13px] leading-[18px] text-ink',
-  me: 'text-[13px] leading-[18px] text-white',
+  them: 'text-[15px] leading-[21px] text-ink',
+  me: 'text-[15px] leading-[21px] text-white',
   // whisper: accent-deep + italic (HTML font-style:italic)
-  whisper: 'text-[13px] leading-[18px] italic text-accent-deep',
+  whisper: 'text-[15px] leading-[21px] italic text-accent-deep',
 };
 
 export interface ChatBubbleProps extends ViewProps {
@@ -190,17 +186,19 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
     );
   }
 
-  // me 와 '내가 보낸 귓속말'은 이름 숨김(`.msg.me .nm{display:none}`).
-  // them / 받은 귓속말만 보낸이 이름 표시. (방향 안내 "→ 나에게" 등은 제거)
-  const showName = (variant === 'them' || (variant === 'whisper' && !mine)) && name != null;
-  // 아바타 표시: them + 귓속말(받은=좌, 내가 보낸=우, row-reverse). me 는 아바타 없음.
-  // 이니셜·photoUrl 중 하나라도 있으면 표시(photoUrl 만으로도 아바타 surface).
+  // 카톡 규칙: 내 메시지(me)·내 귓속말(mine)은 아바타 없음. them / 받은 귓속말만 좌측 아바타.
   const showAvatar =
-    (variant === 'them' || variant === 'whisper') &&
+    (variant === 'them' || (variant === 'whisper' && !mine)) &&
     (avatarInitial != null || avatarPhotoUrl != null);
-  // 귓속말은 이름 라인에 항상 '귓속말' 태그를 노출(내가 보낸 귓속말은 이름 없이 태그만).
-  const showWhisperTag = variant === 'whisper';
-  // mine 귓속말은 me 처럼 우측정렬. 그 외는 변형별 기본 행 레이아웃.
+  // 이름줄 표시 규칙:
+  //  - them          : 보낸이 이름(ink-3)
+  //  - 받은 귓속말     : 보낸이 이름(accent) + '귓속말' 태그
+  //  - 내가 보낸 귓속말 : 수신자 @닉네임(accent, 누구에게 속삭였는지). 태그·이름 대신.
+  //  - me            : 없음
+  const showName = (variant === 'them' || (variant === 'whisper' && !mine)) && name != null;
+  const showWhisperTag = variant === 'whisper' && !mine; // 받은 귓속말만 '귓속말' 태그
+  const showWhisperTarget = variant === 'whisper' && mine && name != null; // 내 귓속말: @수신자
+  // mine 귓속말도 me 처럼 우측정렬(아바타 없음). 그 외는 변형별 기본.
   const rowClass = variant === 'whisper' && mine ? WHISPER_MINE_ROW_CLASS : ROW_CLASS[variant];
   // me 이거나 mine 귓속말이면 송신 상태/재시도를 표시(내가 보낸 메시지 발신측).
   const isMineSender = variant === 'me' || (variant === 'whisper' && mine);
@@ -213,9 +211,9 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
       children
     );
 
-  // 좌측 아바타 노드(them 한정). photoUrl 우선, 없으면 이니셜 폴백.
+  // 좌측 아바타 노드(them/받은 귓속말). photoUrl 우선, 없으면 이니셜 폴백. 36px(카톡 수준).
   const avatarNode = showAvatar ? (
-    <Avatar initial={avatarInitial} photoUrl={avatarPhotoUrl} size={28} bg={avatarBg} />
+    <Avatar initial={avatarInitial} photoUrl={avatarPhotoUrl} size={36} bg={avatarBg} />
   ) : null;
 
   return (
@@ -246,9 +244,8 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
 
       {/* .col: flex column (이름줄 + 버블) */}
       <View className="min-w-0 flex-1">
-        {showName || showWhisperTag ? (
-          // 이름줄: 보낸이 이름(.nm 10.5px) + (귓속말이면) 'accent' 태그 칩.
-          // 내가 보낸 귓속말은 이름 없이 태그만 + 우측 정렬(아바타가 우측이므로).
+        {showName || showWhisperTag || showWhisperTarget ? (
+          // 이름줄. 받은 귓속말=보낸이 이름+'귓속말' 태그 / 내 귓속말=@수신자(우측) / them=이름.
           <View
             className={cn(
               'mb-[3px] flex-row items-center gap-[5px]',
@@ -258,7 +255,7 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
             {showName ? (
               <Text
                 className={cn(
-                  'text-[10.5px] font-semibold',
+                  'text-[11px] font-semibold',
                   variant === 'whisper' ? 'font-bold text-accent' : 'text-ink-3',
                 )}
               >
@@ -273,10 +270,16 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
                 귓속말
               </Text>
             ) : null}
+            {showWhisperTarget ? (
+              // 내가 보낸 귓속말: 누구에게 보냈는지 '@수신자'(accent 볼드).
+              <Text testID="chat-bubble-whisper-target" className="text-[11px] font-bold text-accent">
+                {`@${name}`}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
-        {/* .bub — 내가 보낸 귓속말(mine)은 아바타가 우측이라 버블도 우측 정렬. */}
+        {/* .bub — 내가 보낸 귓속말(mine)은 우측 정렬. */}
         <View className={cn(BUBBLE_CLASS[variant], variant === 'whisper' && mine && 'self-end')}>
           {body}
         </View>

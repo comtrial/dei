@@ -22,6 +22,11 @@ export type VerifiedIdentityProfileSnapshot = IdentityProfileSnapshot & {
 
 export type AuthGateRoute = 'terms' | 'profileStep1' | 'profileStep2' | 'profileStep3' | null;
 
+export type AppGateState = {
+  hasCurrentTermsAgreement: boolean;
+  hasVerifiedIdentityRecord: boolean;
+};
+
 export function hasVerifiedIdentity<Profile extends IdentityProfileSnapshot>(
   profile?: Profile | null,
 ): profile is Profile & VerifiedIdentityProfileSnapshot {
@@ -137,4 +142,24 @@ export function getAuthGateRoute(profile?: IdentityProfileSnapshot | null): Auth
   }
 
   return null;
+}
+
+export function getAppGateRoute(
+  profile: IdentityProfileSnapshot | null | undefined,
+  state: AppGateState,
+): AuthGateRoute {
+  if (!state.hasVerifiedIdentityRecord) {
+    return 'terms';
+  }
+
+  const authGateRoute = getAuthGateRoute(profile);
+  if (authGateRoute === 'terms') {
+    return 'terms';
+  }
+
+  if (!state.hasCurrentTermsAgreement) {
+    return 'terms';
+  }
+
+  return authGateRoute;
 }

@@ -1,6 +1,7 @@
 import { POLICY } from '../../../packages/shared/src/policy.ts';
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
+import { captureEdgeError, captureEdgeMessage } from '../_shared/log.ts';
 
 type EnqueueBody = {
   memberIds?: unknown;
@@ -72,10 +73,16 @@ Deno.serve(async (req) => {
     return errorResponse('method not allowed', 405, { code: 'METHOD_NOT_ALLOWED' });
   }
 
+  // catch 에서 식별자를 잃지 않도록 hoist(user/memberIds 는 try 내부 선언).
+  let userId: string | undefined;
+  let memberCount: number | undefined;
+
   try {
     const { supabase, supabaseAsUser, user } = await getAuthenticatedUser(req);
+    userId = user.id;
     const body = await req.json().catch(() => ({})) as EnqueueBody;
     const memberIds = toMemberIds(body, user.id);
+    memberCount = memberIds.length;
 
     if (
       memberIds.length < POLICY.team.minMembers
@@ -325,6 +332,16 @@ Deno.serve(async (req) => {
           break;
         }
         if (!matchError) break; // 정상 호출인데 매칭 미성사(null) → 재시도 불필요, 대기 잔류
+        // matchError 발생 — 마지막 시도까지 실패하면 조용한 매칭 실패(CLAUDE.md 경고).
+        if (attempt === 1) {
+          captureEdgeMessage('enqueue-match-queue', 'try_match RPC failed — queued fallback', {
+            stage: 'try_match',
+            level: 'warning',
+            userId: user.id,
+            tags: { feature: 'matching' },
+            extra: { attempt, queueId: queue.id, detail: matchError.message },
+          });
+        }
       }
     }
 
@@ -369,6 +386,15 @@ Deno.serve(async (req) => {
       teamId: team.id,
     });
   } catch (error) {
+    // team/match_queue/pass/profile/is_blocked_between 어디서 throw 하든 지금까지
+    // generic 400 으로 가려졌다. 실제 enqueue 파이프라인 실패를 기록.
+    captureEdgeError('enqueue-match-queue', error, {
+      stage: 'enqueue_pipeline',
+      status: 500,
+      userId,
+      tags: { feature: 'matching', code: 'BAD_REQUEST' },
+      extra: { memberCount },
+    });
     const message = error instanceof Error ? error.message : 'failed to enqueue match queue';
     return errorResponse(message, 400, { code: 'BAD_REQUEST' });
   }

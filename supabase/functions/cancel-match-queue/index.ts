@@ -1,5 +1,6 @@
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
+import { captureEdgeError } from '../_shared/log.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -10,8 +11,11 @@ Deno.serve(async (req) => {
     return errorResponse('method not allowed', 405, { code: 'METHOD_NOT_ALLOWED' });
   }
 
+  let userId: string | undefined;
+
   try {
     const { supabase, user } = await getAuthenticatedUser(req);
+    userId = user.id;
 
     const { data: teamMembers, error: teamError } = await supabase
       .from('team_member')
@@ -64,6 +68,13 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ cancelledCount: queueIds.length, ok: true });
   } catch (error) {
+    // team_member/match_queue/team disband throw — 부분 적용된 취소가 invisible.
+    captureEdgeError('cancel-match-queue', error, {
+      stage: 'cancel_queue_pipeline',
+      status: 500,
+      userId,
+      tags: { feature: 'matching', code: 'BAD_REQUEST' },
+    });
     const message = error instanceof Error ? error.message : 'failed to cancel match queue';
     return errorResponse(message, 400, { code: 'BAD_REQUEST' });
   }

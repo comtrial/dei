@@ -1,5 +1,6 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
+import { captureEdgeError, captureEdgeMessage, normalizeError } from '../_shared/log.ts';
 import {
   codedErrorResponse,
   getBirthYear,
@@ -58,30 +59,8 @@ const LOCK_EXCLUDED_FAILURES = new Set<IdentityFailureCode>([
 ]);
 
 const getErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === 'string') {
-    return error;
-  }
-
-  if (error && typeof error === 'object') {
-    const maybeError = error as {
-      code?: unknown;
-      details?: unknown;
-      hint?: unknown;
-      message?: unknown;
-    };
-    const parts = [maybeError.message, maybeError.code, maybeError.details, maybeError.hint]
-      .filter((part): part is string => typeof part === 'string' && part.length > 0);
-
-    if (parts.length > 0) {
-      return parts.join(' ');
-    }
-  }
-
-  return fallback;
+  const { message } = normalizeError(error);
+  return message && message !== 'unknown error' ? message : fallback;
 };
 
 const toSafeProviderMetadata = (
@@ -263,10 +242,14 @@ Deno.serve(async (req) => {
   }
 
   let stage = 'parse_request';
+  // catch 에서 식별자를 잃지 않도록 hoist(user 는 authenticate stage 후에야 존재).
+  let userId: string | undefined;
+  let capturedVerificationId: string | undefined;
 
   try {
     const body = await req.json() as ConfirmBody;
     const identityVerificationId = body.identityVerificationId?.trim();
+    capturedVerificationId = identityVerificationId;
 
     if (!identityVerificationId) {
       return codedErrorResponse(
@@ -277,6 +260,7 @@ Deno.serve(async (req) => {
 
     stage = 'authenticate';
     const { supabase, user } = await getAuthenticatedUser(req);
+    userId = user.id;
 
     stage = 'find_pending_verification';
     const { data: pendingVerification, error: pendingError } = await supabase
@@ -394,6 +378,16 @@ Deno.serve(async (req) => {
           type: portOneBody?.type ?? null,
         },
       );
+
+      // PortOne 인프라 장애 — 본인확인 자체가 불가(사용자 잘못 아님).
+      captureEdgeMessage('confirm-identity-verification', 'PortOne verification lookup failed', {
+        stage,
+        status: 502,
+        level: 'warning',
+        userId,
+        tags: { feature: 'identity-verify' },
+        extra: { identityVerificationId, portoneStatus: portOneResponse.status },
+      });
 
       return codedErrorResponse(
         failure.lockUntil ? 'IDENTITY_LOCKED' : 'PORTONE_LOOKUP_FAILED',
@@ -623,6 +617,15 @@ Deno.serve(async (req) => {
       isAdult: true,
     });
   } catch (error) {
+    // 최고 위험 사각지대 — CI_DUPLICATE 계정 병합/세션 발급 단계의 throw 가
+    // 여기서만 드러난다(account-takeover/merge 흐름). stage 로 어느 단계인지 식별.
+    captureEdgeError('confirm-identity-verification', error, {
+      stage,
+      status: 500,
+      userId,
+      tags: { feature: 'identity-verify', code: 'BAD_REQUEST' },
+      extra: { identityVerificationId: capturedVerificationId },
+    });
     const message = getErrorMessage(error, 'failed to confirm verification');
     const publicMessage =
       message.includes('configured') || message.includes('authentication required')

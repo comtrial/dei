@@ -3,6 +3,7 @@ import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  Avatar,
   AvatarStack,
   ChatBubble,
   InputBar,
@@ -12,6 +13,7 @@ import {
   TopNav,
   type MentionCandidate,
 } from '@dei/ui';
+import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/lib/chat/message-merge';
 import type { RoomMemberLite } from '@/lib/chat/mention';
 import { filterCandidates, parseMentionQuery } from '@/lib/chat/mention';
@@ -40,6 +42,12 @@ export interface RoomChatViewProps {
   roomName?: string;
   memberCount: number;
   selfId: string;
+  /** 내 프로필 사진 URL(헤더 우측). 없으면 이니셜/색 폴백. */
+  selfPhotoUrl?: string;
+  /** 내 아바타 이니셜(헤더 우측 폴백). */
+  selfInitial?: string;
+  /** 내 아바타 bg className(폴백). */
+  selfBg?: string;
   messages: ChatMessage[];
   members: RoomMemberLite[];
   input: string;
@@ -64,6 +72,12 @@ export interface RoomChatViewProps {
   visible: boolean;
   blockedIds?: Set<string>;
   roomEnded?: boolean;
+  /**
+   * 오버레이 모드(피처 플래그 'overlay'): 매칭된 방 영상 위 반투명 레이어.
+   * 루트 배경 투명 + 영상 dim scrim(rgba .45) + 헤더/컴포저 dark band(.62),
+   * 본문 transparent(영상 비침). 기본 false = 기존 불투명 화면(legacy).
+   */
+  overlay?: boolean;
 }
 
 export function RoomChatView(props: RoomChatViewProps) {
@@ -112,24 +126,45 @@ export function RoomChatView(props: RoomChatViewProps) {
 
   if (!props.visible) return null;
 
-  return (
-    // testID 는 SafeAreaView 가 아니라 내부 View 에 둔다 — jest 의 safe-area mock 이
-    // SafeAreaView 를 children 통과(props drop)로 처리해 testID 가 사라지기 때문.
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-bg">
-      <View className="flex-1" testID="room-chat-screen">
-        <TopNav
-          left="back"
-          onLeftPress={props.onClose}
-          leftAccessibilityLabel="뒤로"
-          subtitle={`멤버 ${props.memberCount}명`}
-          rightActions={<AvatarStack items={stackItems} max={3} />}
-        />
+  // 오버레이 모드 표면(UX 스펙 2026-06-03): 영상 위 dim scrim(.45) + 본문 transparent
+  // + 헤더/컴포저 dark band(.62). 기본(legacy)은 불투명 bg-bg.
+  const o = props.overlay === true;
+  const rootBg = o ? 'bg-transparent' : 'bg-bg';
+  const bandClass = o ? 'bg-[rgba(0,0,0,0.62)]' : 'bg-paper';
 
-        <KeyboardAvoidingView
-          testID="room-chat-kav"
-          className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+  return (
+    // KeyboardAvoidingView 를 최상위로 — 키보드가 올라오면 화면 전체 높이를 줄여
+    // 컴포저가 키보드 위로 정확히 따라붙는다(이전: SafeArea bottom 과 padding 이
+    // 이중 계산돼 입력창 일부가 키보드에 씹힘). iOS=padding, Android=네이티브 adjustResize.
+    // top 만 SafeArea(노치) — 하단 인셋은 컴포저가 자체 padding 으로 처리.
+    <KeyboardAvoidingView
+      testID="room-chat-kav"
+      className={cn('flex-1', rootBg)}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {/* 오버레이 모드: 뒤 영상을 누르는 dim scrim(rgba .45). 본문은 이 위에 transparent. */}
+      {o ? <View testID="room-chat-scrim" className="absolute inset-0 bg-[rgba(0,0,0,0.45)]" /> : null}
+      <SafeAreaView edges={['top']} className={cn('flex-1', rootBg)}>
+        <View className="flex-1" testID="room-chat-screen">
+          <TopNav
+            left="back"
+            onDark={o}
+            onLeftPress={props.onClose}
+            leftAccessibilityLabel="뒤로"
+            subtitle={`멤버 ${props.memberCount}명`}
+            // 오버레이면 헤더 dark band(.62), 아니면 paper. 좌:멤버 스택 / 우:내 프로필.
+            className={o ? bandClass : undefined}
+            leftAccessory={stackItems.length > 0 ? <AvatarStack items={stackItems} max={3} size={28} /> : undefined}
+            rightActions={
+              <Avatar
+                size={32}
+                initial={props.selfInitial}
+                photoUrl={props.selfPhotoUrl}
+                bg={props.selfBg}
+                accessibilityLabel="내 프로필"
+              />
+            }
+          />
         <View className="flex-1">
           {props.messages.length === 0 ? (
             <StateView
@@ -156,13 +191,17 @@ export function RoomChatView(props: RoomChatViewProps) {
                 const isWhisper = item.whisperToUserId != null;
                 const variant: 'them' | 'me' | 'whisper' = isWhisper ? 'whisper' : mine ? 'me' : 'them';
 
-                // 방향 안내("→ 나에게"/"→ …에게") 제거(S13a 재구성). 받은 귓속말은
-                // 보낸이 이름만 노출(ChatBubble 이 '귓속말' 태그로 비밀임을 표시).
-                // 내가 보낸 귓속말/내 메시지는 ChatBubble 이 이름을 숨긴다.
-                const name = member?.name;
+                // 이름 전달 규칙:
+                //  - 받은 귓속말/them : 보낸이(member) 이름 → ChatBubble 이 이름+태그로 표시
+                //  - 내가 보낸 귓속말   : '수신자' 이름(@닉네임) → 누구에게 속삭였는지
+                //  - 내 일반 메시지(me) : 이름 미표시(ChatBubble 이 숨김)
+                const name =
+                  isWhisper && mine
+                    ? (members.find((mm) => mm.userId === item.whisperToUserId)?.name ?? '상대')
+                    : member?.name;
 
                 return (
-                  <View className="px-[14px] py-[3px]">
+                  <View className="px-[14px] py-[5px]">
                     <ChatBubble
                       variant={variant}
                       mine={mine}
@@ -185,7 +224,10 @@ export function RoomChatView(props: RoomChatViewProps) {
             />
           )}
 
-          <View>
+          {/* 컴포저 영역 — 입력창↔키보드 간격 축소: 하단 SafeArea(홈 인디케이터)
+              인셋(~34px) 대신 작은 고정 패딩(pb-2=8px). 키보드가 뜨면 컴포저가
+              키보드에 가깝게 붙는다(참고 디자인). 오버레이면 dark band(.62). */}
+          <View className={cn('pb-2', o ? bandClass : undefined)}>
             <NewMessageJumpButton count={props.newCount} onPress={handleJump} />
             <MentionAutocomplete
               candidates={candidates}
@@ -196,6 +238,7 @@ export function RoomChatView(props: RoomChatViewProps) {
               }}
             />
             <InputBar
+              onDark={o}
               value={input}
               onChange={props.onChangeInput}
               onSend={props.onSend}
@@ -214,9 +257,9 @@ export function RoomChatView(props: RoomChatViewProps) {
             />
           </View>
         </View>
-        </KeyboardAvoidingView>
-      </View>
-    </SafeAreaView>
+        </View>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 

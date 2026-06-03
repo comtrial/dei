@@ -35,14 +35,25 @@ CLI 를 쓰더라도 같은 규칙을 따라야 합니다 — 그래서 내용�
    `supabase.functions.invoke` 경로도 포함. 자세히는 `CLAUDE.md` Testing
    규칙 8 (배포 산출물 체크리스트).
 8. **브랜치 / 커밋 / PR 규약** — 새 작업은 `git fetch` 후 최신 `origin/main`
-   에서 `feature/{담당자}/{YYYYMMDD}-{범위}` 형태로 새 브랜치 생성. 커밋은
-   작게·한 의도만. PR 본문에 **변경 내용 + 영향 범위 + 검증 결과 + AI 변경
-   파일 / 임의 판단** 필수. **사용자 명시 지시 없이 `git push` · `--force`
-   · `gh pr create/merge` 금지.** 자세한 규약은 `CLAUDE.md` 의 **Branch /
-   Commit / PR 규약 (CRITICAL)** 섹션.
-9. **"작업 완료" 와 "검증 완료" 분리.** 작업 완료 = 코드 구현 + 화면 연결 +
+   에서 `feature/{담당자}/{YYYYMMDD}-{범위}` 형태로 새 브랜치 생성. 작게
+   (1~2일), 큰 충돌은 억지 merge 말고 최신 main 에서 새로 따기. 기존 브랜치는
+   전체 merge 금지 → diff 선별 이식. 커밋은 작게·한 의도만. PR 본문에 **변경
+   내용 + 영향 범위 + 검증 결과 + AI 변경 파일 / 임의 판단** 필수. **사용자
+   명시 지시 없이 `git push` · `--force` · `gh pr create/merge` 금지.** 자세한
+   규약은 `CLAUDE.md` 의 **Branch / Commit / PR 규약 (CRITICAL)** 섹션.
+9. **사람 승인 지점(★) — AI 가 개발·충돌해결을 많이 담당하므로.** 수정 착수
+   전 건드릴 파일·위험 포인트 먼저 보고 → 수정 후 파일별 요약·검증결과·임의
+   판단 보고. **충돌 해결은 자동으로 하지 말고 충돌 리포트(어느 파일·hunk·
+   의도가 부딪쳤는지) 후 사람 승인.** main 직접 push·머지·배포·외부 전송은
+   사람 확인 후. 어느 에이전트(Claude / Codex / Cursor 등)든 동일 적용.
+10. **"작업 완료" 와 "검증 완료" 분리.** 작업 완료 = 코드 구현 + 화면 연결 +
    placeholder 제거. 검증 완료 = typecheck + lint + test + 필요 시 실DB / 실
    Edge Function 까지. DB/Auth/Edge/결제/알림/Realtime 변경은 별도 체크리스트
    (CLAUDE.md Testing 규칙 8·9).
 
 전체 규칙은 `CLAUDE.md` 를 읽어주세요.
+
+> **Codex CLI 사용자 주의:** Codex 는 이 `AGENTS.md` 를 우선 읽습니다. 위 10개
+> 핵심 원칙은 요약본이며, **반드시 `CLAUDE.md` 본문의 해당 섹션(특히 협업·
+> 브랜치 거버넌스 / Testing / Error Logging)을 함께 적용**하세요. 두 파일이
+> 어긋나면 `CLAUDE.md` 가 우선합니다(단일 source of truth).

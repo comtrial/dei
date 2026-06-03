@@ -1,5 +1,6 @@
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
+import { captureEdgeError } from '../_shared/log.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -10,8 +11,11 @@ Deno.serve(async (req) => {
     return errorResponse('method not allowed', 405, { code: 'METHOD_NOT_ALLOWED' });
   }
 
+  let userId: string | undefined;
+
   try {
     const { supabase, user } = await getAuthenticatedUser(req);
+    userId = user.id;
     const now = new Date().toISOString();
 
     const { data: teamMembers, error: teamError } = await supabase
@@ -66,6 +70,13 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ expiredCount: queueIds.length, ok: true });
   } catch (error) {
+    // 무인 sweep 경로 — 조용한 실패가 특히 눈에 안 띈다.
+    captureEdgeError('expire-match-queue', error, {
+      stage: 'expire_queue_pipeline',
+      status: 500,
+      userId,
+      tags: { feature: 'matching', code: 'BAD_REQUEST' },
+    });
     const message = error instanceof Error ? error.message : 'failed to expire match queue';
     return errorResponse(message, 400, { code: 'BAD_REQUEST' });
   }

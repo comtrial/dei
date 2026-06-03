@@ -1,5 +1,6 @@
 import { forwardRef, memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Pressable, ScrollView, View, type ViewProps } from 'react-native';
+import { Image } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
@@ -70,12 +71,20 @@ export interface GradientComponentProps {
 export interface GridRoomFilledCell {
   kind?: 'filled';
   name: string;
+  /** 멤버 user_id — 아바타 탭 → 멤버 프로필(S14) 정확 매칭용(이름 문자열 매칭 대체). */
+  userId?: string;
   initial?: string;
   uploadTime: string;
   gradient?: CellGradient;
   media?: ReactNode;
   present?: boolean;
   videoId?: string;
+  /**
+   * 멤버 프로필 사진 URL(서명된 https). 지정 시 presence 아바타가 이니셜 대신
+   * 원형 이미지로 렌더하며, 미지정/로드 실패 전까지 `initial` 폴백. expo-image
+   * memory-disk 캐시 → 재렌더/재진입 시 네트워크 왕복 없이 즉시 표시.
+   */
+  photoUrl?: string;
 }
 
 /** 아직 영상을 안 올린 셀. */
@@ -113,7 +122,8 @@ export interface GridRoomProps extends ViewProps {
   cells: GridRoomCell[];
   GradientComponent?: ComponentType<GradientComponentProps>;
   onCellPress?: (cell: GridRoomCell, index: number) => void;
-  onAvatarPress?: (cell: GridRoomFilledCell, index: number) => void;
+  /** 아바타+이름 영역 탭(→ 멤버 프로필). filled·empty 셀 모두 발생(둘 다 userId 보유). */
+  onAvatarPress?: (cell: GridRoomCell, index: number) => void;
   onTimeSlotPress?: (slotIndex: number, slot: GridRoomTimeSlot) => void;
   /** 셀 영역 좌우 swipe(50px+) → -1 (이전 hour) / +1 (다음 hour). */
   onHourShift?: (direction: -1 | 1) => void;
@@ -170,14 +180,41 @@ function TimeChip({ slot }: { slot: GridRoomTimeSlot }) {
 const PresenceAvatar = memo(function PresenceAvatar({
   initial,
   present,
+  photoUrl,
+  index,
 }: {
   initial: string;
   present: boolean;
+  /** 멤버 프로필 사진 URL(서명된 https). 지정 시 이니셜 대신 원형 이미지. */
+  photoUrl?: string;
+  /** 셀 인덱스 — testID 분리용(empty 셀은 미지정). */
+  index?: number;
 }) {
+  const photoTestID = index != null ? `gridroom-avatar-photo-${index}` : undefined;
+  const initialTestID = index != null ? `gridroom-avatar-initial-${index}` : undefined;
   return (
-    <View className="relative w-[22px] h-[22px]">
-      <View className="w-[22px] h-[22px] items-center justify-center rounded-full border-[1.5px] border-accent bg-[rgba(0,0,0,0.35)]">
-        <Text className="text-2xs font-bold text-paper">{initial}</Text>
+    // shrink-0: 이름 라벨과 같은 flex-row 안에 있어, 긴 이름이면 원이 가로 압축돼
+    // 타원이 되는 것을 막는다(정사각 보존).
+    <View className="relative w-[22px] h-[22px] shrink-0">
+      <View className="w-[22px] h-[22px] items-center justify-center overflow-hidden rounded-full border-[1.5px] border-accent bg-[rgba(0,0,0,0.35)]">
+        {photoUrl != null ? (
+          // 프로필 이미지: 원형 컨테이너를 가득 채우는 cover 이미지(이니셜 폴백 대체).
+          // cachePolicy=memory-disk + recyclingKey: 한 번 받은 아바타는 디스크+메모리
+          // 캐시 → 재렌더/재진입 시 네트워크 왕복 없이 즉시 표시(Avatar primitive 와 동일).
+          <Image
+            testID={photoTestID}
+            source={{ uri: photoUrl }}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={photoUrl}
+            transition={120}
+            className="w-[22px] h-[22px] rounded-full"
+          />
+        ) : (
+          <Text testID={initialTestID} className="text-2xs font-bold text-paper">
+            {initial}
+          </Text>
+        )}
       </View>
       {present ? (
         <View className="absolute -bottom-[2px] -right-[2px] w-[8px] h-[8px] rounded-full bg-accent border border-paper" />
@@ -245,7 +282,12 @@ const FilledCell = memo(
           }
           className="absolute left-[8px] top-[8px] flex-row items-center gap-[5px]"
         >
-          <PresenceAvatar initial={initial} present={cell.present ?? true} />
+          <PresenceAvatar
+            initial={initial}
+            present={cell.present ?? true}
+            photoUrl={cell.photoUrl}
+            index={index}
+          />
           <Text className="text-2xs font-bold text-paper">{cell.name}</Text>
         </Pressable>
         <View className="absolute inset-0 items-center justify-center">
@@ -263,6 +305,7 @@ const FilledCell = memo(
     prev.cell.videoId === next.cell.videoId &&
     prev.cell.uploadTime === next.cell.uploadTime &&
     prev.cell.present === next.cell.present &&
+    prev.cell.photoUrl === next.cell.photoUrl &&
     prev.index === next.index,
 );
 
@@ -270,10 +313,12 @@ const EmptyCell = memo(function EmptyCell({
   cell,
   index,
   onCellPress,
+  onAvatarPress,
 }: {
   cell: GridRoomEmptyCell;
   index: number;
   onCellPress?: GridRoomProps['onCellPress'];
+  onAvatarPress?: GridRoomProps['onAvatarPress'];
 }) {
   const initial = cell.name.charAt(0);
   return (
@@ -284,10 +329,18 @@ const EmptyCell = memo(function EmptyCell({
       onPress={onCellPress ? () => onCellPress(cell, index) : undefined}
       className="relative aspect-[3/4] overflow-hidden rounded-md bg-[#1A1A1A]"
     >
-      <View className="absolute left-[8px] top-[8px] flex-row items-center gap-[5px]">
+      {/* 아바타+이름 영역 탭 → 멤버 프로필(filled 셀과 동일). 영상 없는 'Zzz..'
+          셀에서도 프로필 진입이 되도록 별도 Pressable 로 묶는다. */}
+      <Pressable
+        testID={`gridroom-avatar-${index}`}
+        accessibilityRole="button"
+        accessibilityLabel={`${cell.name} 프로필`}
+        onPress={onAvatarPress ? () => onAvatarPress(cell, index) : undefined}
+        className="absolute left-[8px] top-[8px] flex-row items-center gap-[5px]"
+      >
         <PresenceAvatar initial={initial} present={false} />
         <Text className="text-2xs font-bold text-paper">{cell.name}</Text>
-      </View>
+      </Pressable>
       <View className="absolute inset-0 items-center justify-center">
         {cell.canRecord ? (
           <EmptyBlob tone="purple" size={120} />
@@ -450,6 +503,7 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
                       cell={cell}
                       index={index}
                       onCellPress={onCellPress}
+                      onAvatarPress={onAvatarPress}
                     />
                   ) : (
                     <FilledCell

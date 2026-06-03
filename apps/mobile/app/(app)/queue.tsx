@@ -1,6 +1,6 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { BackHandler, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { logger } from '@dei/shared';
@@ -25,6 +25,15 @@ export default function QueueScreen() {
   const [queue, setQueue] = useState<QueueState>(null);
   const [showFreeRematchNotice, setShowFreeRematchNotice] = useState(
     notice === 'free-rematch',
+  );
+
+  // Android 하드웨어 백버튼을 삼킨다("무조건 웨이팅 화면만"). iOS 스와이프는
+  // (app)/_layout 의 gestureEnabled:false 가 막는다. 큐 이탈은 "매칭 취소"(S08)로만.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+      return () => sub.remove();
+    }, []),
   );
 
   useEffect(() => {

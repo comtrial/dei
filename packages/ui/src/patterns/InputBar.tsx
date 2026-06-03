@@ -1,4 +1,4 @@
-import { forwardRef, type ReactNode } from 'react';
+import { forwardRef, useState, type ReactNode } from 'react';
 import { View, type TextInput, type ViewProps } from 'react-native';
 import { ArrowUp } from 'lucide-react-native';
 
@@ -77,6 +77,11 @@ export interface InputBarProps extends Omit<ViewProps, 'children'> {
   whisperTarget?: { name: string; avatarInitial?: string; avatarBg?: string } | null;
   /** 귓속말 대상 칩 × 탭 — 귓속말 모드 해제. */
   onClearWhisper?: () => void;
+  /**
+   * 어두운 표면(영상 위 scrim 오버레이) 위에 얹힐 때 true. 바 표면을 투명으로
+   * (dark band 는 caller 가 줌) + 상단 라인을 흰계열로. 입력 pill(bg-2)은 불투명 유지.
+   */
+  onDark?: boolean;
   className?: string;
 }
 
@@ -92,10 +97,15 @@ const BAR_CLASS = 'border-t border-line bg-paper px-[14px] pt-[10px] pb-[14px]';
 const ROW_CLASS = 'flex-row items-center gap-[8px]';
 
 /**
- * S13a `.input-bar input` 오버라이드 — Input base(rounded-md/py-14/text-15)를
- * pill 형태(rounded-full/py-10/text-13)로 덮는다. bg-2/ink/px-14 는 base 와 동일.
+ * S13a `.input-bar input` 오버라이드 — pill 형태 + 카톡 수준 본문(15px).
+ * 멀티라인 자동높이를 쓰므로 세로 패딩은 줄이고(py-8) 높이는 측정값으로 제어한다.
+ * 한 줄일 땐 rounded-full(알약), 여러 줄로 커지면 rounded-2xl 이 자연스럽다.
  */
-const INPUT_OVERRIDE_CLASS = 'rounded-full py-[10px] text-[13px]';
+const INPUT_OVERRIDE_CLASS = 'py-[8px] text-[15px] leading-[20px]';
+
+/** 멀티라인 입력 높이 경계(px). 한 줄 ~40, 최대 ~120(약 5줄) 후 내부 스크롤. */
+const INPUT_MIN_H = 40;
+const INPUT_MAX_H = 120;
 
 export const InputBar = forwardRef<View, InputBarProps>(function InputBar(
   {
@@ -110,6 +120,7 @@ export const InputBar = forwardRef<View, InputBarProps>(function InputBar(
     inputRef,
     whisperTarget = null,
     onClearWhisper,
+    onDark = false,
     className,
     ...rest
   },
@@ -121,11 +132,27 @@ export const InputBar = forwardRef<View, InputBarProps>(function InputBar(
     ? `${whisperTarget.name}에게만 보이는 귓속말…`
     : placeholder;
 
+  // 멀티라인 자동높이: 줄이 늘면 입력창이 위로 커지고(상한 INPUT_MAX_H) 그 뒤엔 내부 스크롤.
+  // Bug1(흔들림) 수정: 측정 contentSize 를 그대로 clamp 해 반영하되 상수 fudge(+16) 를
+  // 더하지 않고, **실제로 값이 바뀔 때만** setState 한다. 상수 가산 + 강제 height 재측정이
+  // 맞물리면 contentSize 가 매 프레임 달라져 위아래로 진동(피드백 루프)했다.
+  const [inputHeight, setInputHeight] = useState(INPUT_MIN_H);
+  const clampedHeight = Math.max(INPUT_MIN_H, Math.min(INPUT_MAX_H, inputHeight));
+  const onContentSize = (h: number) => {
+    const next = Math.max(INPUT_MIN_H, Math.min(INPUT_MAX_H, Math.round(h)));
+    // 진동 가드: 상한에 도달했으면 더 안 키우고, 동일값이면 setState 생략(재렌더 차단).
+    setInputHeight((prev) => (prev === next ? prev : next));
+  };
+  // 여러 줄로 커지면 알약(rounded-full)보다 둥근 사각이 자연스럽다.
+  const multiline = clampedHeight > INPUT_MIN_H + 6;
+
   return (
     <View
       ref={ref}
       className={cn(
         BAR_CLASS,
+        // onDark(영상 위 오버레이): 바 표면 투명(dark band 는 caller) + 흰계열 상단 라인.
+        onDark && 'border-[rgba(255,255,255,0.12)] bg-transparent',
         // 귓속말 모드 시 accent 톤으로 강조(보더+soft 배경). 색은 토큰 className 만.
         whisperActive && 'border-accent bg-accent-soft',
         className,
@@ -148,16 +175,17 @@ export const InputBar = forwardRef<View, InputBarProps>(function InputBar(
         </View>
       ) : null}
 
-      <View className={ROW_CLASS}>
+      {/* 멀티라인이면 전송 버튼을 입력 하단에 맞춰 정렬(items-end). */}
+      <View className={cn(ROW_CLASS, multiline && 'items-end')}>
         {/* 입력 필드 + (옵션) 글자수 카운트 — flex 1 로 가용폭 차지 */}
         <View className="flex-1">
           {charcount != null ? (
             // 매트릭스 X9 charcount — 입력 위 우측 정렬 meta ('N / max').
             <Text
               variant="meta"
-              tone="ink-3"
+              tone={onDark ? undefined : 'ink-3'}
               tabularNums
-              className="mb-[4px] self-end"
+              className={cn('mb-[4px] self-end', onDark && 'text-[rgba(255,255,255,0.7)]')}
               testID="input-bar-charcount"
             >
               {`${charcount.count} / ${charcount.max}`}
@@ -167,12 +195,15 @@ export const InputBar = forwardRef<View, InputBarProps>(function InputBar(
             ref={inputRef}
             value={value}
             onChangeText={onChange}
-            onSubmitEditing={onSend}
             placeholder={effectivePlaceholder}
-            returnKeyType="send"
-            // S13a pill 형태 오버라이드. className(field 컨테이너 여백)은 0.
+            // 멀티라인: Enter 는 줄바꿈, 전송은 버튼(returnKeyType='default').
+            multiline
+            scrollEnabled={clampedHeight >= INPUT_MAX_H}
+            onContentSizeChange={(e) => onContentSize(e.nativeEvent.contentSize.height)}
+            // 한 줄=알약, 여러 줄=둥근 사각. 동적 높이는 inputStyle 로(NativeWind 런타임 높이 한계 회피).
             className="m-0"
-            inputClassName={INPUT_OVERRIDE_CLASS}
+            inputClassName={cn(INPUT_OVERRIDE_CLASS, multiline ? 'rounded-2xl' : 'rounded-full')}
+            inputStyle={{ height: clampedHeight }}
             testID="input-bar-input"
           />
         </View>
