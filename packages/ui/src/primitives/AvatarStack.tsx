@@ -38,7 +38,7 @@ export function AvatarStack({ items, max = 3, size = 26, className, ...rest }: A
       {shown.map((it, i) => (
         <View
           key={it.userId}
-          className={cn('rounded-full border-2 border-paper', i > 0 && '-ml-[8px]')}
+          className={cn('shrink-0 rounded-full border-2 border-paper', i > 0 && '-ml-[8px]')}
         >
           <Avatar initial={it.initial} photoUrl={it.photoUrl} size={size} bg={it.bg} />
         </View>
@@ -46,7 +46,7 @@ export function AvatarStack({ items, max = 3, size = 26, className, ...rest }: A
       {overflow > 0 ? (
         <View
           className={cn(
-            '-ml-[8px] items-center justify-center rounded-full border-2 border-paper bg-bg-2',
+            '-ml-[8px] shrink-0 items-center justify-center rounded-full border-2 border-paper bg-bg-2',
             `w-[${size}px] h-[${size}px]`,
           )}
         >

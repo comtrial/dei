@@ -158,6 +158,23 @@ export default function AppLayout() {
             : { presentation: 'card' }
         }
       />
+      {/*
+       * 방 나가기 확인 — 내부에서 BottomSheet(RN Modal, 아래서 슬라이드업)를 직접
+       * 그리는 화면. 기본 card presentation 이면 (a) 화면이 옆에서 슬라이드 +
+       * (b) 내부 BottomSheet 가 아래서 슬라이드 = 이중 애니메이션이고, iOS card 의
+       * swipe-to-dismiss 제스처 때문에 시트가 위아래로 끌려다닌다. 그래서:
+       *  - transparentModal: 뒤 방 화면이 비친 채 BottomSheet 만 아래서 등장(단일 애니).
+       *  - animation:'fade': 화면 자체의 옆 슬라이드 제거(등장은 BottomSheet 가 담당).
+       *  - gestureEnabled:false: 스와이프-디스미스 차단 → 시트 위치 고정(드래그 잠금).
+       */}
+      <Stack.Screen
+        name="room/[roomId]/leave-confirm"
+        options={{
+          presentation: 'transparentModal',
+          animation: 'fade',
+          gestureEnabled: false,
+        }}
+      />
     </Stack>
   );
 }
