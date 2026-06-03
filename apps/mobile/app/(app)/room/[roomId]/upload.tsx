@@ -177,6 +177,7 @@ export default function VideoCaptureScreen() {
           mode="video"
           facing={facing}
           videoQuality="720p"
+          responsiveOrientationWhenOrientationLocked
           onCameraReady={() => setCameraReady(true)}
         />
       )}
