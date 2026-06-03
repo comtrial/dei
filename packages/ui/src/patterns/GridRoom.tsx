@@ -1,5 +1,7 @@
 import { forwardRef, memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Pressable, ScrollView, View, type ViewProps } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 
 import { Text } from '../primitives/Text';
 import { EmptyBlob, type EmptyBlobTone } from '../primitives/EmptyBlob';
@@ -113,6 +115,8 @@ export interface GridRoomProps extends ViewProps {
   onCellPress?: (cell: GridRoomCell, index: number) => void;
   onAvatarPress?: (cell: GridRoomFilledCell, index: number) => void;
   onTimeSlotPress?: (slotIndex: number, slot: GridRoomTimeSlot) => void;
+  /** 셀 영역 좌우 swipe(50px+) → -1 (이전 hour) / +1 (다음 hour). */
+  onHourShift?: (direction: -1 | 1) => void;
   className?: string;
 }
 
@@ -153,7 +157,7 @@ function TimeChip({ slot }: { slot: GridRoomTimeSlot }) {
           </Text>
         </View>
       ) : (
-        <View className={cn('rounded-full px-[8px] py-[4px]', slot.disabled && 'opacity-30')}>
+        <View className={cn('rounded-full px-[8px] py-[4px]', slot.disabled && 'opacity-15')}>
           <Text className="text-sm font-bold text-ink-4" tabularNums>
             {slot.label}
           </Text>
@@ -304,32 +308,71 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
     onCellPress,
     onAvatarPress,
     onTimeSlotPress,
+    onHourShift,
     className,
     ...rest
   },
   ref,
 ) {
   const pairs = useMemo(() => chunkPairs(cells), [cells]);
+
+  const cellGridPan = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-30, 30])
+        .failOffsetY([-15, 15])
+        .onEnd((event) => {
+          'worklet';
+          const dx = event.translationX;
+          if (Math.abs(dx) < 50) return;
+          const direction: -1 | 1 = dx > 0 ? -1 : 1;
+          if (onHourShift) runOnJS(onHourShift)(direction);
+        }),
+    [onHourShift],
+  );
   const scrollRef = useRef<ScrollView>(null);
+  const programmaticScrollRef = useRef(false);
+  const programmaticClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [stripWidth, setStripWidth] = useState(0);
   const sidePadding = stripWidth > 0 ? Math.max((stripWidth - CHIP_WIDTH) / 2, 0) : 0;
+
+  const markProgrammaticScroll = () => {
+    programmaticScrollRef.current = true;
+    if (programmaticClearRef.current) clearTimeout(programmaticClearRef.current);
+    programmaticClearRef.current = setTimeout(() => {
+      programmaticScrollRef.current = false;
+      programmaticClearRef.current = null;
+    }, 500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (programmaticClearRef.current) clearTimeout(programmaticClearRef.current);
+    };
+  }, []);
 
   const nowIndex = useMemo(
     () => (timeStrip ? timeStrip.findIndex((s) => s.isNow) : -1),
     [timeStrip],
   );
 
+  const prevNowIndexRef = useRef(nowIndex);
   useEffect(() => {
     if (nowIndex < 0 || stripWidth === 0) return;
+    const distance = Math.abs(nowIndex - prevNowIndexRef.current);
+    const animated = distance > 0 && distance <= 3;
+    prevNowIndexRef.current = nowIndex;
     const id = requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ x: nowIndex * CHIP_WIDTH, animated: true });
+      markProgrammaticScroll();
+      scrollRef.current?.scrollTo({ x: nowIndex * CHIP_WIDTH, animated });
     });
     return () => cancelAnimationFrame(id);
   }, [nowIndex, stripWidth]);
 
   const handleTimeSlotPress = (slotIndex: number, slot: GridRoomTimeSlot) => {
     if (slot.disabled || slot.isNow) return;
-    scrollRef.current?.scrollTo({ x: slotIndex * CHIP_WIDTH, animated: true });
+    markProgrammaticScroll();
+    scrollRef.current?.scrollTo({ x: slotIndex * CHIP_WIDTH, animated: false });
     onTimeSlotPress?.(slotIndex, slot);
   };
 
@@ -354,14 +397,19 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
             decelerationRate="fast"
             contentContainerStyle={{ paddingHorizontal: sidePadding }}
             onMomentumScrollEnd={(e) => {
+              if (programmaticScrollRef.current) {
+                programmaticScrollRef.current = false;
+                return;
+              }
               const offset = e.nativeEvent.contentOffset.x;
               const index = Math.round(offset / CHIP_WIDTH);
               const slot = timeStrip[index];
               if (!slot) return;
               if (slot.disabled) {
                 if (nowIndex >= 0) {
+                  markProgrammaticScroll();
                   requestAnimationFrame(() => {
-                    scrollRef.current?.scrollTo({ x: nowIndex * CHIP_WIDTH, animated: true });
+                    scrollRef.current?.scrollTo({ x: nowIndex * CHIP_WIDTH, animated: false });
                   });
                 }
                 return;
@@ -391,31 +439,33 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
         </View>
       ) : null}
 
-      <View className="gap-[4px] px-[12px]">
-        {pairs.map((pair, rowIndex) => (
-          <View key={rowIndex} className="flex-row gap-[4px]">
-            {pair.map(({ cell, index }) => (
-              <View key={index} className="flex-1">
-                {isEmpty(cell) ? (
-                  <EmptyCell
-                    cell={cell}
-                    index={index}
-                    onCellPress={onCellPress}
-                  />
-                ) : (
-                  <FilledCell
-                    cell={cell}
-                    index={index}
-                    GradientComponent={GradientComponent}
-                    onCellPress={onCellPress}
-                    onAvatarPress={onAvatarPress}
-                  />
-                )}
-              </View>
-            ))}
-          </View>
-        ))}
-      </View>
+      <GestureDetector gesture={cellGridPan}>
+        <View className="gap-[4px] px-[12px]">
+          {pairs.map((pair, rowIndex) => (
+            <View key={rowIndex} className="flex-row gap-[4px]">
+              {pair.map(({ cell, index }) => (
+                <View key={index} className="flex-1">
+                  {isEmpty(cell) ? (
+                    <EmptyCell
+                      cell={cell}
+                      index={index}
+                      onCellPress={onCellPress}
+                    />
+                  ) : (
+                    <FilledCell
+                      cell={cell}
+                      index={index}
+                      GradientComponent={GradientComponent}
+                      onCellPress={onCellPress}
+                      onAvatarPress={onAvatarPress}
+                    />
+                  )}
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      </GestureDetector>
     </View>
   );
 });
