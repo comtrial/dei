@@ -107,7 +107,11 @@ export const SlideToConfirm = forwardRef<View, SlideToConfirmProps>(
         testID={testID}
         accessibilityRole="button"
         accessibilityState={{ disabled: pressableProps.disabled ?? undefined, ...accessibilityState }}
-        // long-press fallback = 실제 확정 경로 (제스처 라이브러리 미의존).
+        // 확정 경로: 탭(onPress) + 길게누름(onLongPress) 둘 다 onConfirm 호출.
+        // 제스처 라이브러리 미의존이라 물리 드래그는 없고, 단일 탭으로도 확정되게 한다
+        // (밀기/롱프레스만 기대하면 '버튼이 안 먹는다'는 혼동을 줌 — 실제 발생). disabled
+        // 면 Pressable 이 onPress/onLongPress 를 자동 무시한다.
+        onPress={onConfirm}
         onLongPress={onConfirm}
         className={containerClassName}
         {...pressableProps}

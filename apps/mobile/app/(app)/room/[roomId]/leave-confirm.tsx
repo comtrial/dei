@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { logger } from '@dei/shared';
 import {
@@ -67,13 +66,9 @@ export default function RoomLeaveConfirmScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 items-center justify-center px-[24px]">
-        <Text className="text-center text-[14px] font-semibold text-ink-3">
-          방 화면
-        </Text>
-      </View>
-
+    // transparentModal 라우트(_layout) 위에 뜨므로 화면 본체는 투명 — 뒤의 실제 방
+    // 화면이 비친 채 BottomSheet 의 scrim(bg-black/55)만 어둡게 깔린다.
+    <View className="flex-1">
       <BottomSheet visible heightPct={78} onClose={() => router.back()}>
         <ScrollView className="flex-1 px-[24px] pt-[14px]">
           <Text variant="h2" className="text-center text-[22px] font-extrabold">
@@ -117,7 +112,7 @@ export default function RoomLeaveConfirmScreen() {
               tone="ink"
               disabled={!canLeave || isLeaving}
               onConfirm={handleLeave}
-              label={isLeaving ? '나가는 중' : '밀어서 방 나가기'}
+              label={isLeaving ? '나가는 중' : '방 나가기'}
               className={!canLeave || isLeaving ? 'opacity-40' : undefined}
             />
           </View>
@@ -133,6 +128,6 @@ export default function RoomLeaveConfirmScreen() {
         actions={[{ label: '확인', variant: 'ink', onPress: () => setFailed(false) }]}
         onDismiss={() => setFailed(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
