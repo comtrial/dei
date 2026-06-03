@@ -32,6 +32,23 @@ export function getFeatureFlag(key: string): boolean | string | undefined {
 }
 
 /**
+ * 플래그 로드/갱신 시 콜백(반응형 구독). PostHog SDK 는 플래그를 **비동기**로
+ * 받으므로 첫 렌더 시점엔 getFeatureFlag 가 undefined 일 수 있다. 이 구독으로
+ * 플래그가 도착/변경되면 UI 가 재평가하도록 한다. 해제 함수를 반환.
+ * 클라이언트 미초기화 시 no-op.
+ */
+export function onFeatureFlags(cb: () => void): () => void {
+  if (!client) return () => {};
+  // SDK 의 onFeatureFlags 는 flags 인자를 주지만 여기선 트리거만 필요.
+  return client.onFeatureFlags(() => cb());
+}
+
+/** 플래그를 강제 재요청(예: identify 직후 — 로그인 유저 기준 재평가). */
+export function reloadFeatureFlags(): void {
+  client?.reloadFeatureFlags();
+}
+
+/**
  * PostHog SDK를 초기화하고 @dei/shared 의 analytics transport 로 등록한다.
  * 앱 진입점에서 React 컴포넌트 트리 마운트 전에 호출되어야 한다.
  *
@@ -63,6 +80,9 @@ export function initPostHog(): void {
     },
     identify(distinctId, props) {
       posthog.identify(distinctId, toEventProps(props));
+      // 로그인(특정 user) 으로 distinct_id 가 바뀌었으니 플래그를 재평가한다
+      // — distinct_id 타겟팅(overlay 등)이 익명→유저 전환 후에도 반영되게.
+      posthog.reloadFeatureFlags();
     },
     screen(name, props) {
       posthog.screen(name, toEventProps(props));

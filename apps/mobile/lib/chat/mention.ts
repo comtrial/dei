@@ -110,3 +110,38 @@ export function resolveTailMention(
 function stripTailMention(input: string): string {
   return input.replace(/(?:^|\s)@+\S*$/, '').replace(/\s+$/, '');
 }
+
+/**
+ * Bug4: '@풀네임 본문' 처럼 **선두 @이름 뒤에 본문이 오는** 인라인 멘션을 해석한다.
+ * (resolveTailMention 은 입력 끝 @토큰만 봐서 '@수아 안녕'은 평문으로 새어나갔다.)
+ *
+ * 규칙:
+ *  - 입력이 `@`(다수 허용) + 이름토큰 + **공백** + 본문 형태여야 한다(공백·본문 필수).
+ *    공백/본문이 없으면 `none`(그건 tail 케이스 — resolveTailMention 이 처리).
+ *  - 이름토큰이 active·non-self·non-blocked 멤버와 **완전일치 && 유일** → `confirmed`
+ *    (strippedInput = @이름 토큰 제거 후 본문, 앞뒤 공백 trim).
+ *  - prefix-만-일치(완전일치 아님) → `ambiguous`(평문 오발신 차단, 명시 선택 유도).
+ *  - self/left/blocked/없는닉네임 → `none`(누설 차단; 평문).
+ */
+export function resolveLeadingMention(
+  input: string,
+  members: RoomMemberLite[],
+  opts: { selfId: string; blockedIds: Set<string> },
+): TailMentionResolution {
+  // 선두 @(다수) + 비공백 이름 + 공백 + 본문. 본문이 공백뿐이면 매칭 실패(none).
+  const m = /^@+(\S+)\s+(\S.*)$/.exec(input);
+  if (!m) return { kind: 'none' };
+  const query = m[1];
+  const body = m[2].trim();
+  if (body === '') return { kind: 'none' };
+
+  const candidates = filterCandidates(members, query, opts);
+  if (candidates.length === 0) return { kind: 'none' };
+  if (candidates.length === 1) {
+    const target = candidates[0];
+    const exact = target.name.toLowerCase() === query.toLowerCase();
+    return exact ? { kind: 'confirmed', target, strippedInput: body } : { kind: 'ambiguous' };
+  }
+  // 2명 이상(동명이인/prefix 다수): 자동확정 금지.
+  return { kind: 'ambiguous' };
+}

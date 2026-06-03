@@ -1,8 +1,19 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-// posthog 모듈을 mock — getFeatureFlag 반환값을 케이스별로 제어.
+// posthog 모듈을 mock — getFeatureFlag 반환값을 케이스별로 제어. onFeatureFlags 는
+// 구독 콜백을 보관해 수동 트리거(플래그 도착 시뮬레이션)할 수 있게 한다.
 const getFeatureFlag = vi.fn();
-vi.mock('@/lib/posthog', () => ({ getFeatureFlag: (k: string) => getFeatureFlag(k) }));
+let flagListener: (() => void) | null = null;
+const onFeatureFlags = vi.fn((cb: () => void) => {
+  flagListener = cb;
+  return () => {
+    flagListener = null;
+  };
+});
+vi.mock('@/lib/posthog', () => ({
+  getFeatureFlag: (k: string) => getFeatureFlag(k),
+  onFeatureFlags: (cb: () => void) => onFeatureFlags(cb),
+}));
 
 import { resolveChatPresentationMode, CHAT_OVERLAY_FLAG } from '../presentation';
 

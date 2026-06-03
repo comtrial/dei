@@ -133,8 +133,16 @@ export const InputBar = forwardRef<View, InputBarProps>(function InputBar(
     : placeholder;
 
   // 멀티라인 자동높이: 줄이 늘면 입력창이 위로 커지고(상한 INPUT_MAX_H) 그 뒤엔 내부 스크롤.
+  // Bug1(흔들림) 수정: 측정 contentSize 를 그대로 clamp 해 반영하되 상수 fudge(+16) 를
+  // 더하지 않고, **실제로 값이 바뀔 때만** setState 한다. 상수 가산 + 강제 height 재측정이
+  // 맞물리면 contentSize 가 매 프레임 달라져 위아래로 진동(피드백 루프)했다.
   const [inputHeight, setInputHeight] = useState(INPUT_MIN_H);
   const clampedHeight = Math.max(INPUT_MIN_H, Math.min(INPUT_MAX_H, inputHeight));
+  const onContentSize = (h: number) => {
+    const next = Math.max(INPUT_MIN_H, Math.min(INPUT_MAX_H, Math.round(h)));
+    // 진동 가드: 상한에 도달했으면 더 안 키우고, 동일값이면 setState 생략(재렌더 차단).
+    setInputHeight((prev) => (prev === next ? prev : next));
+  };
   // 여러 줄로 커지면 알약(rounded-full)보다 둥근 사각이 자연스럽다.
   const multiline = clampedHeight > INPUT_MIN_H + 6;
 
@@ -190,8 +198,8 @@ export const InputBar = forwardRef<View, InputBarProps>(function InputBar(
             placeholder={effectivePlaceholder}
             // 멀티라인: Enter 는 줄바꿈, 전송은 버튼(returnKeyType='default').
             multiline
-            scrollEnabled={inputHeight >= INPUT_MAX_H}
-            onContentSizeChange={(e) => setInputHeight(e.nativeEvent.contentSize.height + 16)}
+            scrollEnabled={clampedHeight >= INPUT_MAX_H}
+            onContentSizeChange={(e) => onContentSize(e.nativeEvent.contentSize.height)}
             // 한 줄=알약, 여러 줄=둥근 사각. 동적 높이는 inputStyle 로(NativeWind 런타임 높이 한계 회피).
             className="m-0"
             inputClassName={cn(INPUT_OVERRIDE_CLASS, multiline ? 'rounded-2xl' : 'rounded-full')}

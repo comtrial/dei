@@ -3,6 +3,7 @@ import {
   parseMentionQuery,
   filterCandidates,
   resolveTailMention,
+  resolveLeadingMention,
   type RoomMemberLite,
 } from '../mention';
 
@@ -56,6 +57,59 @@ describe('mention parsing', () => {
       { userId: 'u2', name: '수민', status: 'active' },
     ];
     expect(filterCandidates(allOut, '수', { selfId: 'me', blockedIds: new Set(['u2']) })).toEqual([]);
+  });
+});
+
+// Bug4: '@풀네임 본문' 처럼 이름 뒤에 본문이 오는 인라인 멘션 → 귓속말 확정.
+// (resolveTailMention 은 tail @토큰만 봐서 '@수아 안녕' 은 평문으로 새어나갔다.)
+describe('resolveLeadingMention (인라인 @풀네임 본문)', () => {
+  const opts = { selfId: 'me', blockedIds: new Set<string>() };
+
+  it("'@수아 안녕' → confirmed + strippedInput='안녕'", () => {
+    const r = resolveLeadingMention('@수아 안녕', MEMBERS, opts);
+    expect(r.kind).toBe('confirmed');
+    expect(r.target?.userId).toBe('u1');
+    expect(r.strippedInput).toBe('안녕');
+  });
+
+  it("'@수아 여러 단어 본문' → 본문 전체 보존", () => {
+    const r = resolveLeadingMention('@수아 오늘 카페 갈래?', MEMBERS, opts);
+    expect(r.kind).toBe('confirmed');
+    expect(r.strippedInput).toBe('오늘 카페 갈래?');
+  });
+
+  it("'@@수아 안녕'(선행 @ 다수) → 흡수 후 confirmed", () => {
+    const r = resolveLeadingMention('@@수아 안녕', MEMBERS, opts);
+    expect(r.kind).toBe('confirmed');
+    expect(r.target?.userId).toBe('u1');
+    expect(r.strippedInput).toBe('안녕');
+  });
+
+  it("'@수 안녕'(prefix-만, 완전일치 아님) → ambiguous(자동확정 금지)", () => {
+    const r = resolveLeadingMention('@수 안녕', MEMBERS, opts);
+    expect(r.kind).toBe('ambiguous');
+  });
+
+  it("'@나 안녕'(self) → none(누설 차단, 평문)", () => {
+    const r = resolveLeadingMention('@나 안녕', MEMBERS, opts);
+    expect(r.kind).toBe('none');
+  });
+
+  it("'@민준 안녕'(left 멤버) → none", () => {
+    const r = resolveLeadingMention('@민준 안녕', MEMBERS, opts);
+    expect(r.kind).toBe('none');
+  });
+
+  it("'@수아'(공백·본문 없음) → none(인라인 아님 — tail 로직이 처리)", () => {
+    expect(resolveLeadingMention('@수아', MEMBERS, opts).kind).toBe('none');
+  });
+
+  it("'안녕 @수아 ...'(선두가 @ 아님) → none", () => {
+    expect(resolveLeadingMention('안녕 @수아 봐', MEMBERS, opts).kind).toBe('none');
+  });
+
+  it("'@수아 '(본문 공백뿐) → none(보낼 본문 없음)", () => {
+    expect(resolveLeadingMention('@수아   ', MEMBERS, opts).kind).toBe('none');
   });
 
   it('parseMentionQuery: @토큰은 개행을 넘지 않는다(\\S* 경계)', () => {

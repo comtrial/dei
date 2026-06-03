@@ -7,7 +7,7 @@ import { Spinner } from '@dei/ui';
 
 import { getAppGateRoute } from '@/lib/auth-flow';
 import { TERMS_VERSION } from '@/lib/b-flow';
-import { resolveChatPresentationMode } from '@/lib/chat/presentation';
+import { useChatPresentationMode } from '@/lib/chat/presentation';
 import {
   repairProfileIdentityFromVerification,
   VERIFIED_IDENTITY_SELECT,
@@ -36,7 +36,7 @@ export default function AppLayout() {
   //              직전 화면(영상)이 마운트된 채 뒤에 비침. UX 스펙대로 scrim 은 화면이 그림.
   //  - legacy  : 기존 — 별도 화면(card)으로 push(불투명).
   // 영상 코드(room/index·video 훅)는 어느 모드에서도 건드리지 않는다.
-  const overlay = resolveChatPresentationMode() === 'overlay';
+  const overlay = useChatPresentationMode() === 'overlay';
 
   useEffect(() => {
     if (isLoading) {
