@@ -1,5 +1,6 @@
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
+import { captureEdgeError } from '../_shared/log.ts';
 
 type LeaveRoomBody = {
   detail?: unknown;
@@ -23,12 +24,21 @@ Deno.serve(async (req) => {
     return errorResponse('method not allowed', 405, { code: 'METHOD_NOT_ALLOWED' });
   }
 
+  // catch 에서 식별자를 잃지 않도록 hoist(user/roomId/reason 은 try 내부 선언).
+  let userId: string | undefined;
+  let capturedRoomId: string | undefined;
+  let capturedReason: string | undefined;
+  let lifecycleStage = 'leave_room_pipeline';
+
   try {
     const { supabase, user } = await getAuthenticatedUser(req);
+    userId = user.id;
     const body = await req.json().catch(() => ({})) as LeaveRoomBody;
     const roomId = typeof body.roomId === 'string' ? body.roomId.trim() : '';
     const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
     const detail = typeof body.detail === 'string' ? body.detail.trim() : '';
+    capturedRoomId = roomId || undefined;
+    capturedReason = reason || undefined;
 
     if (!UUID_PATTERN.test(roomId)) {
       return errorResponse('방 정보를 확인할 수 없어요.', 400, { code: 'INVALID_ROOM' });
@@ -100,6 +110,9 @@ Deno.serve(async (req) => {
 
     const activeMemberCount = count ?? 0;
     const roomEnded = activeMemberCount === 0;
+    // 멤버는 left 됐는데 room 상태 갱신이 실패하면 '방이 종료 안 되고 멈춤' 이
+    // 되므로 별도 stage 로 식별 가능하게 한다.
+    lifecycleStage = 'room_lifecycle_end';
     const { error: roomError } = await supabase
       .from('room')
       .update({
@@ -129,6 +142,15 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ activeMemberCount, ok: true, roomEnded });
   } catch (error) {
+    // room_member/profile/room_lifecycle/room 갱신 throw — 부분 실패(멤버는
+    // 나갔는데 방이 안 끝남)는 stage 로 구분된다.
+    captureEdgeError('leave-room', error, {
+      stage: lifecycleStage,
+      status: 500,
+      userId,
+      tags: { feature: 'room-leave', code: 'BAD_REQUEST' },
+      extra: { roomId: capturedRoomId, reason: capturedReason },
+    });
     const message = error instanceof Error ? error.message : 'failed to leave room';
     return errorResponse(message, 400, { code: 'BAD_REQUEST' });
   }

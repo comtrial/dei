@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { analytics } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 import { avatarColorFor } from '@dei/ui';
 
 import { supabase } from '@/lib/supabase';
@@ -82,62 +82,80 @@ export default function RoomChatScreen() {
   useEffect(() => {
     if (!roomId) return;
     let alive = true;
-    void (async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      if (alive && auth.user) setSelfId(auth.user.id);
+    // 부트스트랩 IIFE: getUser 실패 시 selfId 가 '' 로 남아 귓속말 필터·send(userId='')
+    // 가 조용히 오작동하므로(사용자 영향 高) 각 쿼리 error 를 throw 해 캡처한다.
+    // withErrorCapture 는 재던지므로 void IIFE 에서는 trailing .catch 로 미캐치 방지.
+    void logger
+      .withErrorCapture(
+        'room-chat.bootstrap',
+        async () => {
+          const { data: auth, error: authError } = await supabase.auth.getUser();
+          if (authError) throw authError;
+          if (alive && auth.user) setSelfId(auth.user.id);
 
-      // 멤버 목록 — room_member 에는 profile FK 임베드가 없어(생성 타입 Relationships 비어 있음)
-      // 두 쿼리로 분리: room_member 조회 → user_id 로 profile(nickname) 조회 후 클라에서 결합.
-      const { data: roomMembers } = await supabase
-        .from('room_member')
-        .select('user_id, status')
-        .eq('room_id', roomId);
-      const userIds = (roomMembers ?? []).map((r) => r.user_id);
-      const { data: profiles } = userIds.length
-        ? await supabase
-            .from('profile')
-            .select('user_id, nickname, photo_url')
-            .in('user_id', userIds)
-        : { data: [] as { user_id: string; nickname: string | null; photo_url: string | null }[] };
-      // user_id → { name, photoUrl } 결합용 맵.
-      const profileByUser = new Map(
-        (profiles ?? []).map((p) => [
-          p.user_id,
-          { name: p.nickname ?? '익명', photoUrl: p.photo_url ?? undefined },
-        ]),
-      );
-      if (alive) {
-        const mapped = (roomMembers ?? []).map((r) => {
-          const prof = profileByUser.get(r.user_id);
-          const name = prof?.name ?? '익명';
-          return {
-            userId: r.user_id,
-            status: (r.status as RoomMemberLite['status']) ?? 'active',
-            name,
-            avatarInitial: name[0],
-            // photoUrl 없을 때 이니셜 배경을 userId 결정색으로(멤버 식별·재렌더 안정).
-            avatarBg: avatarColorFor(r.user_id),
-            photoUrl: prof?.photoUrl,
-          };
-        });
-        setMembers(mapped);
-        // 멤버 프로필 사진을 미리 디코딩·캐시 → 헤더 스택/버블 노출 시 리드타임 0.
-        const urls = mapped.map((m) => m.photoUrl).filter((u): u is string => Boolean(u));
-        if (urls.length) void Image.prefetch(urls, { cachePolicy: 'memory-disk' });
-      }
+          // 멤버 목록 — room_member 에는 profile FK 임베드가 없어(생성 타입 Relationships 비어 있음)
+          // 두 쿼리로 분리: room_member 조회 → user_id 로 profile(nickname) 조회 후 클라에서 결합.
+          const { data: roomMembers, error: membersError } = await supabase
+            .from('room_member')
+            .select('user_id, status')
+            .eq('room_id', roomId);
+          if (membersError) throw membersError;
+          const userIds = (roomMembers ?? []).map((r) => r.user_id);
+          const { data: profiles, error: profilesError } = userIds.length
+            ? await supabase
+                .from('profile')
+                .select('user_id, nickname, photo_url')
+                .in('user_id', userIds)
+            : {
+                data: [] as { user_id: string; nickname: string | null; photo_url: string | null }[],
+                error: null,
+              };
+          if (profilesError) throw profilesError;
+          // user_id → { name, photoUrl } 결합용 맵.
+          const profileByUser = new Map(
+            (profiles ?? []).map((p) => [
+              p.user_id,
+              { name: p.nickname ?? '익명', photoUrl: p.photo_url ?? undefined },
+            ]),
+          );
+          if (alive) {
+            const mapped = (roomMembers ?? []).map((r) => {
+              const prof = profileByUser.get(r.user_id);
+              const name = prof?.name ?? '익명';
+              return {
+                userId: r.user_id,
+                status: (r.status as RoomMemberLite['status']) ?? 'active',
+                name,
+                avatarInitial: name[0],
+                // photoUrl 없을 때 이니셜 배경을 userId 결정색으로(멤버 식별·재렌더 안정).
+                avatarBg: avatarColorFor(r.user_id),
+                photoUrl: prof?.photoUrl,
+              };
+            });
+            setMembers(mapped);
+            // 멤버 프로필 사진을 미리 디코딩·캐시 → 헤더 스택/버블 노출 시 리드타임 0.
+            const urls = mapped.map((m) => m.photoUrl).filter((u): u is string => Boolean(u));
+            if (urls.length) void Image.prefetch(urls, { cachePolicy: 'memory-disk' });
+          }
 
-      // 방 이름/상태(있으면). 실패해도 무방 — 기본 라벨/active 로 폴백.
-      const { data: room } = await supabase
-        .from('room')
-        .select('id, status, ended_at')
-        .eq('id', roomId)
-        .maybeSingle();
-      if (alive && room) {
-        // concurrency-misc-9: 진입 시점 종료 여부(읽기전용). 이후 변화는 구독으로 갱신.
-        // (방 제목은 S13a 재구성에서 헤더에서 제거 — roomName state 불필요.)
-        setRoomEnded(isRoomEnded(room));
-      }
-    })();
+          // 방 상태(있으면). 실패 시 throw → 캡처. (방 제목은 S13a 재구성에서
+          // 헤더에서 제거 — roomName state 불필요.)
+          const { data: room, error: roomError } = await supabase
+            .from('room')
+            .select('id, status, ended_at')
+            .eq('id', roomId)
+            .maybeSingle();
+          if (roomError) throw roomError;
+          if (alive && room) {
+            // concurrency-misc-9: 진입 시점 종료 여부(읽기전용). 이후 변화는 구독으로 갱신.
+            setRoomEnded(isRoomEnded(room));
+          }
+        },
+        { tags: { screen: 'room-chat', feature: 'chat-load' }, extra: { room_id: roomId } },
+      )
+      .catch(() => {
+        // withErrorCapture 가 이미 캡처함 — 여기서는 미캐치 rejection 만 흡수.
+      });
 
     analytics.capture(ANALYTICS_EVENTS.room_chat_opened, { room_id: roomId });
     return () => {
