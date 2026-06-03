@@ -56,31 +56,42 @@ describe('ChatBubble (X8)', () => {
     expect(body).toContain('italic');
   });
 
-  it('"whisper" + mine: right-aligned (self-end via row-reverse), my avatar shown, name hidden, 귓속말 tag kept', () => {
+  it('"whisper" + mine: right-aligned, NO avatar, shows @recipient (not 귓속말 tag)', () => {
     render(
-      <ChatBubble testID="cb" variant="whisper" mine name="민준" avatarInitial="나" avatarBg="bg-[#C99A5B]">
+      // mine 일 때 name = 수신자 닉네임(누구에게 보냈는지)
+      <ChatBubble testID="cb" variant="whisper" mine name="변경규" avatarInitial="나" avatarPhotoUrl="https://cdn.test/me.jpg">
         비밀 메시지
       </ChatBubble>,
     );
     const row = screen.getByTestId('cb').props.className as string;
     expect(row).toContain('self-end');
-    // 내 귓속말은 발신자 이름 숨김(me 처럼), '귓속말' 태그는 노출
-    expect(screen.queryByText('민준')).toBeNull();
-    expect(screen.getByTestId('chat-bubble-whisper-tag')).toBeTruthy();
-    // 내 아바타 이니셜 노출(우측)
-    expect(screen.getByText('나')).toBeTruthy();
+    // 내 메시지엔 아바타 없음(카톡)
+    expect(screen.queryByTestId('av-photo')).toBeNull();
+    // '귓속말' 태그 대신 수신자 @닉네임
+    expect(screen.queryByTestId('chat-bubble-whisper-tag')).toBeNull();
+    expect(screen.getByTestId('chat-bubble-whisper-target')).toBeTruthy();
+    expect(screen.getByText('@변경규')).toBeTruthy();
     expect(screen.getByText('비밀 메시지')).toBeTruthy();
   });
 
   it('"whisper" + mine + failed: renders tappable retry firing onRetry (body-render-9)', () => {
     const onRetry = jest.fn();
     render(
-      <ChatBubble testID="cb" variant="whisper" mine sendState="failed" avatarInitial="나" onRetry={onRetry}>
+      <ChatBubble testID="cb" variant="whisper" mine sendState="failed" name="변경규" onRetry={onRetry}>
         실패한 귓속말
       </ChatBubble>,
     );
     fireEvent.press(screen.getByTestId('chat-bubble-retry'));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('"me" message shows no avatar even when avatarPhotoUrl is passed (카톡 — 내 메시지 아바타 없음)', () => {
+    render(
+      <ChatBubble testID="cb" variant="me" avatarPhotoUrl="https://cdn.test/me.jpg">
+        내 메시지
+      </ChatBubble>,
+    );
+    expect(screen.queryByTestId('av-photo')).toBeNull();
   });
 
   it('"mention" renders an inline accent-700 token (.bub .mention)', () => {

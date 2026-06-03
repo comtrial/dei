@@ -83,17 +83,18 @@ describe('RoomChatView', () => {
     expect(screen.getByText(' 이거 봤어?')).toBeTruthy();
   });
 
-  // S13a 재구성: 내가 보낸 귓속말 → 이름 숨김 + '귓속말' 태그(방향 안내 제거).
-  it('my whisper bubble hides sender name and shows a 귓속말 tag (no 방향 안내)', () => {
+  // S13a 재구성: 내가 보낸 귓속말 → 아바타 없음 + 수신자 @닉네임(방향 안내·태그 대신).
+  it('my whisper bubble shows recipient @nickname (no avatar, no 귓속말 tag, no 방향 안내)', () => {
     setup({
       messages: [
         { id: 's4', clientMsgId: null, userId: 'me', body: '비밀 메시지', whisperToUserId: 'u2', createdAt: 't4', sendState: 'sent' },
       ],
     });
     expect(screen.getByText('비밀 메시지')).toBeTruthy();
-    expect(screen.getByTestId('chat-bubble-whisper-tag')).toBeTruthy();
-    // 방향 안내(→ …에게 / → 나에게)는 더 이상 렌더하지 않는다.
-    expect(screen.queryByText(/에게$/)).toBeNull();
+    // 수신자(u2=민준) @닉네임 노출.
+    expect(screen.getByText('@민준')).toBeTruthy();
+    // '귓속말' 태그·방향 안내는 더 이상 없음.
+    expect(screen.queryByTestId('chat-bubble-whisper-tag')).toBeNull();
     expect(screen.queryByText(/→/)).toBeNull();
   });
 

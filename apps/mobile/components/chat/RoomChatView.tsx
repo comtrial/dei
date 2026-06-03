@@ -3,6 +3,7 @@ import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  Avatar,
   AvatarStack,
   ChatBubble,
   InputBar,
@@ -40,6 +41,12 @@ export interface RoomChatViewProps {
   roomName?: string;
   memberCount: number;
   selfId: string;
+  /** 내 프로필 사진 URL(헤더 우측). 없으면 이니셜/색 폴백. */
+  selfPhotoUrl?: string;
+  /** 내 아바타 이니셜(헤더 우측 폴백). */
+  selfInitial?: string;
+  /** 내 아바타 bg className(폴백). */
+  selfBg?: string;
   messages: ChatMessage[];
   members: RoomMemberLite[];
   input: string;
@@ -113,23 +120,34 @@ export function RoomChatView(props: RoomChatViewProps) {
   if (!props.visible) return null;
 
   return (
-    // testID 는 SafeAreaView 가 아니라 내부 View 에 둔다 — jest 의 safe-area mock 이
-    // SafeAreaView 를 children 통과(props drop)로 처리해 testID 가 사라지기 때문.
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-bg">
-      <View className="flex-1" testID="room-chat-screen">
-        <TopNav
-          left="back"
-          onLeftPress={props.onClose}
-          leftAccessibilityLabel="뒤로"
-          subtitle={`멤버 ${props.memberCount}명`}
-          rightActions={<AvatarStack items={stackItems} max={3} />}
-        />
-
-        <KeyboardAvoidingView
-          testID="room-chat-kav"
-          className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+    // KeyboardAvoidingView 를 최상위로 — 키보드가 올라오면 화면 전체 높이를 줄여
+    // 컴포저가 키보드 위로 정확히 따라붙는다(이전: SafeArea bottom 과 padding 이
+    // 이중 계산돼 입력창 일부가 키보드에 씹힘). iOS=padding, Android=네이티브 adjustResize.
+    // top 만 SafeArea(노치) — 하단 인셋은 컴포저가 자체 padding 으로 처리.
+    <KeyboardAvoidingView
+      testID="room-chat-kav"
+      className="flex-1 bg-bg"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <SafeAreaView edges={['top']} className="flex-1 bg-bg">
+        <View className="flex-1" testID="room-chat-screen">
+          <TopNav
+            left="back"
+            onLeftPress={props.onClose}
+            leftAccessibilityLabel="뒤로"
+            subtitle={`멤버 ${props.memberCount}명`}
+            // 좌측(부제 옆): 방 참여 멤버 아바타 스택(프로필 사진). 우측: 내 프로필.
+            leftAccessory={stackItems.length > 0 ? <AvatarStack items={stackItems} max={3} size={28} /> : undefined}
+            rightActions={
+              <Avatar
+                size={32}
+                initial={props.selfInitial}
+                photoUrl={props.selfPhotoUrl}
+                bg={props.selfBg}
+                accessibilityLabel="내 프로필"
+              />
+            }
+          />
         <View className="flex-1">
           {props.messages.length === 0 ? (
             <StateView
@@ -156,13 +174,17 @@ export function RoomChatView(props: RoomChatViewProps) {
                 const isWhisper = item.whisperToUserId != null;
                 const variant: 'them' | 'me' | 'whisper' = isWhisper ? 'whisper' : mine ? 'me' : 'them';
 
-                // 방향 안내("→ 나에게"/"→ …에게") 제거(S13a 재구성). 받은 귓속말은
-                // 보낸이 이름만 노출(ChatBubble 이 '귓속말' 태그로 비밀임을 표시).
-                // 내가 보낸 귓속말/내 메시지는 ChatBubble 이 이름을 숨긴다.
-                const name = member?.name;
+                // 이름 전달 규칙:
+                //  - 받은 귓속말/them : 보낸이(member) 이름 → ChatBubble 이 이름+태그로 표시
+                //  - 내가 보낸 귓속말   : '수신자' 이름(@닉네임) → 누구에게 속삭였는지
+                //  - 내 일반 메시지(me) : 이름 미표시(ChatBubble 이 숨김)
+                const name =
+                  isWhisper && mine
+                    ? (members.find((mm) => mm.userId === item.whisperToUserId)?.name ?? '상대')
+                    : member?.name;
 
                 return (
-                  <View className="px-[14px] py-[3px]">
+                  <View className="px-[14px] py-[5px]">
                     <ChatBubble
                       variant={variant}
                       mine={mine}
@@ -185,7 +207,8 @@ export function RoomChatView(props: RoomChatViewProps) {
             />
           )}
 
-          <View>
+          {/* 컴포저 영역 — 하단 SafeArea(홈 인디케이터) 인셋을 여기서 흡수. */}
+          <SafeAreaView edges={['bottom']}>
             <NewMessageJumpButton count={props.newCount} onPress={handleJump} />
             <MentionAutocomplete
               candidates={candidates}
@@ -212,11 +235,11 @@ export function RoomChatView(props: RoomChatViewProps) {
               }
               onClearWhisper={props.onClearWhisper}
             />
-          </View>
+          </SafeAreaView>
         </View>
-        </KeyboardAvoidingView>
-      </View>
-    </SafeAreaView>
+        </View>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 

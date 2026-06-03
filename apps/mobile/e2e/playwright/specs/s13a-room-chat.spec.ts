@@ -39,10 +39,12 @@ test.describe('S13a 귓속말', () => {
     await expect(page.getByText(/나에게/)).toHaveCount(0);
   });
 
-  test('내가 보낸 귓속말: 귓속말 태그 노출(본문 표시)', async ({ page }) => {
+  test('내가 보낸 귓속말: 수신자 @닉네임 노출(귓속말 태그 아님)', async ({ page }) => {
     await page.goto('/?scenario=whisper-sent');
     await expect(page.getByText('카페 추천해줘요')).toBeVisible();
-    await expect(page.getByTestId('chat-bubble-whisper-tag').first()).toBeVisible();
+    // me → u1(수아) 귓속말 → 수신자 @수아 노출.
+    await expect(page.getByTestId('chat-bubble-whisper-target').first()).toBeVisible();
+    await expect(page.getByText('@수아')).toBeVisible();
   });
 });
 
