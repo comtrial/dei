@@ -157,4 +157,42 @@ describe('AppLayout auth gate', () => {
     );
     expect(mockReplace).not.toHaveBeenCalled();
   });
+
+  // 회귀: 큐(웨이팅)는 뒤로가기 제스처로 못 빠져나가게 고정한다("무조건 웨이팅 화면만").
+  it('locks the queue screen against back navigation (gestureEnabled:false)', async () => {
+    render(<AppLayout />);
+
+    await waitFor(() => {
+      expect(mockStack).toHaveBeenCalled();
+    });
+    expect(mockStackScreen).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'queue',
+        options: expect.objectContaining({
+          gestureEnabled: false,
+          headerBackVisible: false,
+        }),
+      }),
+      undefined,
+    );
+  });
+
+  // 회귀(대칭): 매칭된 방도 뒤로가기로 홈(매칭 전)으로 못 나가게 고정한다.
+  it('locks the matched room screen against back navigation (gestureEnabled:false)', async () => {
+    render(<AppLayout />);
+
+    await waitFor(() => {
+      expect(mockStack).toHaveBeenCalled();
+    });
+    expect(mockStackScreen).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'room/[roomId]/index',
+        options: expect.objectContaining({
+          gestureEnabled: false,
+          headerBackVisible: false,
+        }),
+      }),
+      undefined,
+    );
+  });
 });

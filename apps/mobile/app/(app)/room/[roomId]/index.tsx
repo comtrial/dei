@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, BackHandler, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -195,6 +195,16 @@ export default function RoomScreen() {
   const router = useRouter();
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
   const { user } = useAuth();
+
+  // 매칭된 방 회원은 어떤 경로로도 홈(매칭 전)으로 못 나간다. Android 하드웨어
+  // 백버튼을 삼킨다(iOS 스와이프는 (app)/_layout 의 gestureEnabled:false). 방
+  // 이탈은 "방 나가기" 정식 플로우(S16)로만.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+      return () => sub.remove();
+    }, []),
+  );
 
   const [gateChecked, setGateChecked] = useState(false);
   const [selfGender, setSelfGender] = useState<string | null>(null);

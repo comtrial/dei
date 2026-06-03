@@ -221,15 +221,17 @@ export default function TeamNewScreen() {
           member_count: members.length,
           mode: 'team',
         });
+        // 큐 등록 = 커밋 상태. 홈/팀구성 화면을 스택에서 제거(replace)해
+        // 뒤로가기로 취소 없이 빠져나가는 상태 불일치를 막는다.
         if (registration.freeRematchWaived) {
-          router.push({
+          router.replace({
             pathname: '/(app)/queue',
             params: { notice: 'free-rematch' },
           });
           return;
         }
 
-        router.push(ROUTES.queue);
+        router.replace(ROUTES.queue);
       },
       { tags: { screen: 'team-new', action: 'start-queue' } },
     ).catch((error) => {

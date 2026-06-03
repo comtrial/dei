@@ -150,6 +150,21 @@ export default function AppLayout() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
+      {/* 큐(웨이팅)는 커밋 상태 — 뒤로가기 제스처로 취소 없이 빠져나가지 못하게
+          막는다(한 사람당 1개 큐, "무조건 웨이팅 화면만"). 큐 이탈은 화면 안의
+          "매칭 취소" 플로우(S08)로만. enqueue 진입부도 replace 로 홈을 스택에서
+          제거하지만, 이 게이트가 어떤 경로의 push 에도 방어선이 된다. */}
+      <Stack.Screen
+        name="queue"
+        options={{ gestureEnabled: false, headerBackVisible: false }}
+      />
+      {/* 방(매칭됨)도 동일 — 매칭된 회원은 어떤 경로로도 홈(매칭 전)으로 못 나간다.
+          방 이탈은 "방 나가기" 정식 플로우(S16 leave-confirm)로만. 제스처 차단 +
+          room/index 의 Android BackHandler 가 양 플랫폼을 막는다. */}
+      <Stack.Screen
+        name="room/[roomId]/index"
+        options={{ gestureEnabled: false, headerBackVisible: false }}
+      />
       <Stack.Screen
         name="room/[roomId]/chat"
         options={
