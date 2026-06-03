@@ -155,38 +155,50 @@ export default function QueueScreen() {
 
     // match_queue/group_match 는 realtime publication 에 없으므로
     // 매칭 신호는 내 user_id 로 INSERT 되는 room_member row 로 감지한다.
-    const channel = supabase
-      .channel(`queue-match:${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'room_member',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const next = payload.new as {
-            room_id?: string | null;
-            status?: string | null;
-          };
-          if (next.status === 'active' && next.room_id) {
-            routeToRoom(next.room_id);
+    //
+    // 방어(2026-06-03 크래시): 채널 이름에 **마운트별 고유 suffix** 를 붙여,
+    // effect 가 빠르게 재실행될 때 같은 이름 채널이 중복 생성돼 supabase 가
+    // "cannot add postgres_changes callbacks after subscribe()" 를 던지는 것을
+    // 막는다(그 에러가 effect 마운트 중 터지면 React 가 passive effect 를
+    // 무한 재연결 → JS 스택오버플로우 → EXC_BAD_ACCESS 네이티브 크래시였다).
+    // 1차 원인인 team_member RLS 무한재귀는 별도 마이그레이션으로 제거됨.
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`queue-match:${userId}:${Date.now()}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'room_member',
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const next = payload.new as {
+              room_id?: string | null;
+              status?: string | null;
+            };
+            if (next.status === 'active' && next.room_id) {
+              routeToRoom(next.room_id);
+            }
+          },
+        )
+        .subscribe((status) => {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            logger.captureMessage(`queue match subscription ${status}`, 'warning');
           }
-        },
-      )
-      .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          logger.captureMessage(
-            `queue match subscription ${status}`,
-            'warning',
-          );
-        }
+        });
+    } catch (error) {
+      // 구독 설정 자체가 던져도 effect 마운트로 전파되지 않게 흡수(무한 재연결 차단).
+      logger.captureException(error, {
+        tags: { screen: 'queue', action: 'subscribe-setup' },
       });
+    }
 
     return () => {
       cancelled = true;
-      void supabase.removeChannel(channel);
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [router, user]);
 
