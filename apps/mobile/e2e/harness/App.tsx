@@ -63,6 +63,7 @@ export default function HarnessApp() {
           onJump={() => {}}
           blockedIds={fixture.blockedIds}
           roomEnded={fixture.roomEnded}
+          overlay={fixture.overlay}
           visible
         />
     </View>

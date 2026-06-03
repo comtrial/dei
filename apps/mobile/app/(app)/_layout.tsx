@@ -1,5 +1,7 @@
 import { Stack } from 'expo-router';
 
+import { resolveChatPresentationMode } from '@/lib/chat/presentation';
+
 /**
  * (app) 그룹 — 로그인 메인 흐름.
  * ------------------------------------------------------------------
@@ -12,5 +14,23 @@ import { Stack } from 'expo-router';
  * 딥링크: `dei://room/[roomId]` (room/[roomId] 동적 라우트로 흡수).
  */
 export default function AppLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  // 채팅 진입 방식(피처 플래그, 앱 재배포 없이 원격 분기 — PostHog `chat-overlay-mode`).
+  //  - overlay : 매칭된 방(room/index, 영상) 위 반투명 오버레이(transparentModal+fade).
+  //              직전 화면(영상)이 마운트된 채 뒤에 비침. UX 스펙대로 scrim 은 화면이 그림.
+  //  - legacy  : 기존 — 별도 화면(card)으로 push(불투명).
+  // 영상 코드(room/index·video 훅)는 어느 모드에서도 건드리지 않는다.
+  const overlay = resolveChatPresentationMode() === 'overlay';
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen
+        name="room/[roomId]/chat"
+        options={
+          overlay
+            ? { presentation: 'transparentModal', animation: 'fade' }
+            : { presentation: 'card' }
+        }
+      />
+    </Stack>
+  );
 }

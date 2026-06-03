@@ -11,6 +11,7 @@ import { RoomChatView } from '@/components/chat/RoomChatView';
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { countNewMessages, isNearBottom } from '@/lib/chat/scroll';
 import { parseMentionQuery, resolveTailMention, type RoomMemberLite } from '@/lib/chat/mention';
+import { resolveChatPresentationMode } from '@/lib/chat/presentation';
 
 /** 방이 종료/삭제됐는지(읽기전용 전환 신호). status active 가 아니거나 ended_at 존재. */
 function isRoomEnded(row: { status?: string | null; ended_at?: string | null } | null): boolean {
@@ -50,6 +51,10 @@ export default function RoomChatScreen() {
 
   // 내 멤버 레코드(헤더 우측 프로필 아바타용).
   const self = useMemo(() => members.find((m) => m.userId === selfId), [members, selfId]);
+
+  // 채팅 진입 방식(피처 플래그). 'overlay' 면 영상 위 반투명 레이어(scrim/dark band),
+  // 아니면 기존 불투명 화면. 라우트 presentation 은 (app)/_layout 이 같은 플래그로 결정.
+  const overlay = resolveChatPresentationMode() === 'overlay';
 
   const { messages, send, retry } = useRoomChat({ roomId: roomId ?? '', selfId });
 
@@ -244,6 +249,7 @@ export default function RoomChatScreen() {
       onScroll={onScroll}
       blockedIds={blockedIds}
       roomEnded={roomEnded}
+      overlay={overlay}
       visible
     />
   );
