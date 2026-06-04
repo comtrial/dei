@@ -58,19 +58,53 @@ describe('useRoomEndedDetector', () => {
     expect(onRoomEnded).not.toHaveBeenCalled();
   });
 
-  it('active 0명 → grace(5s) 후 onRoomEnded 1회 발화', () => {
+  it('본인 active → left 전환 시 grace(5s) 후 onRoomEnded 1회 발화', () => {
     const onRoomEnded = jest.fn();
-    const members = [makeRow('user-a', 'left')];
+    const activeMembers = [makeRow('user-a', 'active')];
+    const leftMembers = [makeRow('user-a', 'left')];
 
-    renderHook(() =>
-      useRoomEndedDetector('room-1', members, { selfUserId: 'user-a', onRoomEnded }),
+    const { rerender } = renderHook(
+      ({ members }: { members: RoomMemberRow[] }) =>
+        useRoomEndedDetector('room-1', members, { selfUserId: 'user-a', onRoomEnded }),
+      { initialProps: { members: activeMembers } },
     );
+    // 본인을 active 로 먼저 확인 → 그 후 본인이 left 로 사라짐.
+    rerender({ members: leftMembers });
 
     act(() => { jest.advanceTimersByTime(4999); });
     expect(onRoomEnded).not.toHaveBeenCalled();
 
     act(() => { jest.advanceTimersByTime(1); });
     expect(onRoomEnded).toHaveBeenCalledTimes(1);
+  });
+
+  // 회귀(이번 버그): 본인이 active 인데 members 가 *일시적으로 빈 배열*(refetch/
+  // 포그라운드 복귀 윈도우)이어도 ended 로 오판해 홈으로 빠지면 안 된다.
+  it('본인 active 본 뒤 members 일시 빈 배열 → onRoomEnded 미발화(오판 방지)', () => {
+    const onRoomEnded = jest.fn();
+    const activeMembers = [makeRow('user-a', 'active')];
+
+    const { rerender } = renderHook(
+      ({ members }: { members: RoomMemberRow[] }) =>
+        useRoomEndedDetector('room-1', members, { selfUserId: 'user-a', onRoomEnded }),
+      { initialProps: { members: activeMembers } },
+    );
+    // refetch 중 일시적으로 빈 배열 → 5s 경과 → 다시 본인 active 복귀.
+    rerender({ members: [] });
+    act(() => { jest.advanceTimersByTime(3000); });
+    rerender({ members: activeMembers });
+    act(() => { jest.advanceTimersByTime(5000); });
+    expect(onRoomEnded).not.toHaveBeenCalled();
+  });
+
+  // 초기 로딩(본인을 active 로 보기 전 빈/left)에는 절대 발화하지 않는다.
+  it('본인을 active 로 보기 전(초기 빈/left)에는 onRoomEnded 미발화', () => {
+    const onRoomEnded = jest.fn();
+    renderHook(() =>
+      useRoomEndedDetector('room-1', [], { selfUserId: 'user-a', onRoomEnded }),
+    );
+    act(() => { jest.advanceTimersByTime(6000); });
+    expect(onRoomEnded).not.toHaveBeenCalled();
   });
 
   it('grace 도중 active 복귀 시 타이머 취소 → onRoomEnded 미발화', () => {
@@ -94,13 +128,13 @@ describe('useRoomEndedDetector', () => {
 
   it('onRoomEnded 중복 발화 방지 (1회 lock)', () => {
     const onRoomEnded = jest.fn();
-    const members = [makeRow('user-a', 'left')];
 
     const { rerender } = renderHook(
       ({ m }: { m: RoomMemberRow[] }) =>
         useRoomEndedDetector('room-1', m, { selfUserId: 'user-a', onRoomEnded }),
-      { initialProps: { m: members } },
+      { initialProps: { m: [makeRow('user-a', 'active')] } },
     );
+    rerender({ m: [makeRow('user-a', 'left')] });
 
     act(() => { jest.advanceTimersByTime(5000); });
     expect(onRoomEnded).toHaveBeenCalledTimes(1);
@@ -112,12 +146,14 @@ describe('useRoomEndedDetector', () => {
 
   it('onRoomEnded 발화 시 analytics room_closed_last_member_left 이벤트 발화', () => {
     const onRoomEnded = jest.fn();
-    const members = [makeRow('user-a', 'left')];
     const { analytics } = require('@dei/shared') as { analytics: { capture: jest.Mock } };
 
-    renderHook(() =>
-      useRoomEndedDetector('room-1', members, { selfUserId: 'user-a', onRoomEnded }),
+    const { rerender } = renderHook(
+      ({ m }: { m: RoomMemberRow[] }) =>
+        useRoomEndedDetector('room-1', m, { selfUserId: 'user-a', onRoomEnded }),
+      { initialProps: { m: [makeRow('user-a', 'active')] } },
     );
+    rerender({ m: [makeRow('user-a', 'left')] });
 
     act(() => { jest.advanceTimersByTime(5000); });
 
@@ -129,11 +165,13 @@ describe('useRoomEndedDetector', () => {
 
   it('unmount 시 grace 타이머 정리 → onRoomEnded 미발화', () => {
     const onRoomEnded = jest.fn();
-    const members = [makeRow('user-a', 'left')];
 
-    const { unmount } = renderHook(() =>
-      useRoomEndedDetector('room-1', members, { selfUserId: 'user-a', onRoomEnded }),
+    const { rerender, unmount } = renderHook(
+      ({ m }: { m: RoomMemberRow[] }) =>
+        useRoomEndedDetector('room-1', m, { selfUserId: 'user-a', onRoomEnded }),
+      { initialProps: { m: [makeRow('user-a', 'active')] } },
     );
+    rerender({ m: [makeRow('user-a', 'left')] });
 
     act(() => { jest.advanceTimersByTime(3000); });
     unmount();
