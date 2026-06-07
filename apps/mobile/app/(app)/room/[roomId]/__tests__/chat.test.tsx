@@ -152,11 +152,26 @@ describe('RoomChatScreen member leave realtime', () => {
   });
 
   it('adds a chat system notice and removes the leaver from active member count', async () => {
+    mockGetCachedRoomChatMembers.mockReturnValue([
+      {
+        avatarBg: 'bg-me',
+        avatarInitial: '나',
+        name: '나',
+        status: 'active',
+        userId: 'me',
+      },
+      {
+        avatarBg: 'bg-user-a',
+        avatarInitial: '수',
+        name: '수아',
+        status: 'active',
+        userId: 'user-a',
+      },
+    ]);
+
     render(<RoomChatScreen />);
 
-    await waitFor(() => {
-      expect(mockLatestChatProps?.memberCount).toBe(2);
-    });
+    expect(mockLatestChatProps?.memberCount).toBe(2);
 
     await waitFor(() => {
       expect(mockMemberUpdateHandler).toEqual(expect.any(Function));
