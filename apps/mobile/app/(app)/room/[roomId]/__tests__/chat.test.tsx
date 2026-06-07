@@ -158,6 +158,10 @@ describe('RoomChatScreen member leave realtime', () => {
       expect(mockLatestChatProps?.memberCount).toBe(2);
     });
 
+    await waitFor(() => {
+      expect(mockMemberUpdateHandler).toEqual(expect.any(Function));
+    });
+
     act(() => {
       mockMemberUpdateHandler?.({
         left_at: '2026-06-07T00:01:00.000Z',
