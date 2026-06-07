@@ -98,6 +98,22 @@ export default function RoomChatScreen() {
     if (user?.id) setSelfId(user.id);
   }, [user?.id]);
 
+  // 채팅 화면 진입 시 읽음 마킹 → 방 화면 unread 점 사라짐. 실패해도 채팅은
+  // 정상 동작(점이 안 사라질 뿐) → 회복 가능, 비동기 경계만 보호하고 캡처만.
+  useEffect(() => {
+    if (!roomId || !user?.id) return;
+    void logger
+      .withErrorCapture(
+        'room.mark-read',
+        async () => {
+          const { error } = await supabase.rpc('mark_room_read', { p_room_id: roomId });
+          if (error) throw error;
+        },
+        { tags: { feature: 'chat-unread', room_id: roomId } },
+      )
+      .catch(() => {});
+  }, [roomId, user?.id]);
+
   useEffect(() => {
     if (!roomId) return;
     const cached = getCachedRoomChatMembers(roomId);
