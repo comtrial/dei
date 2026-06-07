@@ -27,6 +27,11 @@ export default function VideoCaptureScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
   const [overlayMounted, setOverlayMounted] = useState(true);
+  // 권한 grant 직후 첫 마운트된 CameraView 가 초기화되지 않아(expo-camera#31597,
+  // onCameraReady 미호출 → 흰 화면) 셔터가 영영 활성화 안 되는 문제. key 를 바꿔
+  // 강제 재마운트하면 카메라 세션이 새로 초기화된다.
+  const [cameraKey, setCameraKey] = useState(0);
+  const remountTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const progressAnimRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -63,9 +68,21 @@ export default function VideoCaptureScreen() {
       });
     }, 350);
 
+    // onCameraReady 가 끝내 안 불리면(흰 화면) 한 번 더 강제 재마운트한다.
+    remountTimerRef.current = setTimeout(() => {
+      setCameraReady((ready) => {
+        if (!ready) setCameraKey((k) => k + 1);
+        return ready;
+      });
+    }, 1200);
+
     return () => {
       clearTimeout(fadeTimer);
       clearInterval(timerId);
+      if (remountTimerRef.current) {
+        clearTimeout(remountTimerRef.current);
+        remountTimerRef.current = null;
+      }
       setIsFocused(false);
       setCameraReady(false);
       recordingRef.current = false;
@@ -105,6 +122,11 @@ export default function VideoCaptureScreen() {
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
       if ((state === 'inactive' || state === 'background') && recordingRef.current) {
         void stopRecording();
+      }
+      // 포그라운드 복귀 시 카메라 세션을 재마운트해 초기화되지 않은 프리뷰를 살린다.
+      if (state === 'active' && !recordingRef.current) {
+        setCameraReady(false);
+        setCameraKey((k) => k + 1);
       }
     });
     return () => sub.remove();
@@ -167,7 +189,7 @@ export default function VideoCaptureScreen() {
     <View style={StyleSheet.absoluteFill} className="bg-black">
       {isFocused && (
         <CameraView
-          key={`cam-${facing}`}
+          key={`cam-${cameraKey}-${facing}`}
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           mode="video"
