@@ -37,6 +37,18 @@ export const withSpring = <T,>(toValue: T) => toValue;
 export const cancelAnimation = (_sv: unknown) => {};
 export const interpolate = (x: number) => x;
 export const useDerivedValue = <T,>(fn: () => T) => ({ value: fn() });
+
+// GridRoom(@dei/ui, RoomChatView 가 배럴로 끌어옴)이 `runOnJS(cb)(args)` 로
+// worklet→JS 콜백을 브릿지한다. 웹 하네스엔 worklet 이 없으므로 콜백을 그대로
+// 반환해 동기 호출되게 둔다(존재 + 호출 안전만 보장 — 애니메이션 non-load-bearing).
+export const runOnJS =
+  <A extends unknown[], R>(fn: (...args: A) => R) =>
+  (...args: A): R =>
+    fn(...args);
+export const runOnUI =
+  <A extends unknown[], R>(fn: (...args: A) => R) =>
+  (...args: A): R =>
+    fn(...args);
 export const Easing = new Proxy(
   {},
   { get: () => (..._args: unknown[]) => (x: number) => x },
