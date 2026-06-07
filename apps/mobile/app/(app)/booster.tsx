@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { getRematchRestriction, logger, POLICY } from '@dei/shared';
+import { analytics, getRematchRestriction, logger, POLICY } from '@dei/shared';
 import {
   AlertDialog,
   Badge,
@@ -21,6 +21,7 @@ import {
   TopNav,
 } from '@dei/ui';
 
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { PAYMENT_PACKS } from '@/lib/b-flow';
 import { enqueueMatchQueue } from '@/lib/matching';
 import { getAppNotificationEnabled, registerPushToken } from '@/lib/notifications.stub';
@@ -116,7 +117,16 @@ export default function BoosterScreen() {
     );
   }, [user]);
 
+  useEffect(() => {
+    analytics.capture(ANALYTICS_EVENTS.booster_paywall_shown, {
+      reason: 'rematch_restricted',
+    });
+  }, []);
+
   const handlePay = () => {
+    analytics.capture(ANALYTICS_EVENTS.booster_purchase_attempted, {
+      product_id: selectedPack.id,
+    });
     void logger.withErrorCapture(
       'booster.purchase',
       async () => {
@@ -164,6 +174,9 @@ export default function BoosterScreen() {
           response,
           paymentProductId ?? selectedPack.id,
         );
+        analytics.capture(ANALYTICS_EVENTS.booster_purchase_succeeded, {
+          product_id: paymentProductId ?? selectedPack.id,
+        });
 
         if (!user?.id) {
           throw new Error('authentication required');
