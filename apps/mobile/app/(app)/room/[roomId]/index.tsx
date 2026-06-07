@@ -33,6 +33,7 @@ import { useRoomPresence } from '@/hooks/useRoomPresence';
 import { useHourSlot } from '@/hooks/useHourSlot';
 import { useAppStateRefetch } from '@/hooks/useAppStateRefetch';
 import { useRoomEndedDetector } from '@/hooks/useRoomEndedDetector';
+import { useRoomUnread } from '@/hooks/useRoomUnread';
 import {
   getSelfVideoCount24h,
   getRoomMembersSnapshot,
@@ -331,6 +332,7 @@ export default function RoomScreen() {
     },
   });
   const { onlineUserIds } = useRoomPresence(roomId, { selfUserId: user?.id ?? null });
+  const { hasUnread } = useRoomUnread(roomId, user?.id ?? null);
 
   useRoomEndedDetector(roomId, members, {
     selfUserId: user?.id ?? '',
@@ -793,9 +795,11 @@ export default function RoomScreen() {
                       router.push(`/room/${roomId}/chat`);
                     }}
                   />
-                  <View className="absolute top-[2px] right-[2px]">
-                    <Badge variant="dot" />
-                  </View>
+                  {hasUnread ? (
+                    <View className="absolute top-[2px] right-[2px]">
+                      <Badge variant="dot" />
+                    </View>
+                  ) : null}
                 </View>
                 <IconButton
                   glyph={MoreHorizontal}
