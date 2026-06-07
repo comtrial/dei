@@ -24,6 +24,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "REPLACE_ME_APPLE_ID_EMAIL",
+        "ascAppId": "REPLACE_ME_ASC_APP_ID",
+        "appleTeamId": "REPLACE_ME_APPLE_TEAM_ID"
+      }
+    }
   }
 }
