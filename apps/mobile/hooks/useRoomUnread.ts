@@ -61,7 +61,11 @@ export function useRoomUnread(roomId: string | undefined, selfId: string | null)
         return;
       }
       const latest = data?.[0]?.created_at as string | undefined;
-      if (latest) setLatestOthersAt((prev) => (prev && prev > latest ? prev : latest));
+      if (latest) {
+        setLatestOthersAt((prev) =>
+          prev && new Date(prev).getTime() >= new Date(latest).getTime() ? prev : latest,
+        );
+      }
     })();
     return () => {
       alive = false;
@@ -75,7 +79,9 @@ export function useRoomUnread(roomId: string | undefined, selfId: string | null)
       if (String(row.user_id) === selfId) return;
       const at = row.created_at as string | undefined;
       if (!at) return;
-      setLatestOthersAt((prev) => (prev && prev > at ? prev : at));
+      setLatestOthersAt((prev) =>
+        prev && new Date(prev).getTime() >= new Date(at).getTime() ? prev : at,
+      );
     });
     return unsub;
   }, [roomId, selfId]);
