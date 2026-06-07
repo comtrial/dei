@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
@@ -7,6 +7,10 @@ const mockGetPermissionState = jest.fn();
 const mockRecordClip = jest.fn();
 const mockAnalyticsCapture = jest.fn();
 const mockRequestMicrophonePermissionsAsync = jest.fn();
+
+// CameraView 가 onCameraReady 를 호출할지 제어한다. 권한 grant 직후 첫 마운트에서
+// onCameraReady 가 끝내 안 불리는 expo-camera 버그(흰 화면)를 재현하기 위함.
+const cameraViewState = { fireReady: true, mountCount: 0 };
 
 jest.mock('expo-router', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factory runs before ESM imports; require is required.
@@ -32,9 +36,13 @@ jest.mock('expo-camera', () => {
         mockRequestMicrophonePermissionsAsync(...args),
     },
     CameraView: ({ onCameraReady }: { onCameraReady?: () => void }) => {
+      // 실제 RN 처럼 마운트당 1회만 실행해야 key 기반 재마운트 횟수를 정확히 잴 수 있다.
+      // (deps 에 onCameraReady 를 넣으면 prop 함수 재생성마다 effect 가 다시 돌아 오탐.)
       React.useEffect(() => {
-        if (onCameraReady) onCameraReady();
-      }, [onCameraReady]);
+        cameraViewState.mountCount += 1;
+        if (onCameraReady && cameraViewState.fireReady) onCameraReady();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트당 1회 (RN 네이티브 동작 모사)
+      }, []);
       return null;
     },
   };
@@ -59,6 +67,8 @@ import VideoCaptureScreen from '../upload';
 describe('VideoCaptureScreen (S11)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    cameraViewState.fireReady = true;
+    cameraViewState.mountCount = 0;
   });
 
   it('권한 denied — router.replace 호출', async () => {
@@ -89,6 +99,47 @@ describe('VideoCaptureScreen (S11)', () => {
     await waitFor(() => {
       expect(mockRecordClip).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('onCameraReady 미호출(흰 화면) — 1.2초 뒤 CameraView 강제 재마운트', async () => {
+    // 권한 grant 직후 첫 마운트에서 onCameraReady 가 안 불리는 상황 재현.
+    mockGetPermissionState.mockResolvedValue('granted');
+    cameraViewState.fireReady = false;
+    jest.useFakeTimers();
+
+    try {
+      render(<VideoCaptureScreen />);
+
+      // 최초 마운트 1회. 셔터는 아직 '카메라 준비 중'.
+      await waitFor(() => {
+        expect(cameraViewState.mountCount).toBe(1);
+      });
+      expect(screen.getByText('카메라 준비 중…')).toBeTruthy();
+
+      // fallback 타이머(1200ms) 경과 → key 변경 → 재마운트.
+      act(() => {
+        jest.advanceTimersByTime(1300);
+      });
+
+      await waitFor(() => {
+        expect(cameraViewState.mountCount).toBe(2);
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('onCameraReady 호출됨 — 재마운트 없이 셔터 활성화', async () => {
+    mockGetPermissionState.mockResolvedValue('granted');
+    cameraViewState.fireReady = true;
+
+    render(<VideoCaptureScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('꾹 눌러서 녹화')).toBeTruthy();
+    });
+    // 정상 경로에선 첫 마운트 1회로 충분.
+    expect(cameraViewState.mountCount).toBe(1);
   });
 
   it('recordClip 성공 — upload-preview 로 push', async () => {
