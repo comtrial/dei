@@ -35,13 +35,15 @@ export type RecordClipResult = {
 
 export async function recordClip(
   cameraRef: RefObject<CameraView | null>,
+  options?: { maxDurationMs?: number },
 ): Promise<RecordClipResult> {
   if (!cameraRef.current) {
     throw new Error('CAMERA_NOT_READY');
   }
 
+  const maxDurationMs = options?.maxDurationMs ?? POLICY.video.maxDurationMs;
   const result = await cameraRef.current.recordAsync({
-    maxDuration: POLICY.video.maxDurationMs / 1000,
+    maxDuration: maxDurationMs / 1000,
   });
 
   if (!result?.uri) {
@@ -57,9 +59,7 @@ export async function recordClip(
     throw new Error('VIDEO_TOO_LARGE');
   }
 
-  const durationMs = POLICY.video.maxDurationMs;
-
-  return { localUri: result.uri, durationMs };
+  return { localUri: result.uri, durationMs: maxDurationMs };
 }
 
 async function generateThumbnail(localUri: string): Promise<string> {
@@ -89,10 +89,10 @@ async function readFileAsArrayBuffer(uri: string): Promise<ArrayBuffer> {
 }
 
 export async function uploadClip(
-  args: { roomId: string; localUri: string; durationMs?: number; capturedAtIso?: string; muted?: boolean },
+  args: { roomId: string; localUri: string; durationMs?: number; capturedAtIso?: string; muted?: boolean; caption?: string | null },
   options: UploadClipOptions = {},
 ): Promise<UploadClipResult> {
-  const { roomId, localUri, durationMs = POLICY.video.maxDurationMs, capturedAtIso, muted = false } = args;
+  const { roomId, localUri, durationMs = POLICY.video.maxDurationMs, capturedAtIso, muted = false, caption } = args;
   const { onProgress } = options;
 
   const {
@@ -167,6 +167,8 @@ export async function uploadClip(
 
   onProgress?.(0.8);
 
+  const trimmedCaption = caption?.trim() || null;
+
   const row: VideoRow = {
     id: videoId,
     room_id: roomId,
@@ -177,6 +179,7 @@ export async function uploadClip(
     hour_slot: getCurrentHourSlotKst(),
     status: 'ready',
     muted,
+    ...(trimmedCaption ? { caption: trimmedCaption } : {}),
     ...(capturedAtIso ? { created_at: capturedAtIso } : {}),
   };
 

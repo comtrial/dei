@@ -224,6 +224,7 @@ function buildCells(
       name: displayName,
       userId: member.user_id,
       uploadTime: uploadHour,
+      caption: video.caption ?? null,
       videoId: video.id,
       present: onlineUserIds.has(member.user_id),
       photoUrl,

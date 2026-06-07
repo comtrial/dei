@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -204,6 +209,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      identity_rejoin_lock: {
+        Row: {
+          ci_hash: string
+          created_at: string
+          id: string
+          locked_until: string
+          reason: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          ci_hash: string
+          created_at?: string
+          id?: string
+          locked_until: string
+          reason?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          ci_hash?: string
+          created_at?: string
+          id?: string
+          locked_until?: string
+          reason?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       match_config: {
         Row: {
@@ -893,6 +928,7 @@ export type Database = {
       }
       video: {
         Row: {
+          caption: string | null
           created_at: string
           duration_ms: number | null
           hour_slot: number | null
@@ -905,6 +941,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          caption?: string | null
           created_at?: string
           duration_ms?: number | null
           hour_slot?: number | null
@@ -917,6 +954,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          caption?: string | null
           created_at?: string
           duration_ms?: number | null
           hour_slot?: number | null
@@ -966,6 +1004,7 @@ export type Database = {
       get_room_videos: {
         Args: { p_hour_from: number; p_hour_to: number; p_room_id: string }
         Returns: {
+          caption: string | null
           created_at: string
           duration_ms: number | null
           hour_slot: number | null
@@ -1006,6 +1045,30 @@ export type Database = {
       room_is_member: {
         Args: { p_room_id: string; p_user_id: string }
         Returns: boolean
+      }
+      send_room_message: {
+        Args: {
+          p_body: string
+          p_client_msg_id?: string
+          p_room_id: string
+          p_whisper_to_user_id?: string
+        }
+        Returns: {
+          body: string
+          client_msg_id: string | null
+          created_at: string
+          id: string
+          room_id: string
+          status: string
+          user_id: string
+          whisper_to_user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "message"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       try_match: { Args: { p_queue_id: string }; Returns: string }
     }
