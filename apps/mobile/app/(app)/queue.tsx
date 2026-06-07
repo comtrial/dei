@@ -1,11 +1,10 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { BackHandler, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { BackHandler } from 'react-native';
 
 import { logger } from '@dei/shared';
-import { Button, Card, PulseRing, Text } from '@dei/ui';
 
+import { MatchingWaitingView } from '@/components/matching/MatchingWaitingView';
 import { expireMatchQueue, isQueueExpired } from '@/lib/matching';
 import { ROUTES, roomRoutes } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
@@ -155,85 +154,64 @@ export default function QueueScreen() {
 
     // match_queue/group_match 는 realtime publication 에 없으므로
     // 매칭 신호는 내 user_id 로 INSERT 되는 room_member row 로 감지한다.
-    const channel = supabase
-      .channel(`queue-match:${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'room_member',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const next = payload.new as {
-            room_id?: string | null;
-            status?: string | null;
-          };
-          if (next.status === 'active' && next.room_id) {
-            routeToRoom(next.room_id);
+    //
+    // 방어(2026-06-03 크래시): 채널 이름에 **마운트별 고유 suffix** 를 붙여,
+    // effect 가 빠르게 재실행될 때 같은 이름 채널이 중복 생성돼 supabase 가
+    // "cannot add postgres_changes callbacks after subscribe()" 를 던지는 것을
+    // 막는다(그 에러가 effect 마운트 중 터지면 React 가 passive effect 를
+    // 무한 재연결 → JS 스택오버플로우 → EXC_BAD_ACCESS 네이티브 크래시였다).
+    // 1차 원인인 team_member RLS 무한재귀는 별도 마이그레이션으로 제거됨.
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`queue-match:${userId}:${Date.now()}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'room_member',
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const next = payload.new as {
+              room_id?: string | null;
+              status?: string | null;
+            };
+            if (next.status === 'active' && next.room_id) {
+              routeToRoom(next.room_id);
+            }
+          },
+        )
+        .subscribe((status) => {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            logger.captureMessage(`queue match subscription ${status}`, 'warning');
           }
-        },
-      )
-      .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          logger.captureMessage(
-            `queue match subscription ${status}`,
-            'warning',
-          );
-        }
+        });
+    } catch (error) {
+      // 구독 설정 자체가 던져도 effect 마운트로 전파되지 않게 흡수(무한 재연결 차단).
+      logger.captureException(error, {
+        tags: { screen: 'queue', action: 'subscribe-setup' },
       });
+    }
 
     return () => {
       cancelled = true;
-      void supabase.removeChannel(channel);
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [router, user]);
 
   return (
-    <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 px-[24px] pb-[36px] pt-[64px]">
-        <View className="items-center">
-          <PulseRing
-            className="mb-[32px]"
-            core={<Text className="text-[24px] font-black text-white">dei</Text>}
-          />
-          <Text variant="h1" className="text-center text-[25px] leading-[33px]">
-            곧 만날 사람들을{'\n'}찾고 있어요
-          </Text>
-          <Text className="mt-[10px] text-center text-[13.5px] leading-[21px] text-ink-3">
-            앱을 닫아도 매칭되면{'\n'}알림으로 알려드려요.
-          </Text>
-        </View>
-
-        <Card className="mt-[34px] items-center rounded-md border-0 bg-bg-2 px-[22px] py-[14px]">
-          <Text className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-3">
-            평균 대기 시간
-          </Text>
-          <Text className="mt-[4px] text-[19px] font-extrabold text-ink">
-            {queue ? '2 ~ 6 시간' : '확인 중'}
-          </Text>
-        </Card>
-
-        <Button
-          variant="secondary"
-          className="mt-auto self-end rounded-full border border-line bg-paper px-[20px] py-[12px]"
-          textClassName="text-[13px] font-bold"
-          onPress={() => router.push(ROUTES.matchCancelConfirm)}
-        >
-          매칭 취소
-        </Button>
-      </View>
-
-      {showFreeRematchNotice ? (
-        <View className="absolute bottom-[34px] left-0 right-0 items-center px-[24px]">
-          <View className="rounded-full bg-ink px-[16px] py-[10px]">
-            <Text className="text-center text-[12.5px] font-bold text-white">
-              바로 매칭 시작할게요
-            </Text>
-          </View>
-        </View>
-      ) : null}
-    </SafeAreaView>
+    <MatchingWaitingView
+      action={{
+        label: '매칭 취소',
+        onPress: () => router.push(ROUTES.matchCancelConfirm),
+      }}
+      cardLabel="평균 대기 시간"
+      cardValue={queue ? '2 ~ 6 시간' : '확인 중'}
+      description={`앱을 닫아도 매칭되면\n알림으로 알려드려요.`}
+      title={`곧 만날 사람들을\n찾고 있어요`}
+      toast={showFreeRematchNotice ? '바로 매칭 시작할게요' : null}
+    />
   );
 }

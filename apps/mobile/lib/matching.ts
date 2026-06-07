@@ -38,6 +38,10 @@ export function isMatchQueueErrorCode(error: unknown, code: string) {
   return error instanceof MatchQueueError && error.code === code;
 }
 
+export function isMatchQueueError(error: unknown): error is MatchQueueError {
+  return error instanceof MatchQueueError;
+}
+
 async function toFunctionError(fallback: string, error?: FunctionInvokeError | null) {
   if (error?.context) {
     try {

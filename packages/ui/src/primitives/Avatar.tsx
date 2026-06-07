@@ -1,6 +1,5 @@
-import { forwardRef } from 'react';
-import { View, Text, type ViewProps } from 'react-native';
-import { Image } from 'expo-image';
+import { forwardRef, useEffect, useState } from 'react';
+import { Image, View, Text, type ViewProps } from 'react-native';
 
 import { cn } from '../lib/cn';
 
@@ -18,6 +17,7 @@ import { cn } from '../lib/cn';
  *
  * 규칙(DS 강제 D-04):
  *  - 색·치수는 NativeWind className(arbitrary-value 포함)으로만 인코딩.
+ *  - 치수 arbitrary-value 는 NativeWind 추출을 위해 정적 클래스 테이블로 유지한다.
  *  - inline `style={{}}` / raw hex `style` / StyleSheet 미사용.
  *  - ring(accent 테두리)·presenceDot·badge 는 토큰 className(accent/paper)으로.
  *
@@ -41,6 +41,32 @@ const PEER_BGS = [
   'bg-[#5B9AC9]',
 ] as const;
 
+const SIZE_CLASS: Record<number, string> = {
+  20: 'h-[20px] w-[20px]',
+  24: 'h-[24px] w-[24px]',
+  26: 'h-[26px] w-[26px]',
+  28: 'h-[28px] w-[28px]',
+  32: 'h-[32px] w-[32px]',
+  36: 'h-[36px] w-[36px]',
+  38: 'h-[38px] w-[38px]',
+  120: 'h-[120px] w-[120px]',
+};
+
+const INITIAL_SIZE_CLASS: Record<number, string> = {
+  20: 'text-[7px] leading-[20px]',
+  24: 'text-[9px] leading-[24px]',
+  26: 'text-[10px] leading-[26px]',
+  28: 'text-[10px] leading-[28px]',
+  32: 'text-[12px] leading-[32px]',
+  36: 'text-[13px] leading-[36px]',
+  38: 'text-[14px] leading-[38px]',
+  120: 'text-[48px] leading-[120px]',
+};
+
+function avatarSizeClass(size: number): string {
+  return SIZE_CLASS[size] ?? SIZE_CLASS[38];
+}
+
 /** userId(또는 임의 키) → 결정적 peer 아바타 bg className. 캐싱·재렌더에 안정. */
 export function avatarColorFor(key: string): string {
   let h = 0;
@@ -53,7 +79,7 @@ export interface AvatarProps extends ViewProps {
   initial?: string;
   /**
    * 프로필 이미지 URL. 지정 시 이니셜 대신 원형(size) 이미지로 렌더하며,
-   * 미지정/로드 실패 전까지 `initial` 폴백을 사용한다. expo-image 로 디코딩.
+   * 미지정/로드 실패 시 `initial` 폴백을 사용한다.
    */
   photoUrl?: string;
   /** 원형 지름(px). 18~120. 기본 38 (S05 `.av-me`). */
@@ -87,12 +113,10 @@ export interface AvatarProps extends ViewProps {
  */
 function initialClass(size: number): string {
   const isHero = size >= 64;
-  const fontPx = Math.round(size * (isHero ? 0.4 : 0.37));
   return cn(
     'text-white text-center',
     isHero ? 'font-extrabold' : 'font-bold',
-    `text-[${fontPx}px]`,
-    `leading-[${size}px]`,
+    INITIAL_SIZE_CLASS[size] ?? INITIAL_SIZE_CLASS[38],
   );
 }
 
@@ -117,6 +141,13 @@ export const Avatar = forwardRef<View, AvatarProps>(function Avatar(
   },
   ref,
 ) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const showPhoto = photoUrl != null && !imageFailed;
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [photoUrl]);
+
   return (
     <View
       ref={ref}
@@ -126,27 +157,24 @@ export const Avatar = forwardRef<View, AvatarProps>(function Avatar(
         // shrink-0: flex-row 부모(Chip·아바타 스택·헤더 등)에서 라벨/배지가 공간을
         // 요구할 때 아바타 width 만 압축돼 타원으로 찌그러지는 것을 막는다(정사각 보존).
         'relative shrink-0 items-center justify-center overflow-hidden rounded-full',
-        `w-[${size}px] h-[${size}px]`,
-        bg ?? DEFAULT_BG,
+        avatarSizeClass(size),
+        showPhoto ? 'bg-bg-2' : bg ?? DEFAULT_BG,
         // PresenceAvatar accent 링: 1.5px accent 보더(box-shadow 대체).
         ring && 'border-[1.5px] border-accent',
         className,
       )}
       {...rest}
     >
-      {photoUrl != null ? (
+      {showPhoto ? (
         // 프로필 이미지: 원형 컨테이너를 가득 채우는 cover 이미지(이니셜 폴백 대체).
-        // cachePolicy=memory-disk: 한 번 받은 아바타는 디스크+메모리 캐시 → 재진입/
-        // 재렌더 시 네트워크 왕복 없이 즉시 표시(리드타임 제거). recyclingKey 로
-        // url 별 캐시 분리. placeholder 가림 없이 부드럽게(짧은 transition).
+        // react-native Image 를 사용한다. 프로필 상세 화면도 같은 경로라 iOS 실기기에서
+        // Supabase signed URL 렌더링이 일관된다. 로드 실패 시 빈 색 원 대신 이니셜 폴백.
         <Image
           testID="av-photo"
           source={{ uri: photoUrl }}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          recyclingKey={photoUrl}
-          transition={120}
-          className={cn('rounded-full', `w-[${size}px] h-[${size}px]`)}
+          resizeMode="cover"
+          onError={() => setImageFailed(true)}
+          className={cn('rounded-full', avatarSizeClass(size))}
         />
       ) : initial != null ? (
         <Text className={cn(initialClass(size), textClassName)}>{initial}</Text>

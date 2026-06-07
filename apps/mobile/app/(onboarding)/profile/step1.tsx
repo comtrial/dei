@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { Keyboard, TouchableWithoutFeedback, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { analytics, logger } from '@dei/shared';
@@ -273,68 +273,74 @@ export default function ProfileStep1Screen() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-1 px-[24px] pb-[118px] pt-[18px]">
-        <Text variant="meta" tone="ink-3">
-          기본 정보 · 1 / 3
-        </Text>
-        <ProgressBar value={1 / 3} className="mt-[10px]" />
-
-        <View className="mt-[34px]">
-          <Text variant="h1" className="text-[26px] leading-[34px]">
-            닉네임과 성별을{'\n'}알려주세요
+      <TouchableWithoutFeedback
+        accessible={false}
+        onPress={Keyboard.dismiss}
+        testID="onboarding-step1-dismiss-area"
+      >
+        <View className="flex-1 px-[24px] pb-[118px] pt-[18px]">
+          <Text variant="meta" tone="ink-3">
+            기본 정보 · 1 / 3
           </Text>
-          <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-            성별은 매칭에 사용돼요
-          </Text>
-        </View>
+          <ProgressBar value={1 / 3} className="mt-[10px]" />
 
-        <Input
-          value={nickname}
-          maxLength={NICKNAME_MAX_LENGTH}
-          onChangeText={setNickname}
-          label="닉네임"
-          labelAccessory={`${normalizeNickname(nickname).length} / ${NICKNAME_MAX_LENGTH}`}
-          placeholder="예: 하루산책"
-          state={validation.state === 'invalid' ? 'error' : 'default'}
-          helper={helperMessage}
-          helperClassName={helperClassName}
-          className="mt-[30px]"
-          testID="onboarding-nickname-input"
-        />
+          <View className="mt-[34px]">
+            <Text variant="h1" className="text-[26px] leading-[34px]">
+              닉네임과 성별을{'\n'}알려주세요
+            </Text>
+            <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+              성별은 매칭에 사용돼요
+            </Text>
+          </View>
 
-        <View className="mt-[24px]">
-          <Text variant="eyebrow" tone="ink-3">
-            성별 선택
-          </Text>
-          <ChoiceList
-            tone="accent"
-            className="mt-[10px]"
-            value={gender}
-            onChange={(value) => {
-              if (value === 'male' || value === 'female') {
-                setGender(value);
-              }
-            }}
-            options={GENDER_OPTIONS}
-          />
-        </View>
-
-        <View className="mt-[28px] gap-[12px]">
-          <Text variant="eyebrow" tone="ink-3">
-            본인인증 정보
-          </Text>
           <Input
-            state="locked"
-            readonly
-            label="생년월일"
-            labelAccessory="🔒 본인인증 자동"
-            value={birthDateLongLabel(verifiedProfile.birthDate, verifiedProfile.birthYear)}
+            value={nickname}
+            maxLength={NICKNAME_MAX_LENGTH}
+            onChangeText={setNickname}
+            label="닉네임"
+            labelAccessory={`${normalizeNickname(nickname).length} / ${NICKNAME_MAX_LENGTH}`}
+            placeholder="예: 하루산책"
+            state={validation.state === 'invalid' ? 'error' : 'default'}
+            helper={helperMessage}
+            helperClassName={helperClassName}
+            className="mt-[30px]"
+            testID="onboarding-nickname-input"
           />
-          <Badge variant="required" tone="info">
-            생년월일은 본인인증 기준으로만 사용돼요.
-          </Badge>
+
+          <View className="mt-[24px]">
+            <Text variant="eyebrow" tone="ink-3">
+              성별 선택
+            </Text>
+            <ChoiceList
+              tone="accent"
+              className="mt-[10px]"
+              value={gender}
+              onChange={(value) => {
+                if (value === 'male' || value === 'female') {
+                  setGender(value);
+                }
+              }}
+              options={GENDER_OPTIONS}
+            />
+          </View>
+
+          <View className="mt-[28px] gap-[12px]">
+            <Text variant="eyebrow" tone="ink-3">
+              본인인증 정보
+            </Text>
+            <Input
+              state="locked"
+              readonly
+              label="생년월일"
+              labelAccessory="🔒 본인인증 자동"
+              value={birthDateLongLabel(verifiedProfile.birthDate, verifiedProfile.birthYear)}
+            />
+            <Badge variant="required" tone="info">
+              생년월일은 본인인증 기준으로만 사용돼요.
+            </Badge>
+          </View>
         </View>
-      </View>
+      </TouchableWithoutFeedback>
 
       <BottomActionBar fixed>
         <Button

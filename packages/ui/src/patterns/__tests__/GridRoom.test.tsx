@@ -76,6 +76,25 @@ describe('GridRoom (X10)', () => {
     expect(screen.getByText('‹ 회상')).toBeTruthy();
   });
 
+  it('enlarges the current time slot and commits a pressed slot', () => {
+    const onTimeSlotPress = jest.fn();
+    const onTimeSlotPreview = jest.fn();
+    render(
+      <GridRoom
+        cells={cells}
+        timeStrip={timeStrip}
+        onTimeSlotPress={onTimeSlotPress}
+        onTimeSlotPreview={onTimeSlotPreview}
+      />,
+    );
+
+    expect(screen.getByTestId('gridroom-time-slot-3').props.className).toContain('scale-110');
+    fireEvent.press(screen.getByTestId('gridroom-time-slot-4'));
+
+    expect(onTimeSlotPreview).toHaveBeenCalledWith(4, timeStrip[4]);
+    expect(onTimeSlotPress).toHaveBeenCalledWith(4, timeStrip[4]);
+  });
+
   it('omits the timeStrip when not provided', () => {
     render(<GridRoom cells={cells} />);
     expect(screen.queryByTestId('gridroom-now-pill')).toBeNull();
@@ -99,9 +118,9 @@ describe('GridRoom (X10)', () => {
   it('fires onAvatarPress for empty cells (Zzz.. 셀도 프로필 진입)', () => {
     const onAvatarPress = jest.fn();
     render(<GridRoom cells={cells} onAvatarPress={onAvatarPress} />);
-    // cells[0] = { kind: 'empty', name: '동현' }
-    fireEvent.press(screen.getByTestId('gridroom-avatar-0'));
-    expect(onAvatarPress).toHaveBeenCalledWith(cells[0], 0);
+    // cells[3] = { kind: 'empty', name: '동현' }
+    fireEvent.press(screen.getByTestId('gridroom-avatar-3'));
+    expect(onAvatarPress).toHaveBeenCalledWith(cells[3], 3);
   });
 
   it('falls back to a token solid (bg-bg-2) cell background without a GradientComponent', () => {
@@ -155,6 +174,44 @@ describe('GridRoom (X10)', () => {
     expect(photo.props.source).toEqual({ uri: 'https://example.test/photo.jpg' });
     // 이미지가 있으면 이니셜 텍스트는 렌더하지 않는다(폴백 대체).
     expect(screen.queryByTestId('gridroom-avatar-initial-0')).toBeNull();
+  });
+
+  it('renders the profile photo for empty Zzz cells when photoUrl is provided', () => {
+    render(
+      <GridRoom
+        cells={[
+          {
+            kind: 'empty',
+            name: '동현',
+            photoUrl: 'https://example.test/empty-photo.jpg',
+          },
+        ]}
+      />,
+    );
+
+    const photo = screen.getByTestId('gridroom-avatar-photo-0');
+    expect(photo).toBeTruthy();
+    expect(photo.props.source).toEqual({ uri: 'https://example.test/empty-photo.jpg' });
+    expect(screen.queryByTestId('gridroom-avatar-initial-0')).toBeNull();
+  });
+
+  it('falls back to the initial if the grid avatar photo fails to load', () => {
+    render(
+      <GridRoom
+        cells={[
+          {
+            kind: 'empty',
+            name: '동현',
+            photoUrl: 'https://example.test/empty-photo.jpg',
+          },
+        ]}
+      />,
+    );
+
+    fireEvent(screen.getByTestId('gridroom-avatar-photo-0'), 'error');
+
+    expect(screen.queryByTestId('gridroom-avatar-photo-0')).toBeNull();
+    expect(screen.getByTestId('gridroom-avatar-initial-0')).toBeTruthy();
   });
 
   it('falls back to the initial when no photoUrl is provided', () => {

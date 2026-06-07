@@ -2,13 +2,108 @@ import type { Database } from '@dei/api';
 import { POLICY, logger } from '@dei/shared';
 
 import { supabase } from '@/lib/supabase';
+import { cacheProfilePhotoUrl } from '@/lib/profile-photo-cache';
 
 type VideoRow = Database['public']['Tables']['video']['Row'];
 type ProfileRow = Database['public']['Tables']['profile']['Row'];
 
-export type RoomMemberWithProfile = Database['public']['Tables']['room_member']['Row'] & {
-  profile: Pick<ProfileRow, 'nickname' | 'gender' | 'photo_url'> | null;
+export type MemberProfile = Pick<
+  ProfileRow,
+  'nickname' | 'gender' | 'birth_year' | 'region' | 'photo_url' | 'bio' | 'mbti'
+> & {
+  avatar_url?: string | null;
 };
+
+export type RoomMemberWithProfile = Database['public']['Tables']['room_member']['Row'] & {
+  profile: MemberProfile | null;
+};
+
+export type MemberProfileResult = {
+  memberStatus: string;
+  profile: MemberProfile | null;
+};
+
+type RoomMembersBundle = {
+  blockedUserIds?: string[];
+  memberProfile?: MemberProfileResult | null;
+  members: RoomMemberWithProfile[];
+};
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function primeAvatarCache(members: RoomMemberWithProfile[]) {
+  await Promise.all(
+    members.map((member) => {
+      const path = member.profile?.photo_url;
+      const url = member.profile?.avatar_url;
+      return path && url
+        ? cacheProfilePhotoUrl({ path, url, userId: member.user_id })
+        : Promise.resolve();
+    }),
+  );
+}
+
+async function getRoomMembersBundle(
+  roomId: string,
+  targetUserId?: string,
+): Promise<RoomMembersBundle | null> {
+  const { data, error } = await supabase.functions.invoke<RoomMembersBundle>('room-members', {
+    body: targetUserId ? { roomId, targetUserId } : { roomId },
+  });
+
+  if (error || !data?.members) {
+    logger.captureMessage('room-members edge fallback', 'warning', {
+      tags: { feature: 'room_rpc', rpc: 'room-members', room_id: roomId },
+      extra: { reason: error ? getErrorMessage(error) : 'empty response' },
+    });
+    return null;
+  }
+
+  await primeAvatarCache(data.members);
+  return data;
+}
+
+async function getRoomMembersWithProfileDirect(
+  roomId: string,
+): Promise<RoomMemberWithProfile[]> {
+  const { data: members, error: membersError } = await supabase
+    .from('room_member')
+    .select('*')
+    .eq('room_id', roomId)
+    .eq('status', 'active');
+  if (membersError) throw membersError;
+  if (!members || members.length === 0) return [];
+
+  const userIds = members.map((m) => m.user_id);
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profile')
+    .select('user_id, nickname, gender, birth_year, region, photo_url, bio, mbti')
+    .in('user_id', userIds);
+  if (profilesError) throw profilesError;
+
+  const profileMap = new Map(
+    (profiles ?? []).map((p) => [
+      p.user_id,
+      {
+        avatar_url: null,
+        bio: p.bio,
+        birth_year: p.birth_year,
+        nickname: p.nickname,
+        gender: p.gender,
+        mbti: p.mbti,
+        photo_url: p.photo_url,
+        region: p.region,
+      },
+    ]),
+  );
+
+  return members.map((m) => ({
+    ...m,
+    profile: profileMap.get(m.user_id) ?? null,
+  }));
+}
 
 export async function getRoomVideos(
   roomId: string,
@@ -65,34 +160,41 @@ export async function getRoomMembersWithProfile(
   roomId: string,
 ): Promise<RoomMemberWithProfile[]> {
   try {
-    const { data: members, error: membersError } = await supabase
-      .from('room_member')
-      .select('*')
-      .eq('room_id', roomId)
-      .eq('status', 'active');
-    if (membersError) throw membersError;
-    if (!members || members.length === 0) return [];
+    const bundle = await getRoomMembersBundle(roomId);
+    if (bundle) return bundle.members;
 
-    const userIds = members.map((m) => m.user_id);
-    const { data: profiles, error: profilesError } = await supabase
-      .from('profile')
-      .select('user_id, nickname, gender, photo_url')
-      .in('user_id', userIds);
-    if (profilesError) throw profilesError;
-
-    const profileMap = new Map(
-      (profiles ?? []).map((p) => [p.user_id, { nickname: p.nickname, gender: p.gender, photo_url: p.photo_url }]),
-    );
-
-    return members.map((m) => ({
-      ...m,
-      profile: profileMap.get(m.user_id) ?? null,
-    }));
+    return await getRoomMembersWithProfileDirect(roomId);
   } catch (err) {
     logger.captureException(err, {
       tags: { feature: 'room_rpc', rpc: 'get_room_members_with_profile', room_id: roomId },
     });
     return [];
+  }
+}
+
+export async function getRoomMembersSnapshot(
+  roomId: string,
+  selfUserId: string,
+): Promise<{ blockedUserIds: Set<string>; members: RoomMemberWithProfile[] }> {
+  try {
+    const bundle = await getRoomMembersBundle(roomId);
+    if (bundle) {
+      return {
+        blockedUserIds: new Set(bundle.blockedUserIds ?? []),
+        members: bundle.members,
+      };
+    }
+
+    const [members, blockedUserIds] = await Promise.all([
+      getRoomMembersWithProfileDirect(roomId),
+      getBlockedUserIds(selfUserId),
+    ]);
+    return { blockedUserIds, members };
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'room_rpc', rpc: 'get_room_members_snapshot', room_id: roomId },
+    });
+    return { blockedUserIds: new Set(), members: [] };
   }
 }
 
@@ -153,19 +255,24 @@ export async function getSiblingVideos(
   }
 }
 
-export type MemberProfileResult = {
-  memberStatus: string;
-  profile: Pick<
-    ProfileRow,
-    'nickname' | 'gender' | 'birth_year' | 'region' | 'photo_url' | 'bio'
-  > | null;
-};
-
 export async function getMemberProfile(
   userId: string,
   roomId: string,
 ): Promise<MemberProfileResult | null> {
   try {
+    const bundle = await getRoomMembersBundle(roomId, userId);
+    if (bundle && Object.prototype.hasOwnProperty.call(bundle, 'memberProfile')) {
+      const profile = bundle.memberProfile?.profile;
+      if (profile?.photo_url && profile.avatar_url) {
+        await cacheProfilePhotoUrl({
+          path: profile.photo_url,
+          url: profile.avatar_url,
+          userId,
+        });
+      }
+      return bundle.memberProfile ?? null;
+    }
+
     const { data: member, error: memberError } = await supabase
       .from('room_member')
       .select('status')
@@ -178,7 +285,7 @@ export async function getMemberProfile(
 
     const { data: profile, error: profileError } = await supabase
       .from('profile')
-      .select('nickname, gender, birth_year, region, photo_url, bio')
+      .select('nickname, gender, birth_year, region, photo_url, bio, mbti')
       .eq('user_id', userId)
       .single();
 
@@ -186,7 +293,7 @@ export async function getMemberProfile(
 
     return {
       memberStatus: member.status,
-      profile: profile ?? null,
+      profile: profile ? { ...profile, avatar_url: null } : null,
     };
   } catch (err) {
     logger.captureException(err, {

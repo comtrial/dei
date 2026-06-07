@@ -168,16 +168,16 @@ describe('logger', () => {
     // Re-import a fresh module so we hit the real default (consoleTransport).
     vi.resetModules();
     const fresh = await import('../logger');
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     fresh.logger.captureException(new Error('to-console'));
     fresh.logger.captureMessage('msg-to-console');
 
-    expect(errorSpy).toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
     expect(logSpy).toHaveBeenCalled();
 
-    errorSpy.mockRestore();
+    warnSpy.mockRestore();
     logSpy.mockRestore();
   });
 });

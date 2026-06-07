@@ -12,16 +12,35 @@ import {
   Text,
   TopNav,
 } from '@dei/ui';
-import { analytics } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 import { getMemberProfile } from '@/lib/room-rpc';
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import {
+  getCachedProfilePhotoUrl,
+  resolveProfilePhotoUrl,
+} from '@/lib/profile-photo-cache';
+import { getCachedRoomChatMembers } from '@/lib/chat/member-cache';
 
 type DialogKind = 'left' | 'error' | null;
 
 export default function MemberProfileScreen() {
   const router = useRouter();
-  const { userId, roomId } = useLocalSearchParams<{ userId: string; roomId?: string }>();
+  const { roomId, targetAvatarUrl, targetNickname, userId } = useLocalSearchParams<{
+    roomId?: string;
+    targetAvatarUrl?: string;
+    targetNickname?: string;
+    userId: string;
+  }>();
+  const initialNickname = Array.isArray(targetNickname) ? targetNickname[0] : targetNickname;
+  const initialAvatarUrl = Array.isArray(targetAvatarUrl) ? targetAvatarUrl[0] : targetAvatarUrl;
+  const cachedMember =
+    roomId && userId
+      ? getCachedRoomChatMembers(roomId).find((member) => member.userId === userId)
+      : undefined;
+  const cachedProfile = cachedMember?.profile;
+  const cachedAvatarUrl = cachedProfile?.avatar_url ?? cachedMember?.photoUrl ?? initialAvatarUrl;
+  const cachedNickname = cachedProfile?.nickname ?? cachedMember?.name ?? initialNickname;
 
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [profile, setProfile] = useState<{
@@ -30,8 +49,28 @@ export default function MemberProfileScreen() {
     birth_year: number | null;
     region: string | null;
     photo_url: string | null;
+    avatar_url?: string | null;
     bio: string | null;
-  } | null>(null);
+    mbti: string | null;
+  } | null>(() =>
+    cachedProfile
+      ? cachedProfile
+      : cachedNickname
+      ? {
+          avatar_url: cachedAvatarUrl ?? null,
+          bio: null,
+          birth_year: null,
+          gender: null,
+          mbti: null,
+          nickname: cachedNickname,
+          photo_url: null,
+          region: null,
+        }
+      : null,
+  );
+  const [isLoading, setIsLoading] = useState(!cachedNickname);
+  const [photoDisplayUrl, setPhotoDisplayUrl] = useState<string | null>(cachedAvatarUrl ?? null);
+  const [photoImageFailed, setPhotoImageFailed] = useState(false);
 
   useEffect(() => {
     if (!userId) {
@@ -40,12 +79,14 @@ export default function MemberProfileScreen() {
     }
 
     let cancelled = false;
+    if (!cachedNickname) setIsLoading(true);
 
     getMemberProfile(userId, roomId ?? '').then((result) => {
       if (cancelled) return;
+      setIsLoading(false);
 
       if (!result) {
-        setDialog('error');
+        if (!cachedNickname) setDialog('error');
         return;
       }
 
@@ -54,22 +95,92 @@ export default function MemberProfileScreen() {
         return;
       }
 
+      if (!result.profile) {
+        setDialog('error');
+        return;
+      }
+
+      setPhotoImageFailed(false);
+      setPhotoDisplayUrl(
+        result.profile.avatar_url ?? getCachedProfilePhotoUrl(userId, result.profile.photo_url),
+      );
       setProfile(result.profile);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [userId, roomId, router]);
+  }, [cachedNickname, roomId, router, userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const photoPath = profile?.photo_url ?? null;
+    const avatarUrl = profile?.avatar_url ?? null;
+
+    if (!userId) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (avatarUrl) {
+      setPhotoDisplayUrl(avatarUrl);
+      setPhotoImageFailed(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setPhotoDisplayUrl(getCachedProfilePhotoUrl(userId, photoPath));
+    setPhotoImageFailed(false);
+
+    if (!photoPath) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void logger.withErrorCapture(
+      'room.member-profile.signed-photo',
+      async () => {
+        const photoUrl = await resolveProfilePhotoUrl(
+          { path: photoPath, userId },
+          { screen: 'member-profile', roomId },
+        );
+
+        if (!cancelled) {
+          setPhotoDisplayUrl(photoUrl);
+        }
+      },
+      { tags: { screen: 'member-profile', action: 'signed-photo' } },
+    ).catch(() => {
+      if (!cancelled) {
+        setPhotoDisplayUrl(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.avatar_url, profile?.photo_url, roomId, userId]);
 
   function handleMore() {
     analytics.capture(ANALYTICS_EVENTS.room_overflow_menu_opened, {
       roomId: roomId ?? '',
       targetUserId: userId,
     });
-    router.push(
-      `/(app)/report/block-report?targetId=${userId}&roomId=${roomId ?? ''}` as never,
-    );
+    const targetAvatarUrl = !photoImageFailed
+      ? photoDisplayUrl ?? profile?.avatar_url ?? undefined
+      : undefined;
+    router.push({
+      pathname: '/(app)/report/block-report',
+      params: {
+        roomId: roomId ?? '',
+        targetId: userId,
+        targetNickname: nickname,
+        ...(targetAvatarUrl ? { targetAvatarUrl } : {}),
+      },
+    } as never);
   }
 
   const age =
@@ -89,7 +200,8 @@ export default function MemberProfileScreen() {
   if (genderLabel) metaParts.push(genderLabel);
   const meta = metaParts.length > 0 ? metaParts.join(' · ') : undefined;
 
-  const nickname = profile?.nickname ?? '';
+  const nickname = profile?.nickname?.trim() || '이름 없음';
+  const hasDetail = Boolean(profile?.bio || profile?.region || profile?.mbti);
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
@@ -109,41 +221,71 @@ export default function MemberProfileScreen() {
         className="flex-1"
         contentContainerClassName="items-center px-[24px] pt-[32px] pb-[40px] gap-[16px]"
       >
-        <ProfileHero
-          size="xl"
-          name={nickname}
-          meta={meta}
-          initial={nickname ? nickname[0] : undefined}
-        >
-          {profile?.photo_url ? (
-            <Image
-              source={{ uri: profile.photo_url }}
-              className="w-[120px] h-[120px] rounded-full"
-              accessibilityLabel={`${nickname} 프로필 사진`}
-            />
-          ) : undefined}
-        </ProfileHero>
+        {isLoading ? (
+          <Text className="py-[32px] text-[13px] font-semibold text-ink-3">
+            프로필을 불러오고 있어요.
+          </Text>
+        ) : (
+          <>
+            <ProfileHero
+              size="xl"
+              name={nickname}
+              meta={meta}
+              initial={nickname ? nickname[0] : undefined}
+            >
+              {photoDisplayUrl && !photoImageFailed ? (
+                <Image
+                  testID="member-profile-photo"
+                  source={{ uri: photoDisplayUrl }}
+                  className="w-[120px] h-[120px] rounded-full"
+                  accessibilityLabel={`${nickname} 프로필 사진`}
+                  onError={() => setPhotoImageFailed(true)}
+                />
+              ) : undefined}
+            </ProfileHero>
 
-        {profile?.bio ? (
-          <Card className="w-full bg-bg-2 px-[16px] py-[14px]">
-            <Text variant="body" tone="ink">
-              {profile.bio}
-            </Text>
-          </Card>
-        ) : null}
+            {profile?.bio ? (
+              <Card className="w-full bg-bg-2 px-[16px] py-[14px]">
+                <Text variant="body" tone="ink">
+                  {profile.bio}
+                </Text>
+              </Card>
+            ) : null}
 
-        {profile?.region ? (
-          <Card variant="info-rows" className="w-full">
-            <View className="flex-row items-center justify-between px-[16px] py-[14px]">
-              <Text variant="caption" tone="ink-3">
-                지역
-              </Text>
-              <Text variant="body" tone="ink">
-                {profile.region}
-              </Text>
-            </View>
-          </Card>
-        ) : null}
+            {profile?.region || profile?.mbti ? (
+              <Card variant="info-rows" className="w-full">
+                {profile?.region ? (
+                  <View className="flex-row items-center justify-between px-[16px] py-[14px]">
+                    <Text variant="caption" tone="ink-3">
+                      지역
+                    </Text>
+                    <Text variant="body" tone="ink">
+                      {profile.region}
+                    </Text>
+                  </View>
+                ) : null}
+                {profile?.mbti ? (
+                  <View className="flex-row items-center justify-between px-[16px] py-[14px]">
+                    <Text variant="caption" tone="ink-3">
+                      MBTI
+                    </Text>
+                    <Text variant="body" tone="ink">
+                      {profile.mbti}
+                    </Text>
+                  </View>
+                ) : null}
+              </Card>
+            ) : null}
+
+            {!hasDetail ? (
+              <Card className="w-full bg-bg-2 px-[16px] py-[14px]">
+                <Text className="text-center text-[13px] font-semibold text-ink-3">
+                  아직 공개한 상세 정보가 없어요.
+                </Text>
+              </Card>
+            ) : null}
+          </>
+        )}
       </ScrollView>
 
       <AlertDialog

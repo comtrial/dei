@@ -1,6 +1,20 @@
-import { forwardRef, memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { Pressable, ScrollView, View, type ViewProps } from 'react-native';
-import { Image } from 'expo-image';
+import {
+  forwardRef,
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  View,
+  type ViewProps,
+} from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
@@ -100,6 +114,8 @@ export interface GridRoomEmptyCell {
   isSelf?: boolean;
   /** 멤버 user_id — 자기 셀 fallback 매칭용. */
   userId?: string;
+  /** 멤버 프로필 사진 URL(서명된 https). 영상 없는 셀도 얼굴 아바타를 표시한다. */
+  photoUrl?: string;
   /** 현재 시간대에서 자기 자신 셀로 촬영 가능한 경우만 true (보라색 face 표시). */
   canRecord?: boolean;
 }
@@ -112,7 +128,7 @@ export interface GridRoomTimeSlot {
   label: string;
   /** 현재 시간대 여부(ink 채움 pill). */
   isNow?: boolean;
-  /** 선택 불가(미래/quiet) — opacity 30% + tap 무시. */
+  /** 선택 불가(미래 시간대 등) — opacity 15% + tap 무시. */
   disabled?: boolean;
 }
 
@@ -124,6 +140,9 @@ export interface GridRoomProps extends ViewProps {
   onCellPress?: (cell: GridRoomCell, index: number) => void;
   /** 아바타+이름 영역 탭(→ 멤버 프로필). filled·empty 셀 모두 발생(둘 다 userId 보유). */
   onAvatarPress?: (cell: GridRoomCell, index: number) => void;
+  /** 시간 스트립이 스크롤되며 가운데 슬롯이 바뀔 때 발생. 햅틱 등 즉시 피드백용. */
+  onTimeSlotPreview?: (slotIndex: number, slot: GridRoomTimeSlot) => void;
+  /** 손을 떼거나 momentum 이 끝나 가운데 슬롯 선택이 확정될 때 발생. */
   onTimeSlotPress?: (slotIndex: number, slot: GridRoomTimeSlot) => void;
   /** 셀 영역 좌우 swipe(50px+) → -1 (이전 hour) / +1 (다음 hour). */
   onHourShift?: (direction: -1 | 1) => void;
@@ -147,32 +166,28 @@ function chunkPairs(
 }
 
 /** Timestrip 한 칸. now=ink 채움/white, default=ink-4. */
-function TimeChip({ slot }: { slot: GridRoomTimeSlot }) {
-  return (
-    <View
-      style={{ width: CHIP_WIDTH }}
-      className="items-center justify-center"
-    >
-      {slot.isNow ? (
-        <View
-          testID="gridroom-now-pill"
-          className="rounded-full bg-ink px-[12px] py-[6px]"
-          accessibilityRole="text"
+function TimeChip({ active, slot }: { active: boolean; slot: GridRoomTimeSlot }) {
+  if (active) {
+    return (
+      <View
+        testID="gridroom-now-pill"
+        className="rounded-full bg-ink px-[12px] py-[6px]"
+        accessibilityRole="text"
+      >
+        <Text
+          className="text-base font-extrabold text-paper tracking-tight"
+          tabularNums
         >
-          <Text
-            className="text-base font-extrabold text-paper tracking-tight"
-            tabularNums
-          >
-            {slot.label}
-          </Text>
-        </View>
-      ) : (
-        <View className={cn('rounded-full px-[8px] py-[4px]', slot.disabled && 'opacity-15')}>
-          <Text className="text-sm font-bold text-ink-4" tabularNums>
-            {slot.label}
-          </Text>
-        </View>
-      )}
+          {slot.label}
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <View className={cn('rounded-full px-[8px] py-[4px]', slot.disabled && 'opacity-15')}>
+      <Text className="text-sm font-bold text-ink-4" tabularNums>
+        {slot.label}
+      </Text>
     </View>
   );
 }
@@ -190,24 +205,29 @@ const PresenceAvatar = memo(function PresenceAvatar({
   /** 셀 인덱스 — testID 분리용(empty 셀은 미지정). */
   index?: number;
 }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const showPhoto = photoUrl != null && !imageFailed;
   const photoTestID = index != null ? `gridroom-avatar-photo-${index}` : undefined;
   const initialTestID = index != null ? `gridroom-avatar-initial-${index}` : undefined;
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [photoUrl]);
+
   return (
     // shrink-0: 이름 라벨과 같은 flex-row 안에 있어, 긴 이름이면 원이 가로 압축돼
     // 타원이 되는 것을 막는다(정사각 보존).
     <View className="relative w-[22px] h-[22px] shrink-0">
       <View className="w-[22px] h-[22px] items-center justify-center overflow-hidden rounded-full border-[1.5px] border-accent bg-[rgba(0,0,0,0.35)]">
-        {photoUrl != null ? (
+        {showPhoto ? (
           // 프로필 이미지: 원형 컨테이너를 가득 채우는 cover 이미지(이니셜 폴백 대체).
-          // cachePolicy=memory-disk + recyclingKey: 한 번 받은 아바타는 디스크+메모리
-          // 캐시 → 재렌더/재진입 시 네트워크 왕복 없이 즉시 표시(Avatar primitive 와 동일).
+          // Avatar primitive 와 같은 RN Image 경로를 써서 profile-photo-cache prefetch 와
+          // 캐시가 맞도록 한다. 실패 시 빈 원 대신 이니셜 폴백.
           <Image
             testID={photoTestID}
             source={{ uri: photoUrl }}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            recyclingKey={photoUrl}
-            transition={120}
+            resizeMode="cover"
+            onError={() => setImageFailed(true)}
             className="w-[22px] h-[22px] rounded-full"
           />
         ) : (
@@ -338,7 +358,12 @@ const EmptyCell = memo(function EmptyCell({
         onPress={onAvatarPress ? () => onAvatarPress(cell, index) : undefined}
         className="absolute left-[8px] top-[8px] flex-row items-center gap-[5px]"
       >
-        <PresenceAvatar initial={initial} present={false} />
+        <PresenceAvatar
+          initial={initial}
+          present={false}
+          photoUrl={cell.photoUrl}
+          index={index}
+        />
         <Text className="text-2xs font-bold text-paper">{cell.name}</Text>
       </Pressable>
       <View className="absolute inset-0 items-center justify-center">
@@ -360,6 +385,7 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
     GradientComponent,
     onCellPress,
     onAvatarPress,
+    onTimeSlotPreview,
     onTimeSlotPress,
     onHourShift,
     className,
@@ -368,7 +394,6 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
   ref,
 ) {
   const pairs = useMemo(() => chunkPairs(cells), [cells]);
-
   const cellGridPan = useMemo(
     () =>
       Gesture.Pan()
@@ -423,7 +448,8 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
   }, [nowIndex, stripWidth]);
 
   const handleTimeSlotPress = (slotIndex: number, slot: GridRoomTimeSlot) => {
-    if (slot.disabled || slot.isNow) return;
+    if (slot.disabled) return;
+    onTimeSlotPreview?.(slotIndex, slot);
     markProgrammaticScroll();
     scrollRef.current?.scrollTo({ x: slotIndex * CHIP_WIDTH, animated: false });
     onTimeSlotPress?.(slotIndex, slot);
@@ -433,7 +459,7 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
     <View ref={ref} testID="gridroom" className={cn('bg-bg', className)} {...rest}>
       {timeStrip && timeStrip.length > 0 ? (
         <View
-          className="relative pb-[14px] pt-[6px]"
+          className="relative mx-[8px] px-0 pb-[14px] pt-[6px]"
           onLayout={(e) => setStripWidth(e.nativeEvent.layout.width)}
         >
           <View className="absolute left-[6px] top-[6px] bottom-[14px] justify-center z-10">
@@ -468,19 +494,25 @@ export const GridRoom = forwardRef<View, GridRoomProps>(function GridRoom(
                 return;
               }
               if (slot.isNow) return;
+              onTimeSlotPreview?.(index, slot);
               onTimeSlotPress?.(index, slot);
             }}
           >
             {timeStrip.map((slot, i) => (
               <Pressable
                 key={`${slot.label}-${i}`}
+                testID={`gridroom-time-slot-${i}`}
                 onPress={() => handleTimeSlotPress(i, slot)}
                 disabled={slot.disabled}
                 accessibilityRole="button"
                 accessibilityLabel={`${slot.label} 시간대`}
                 accessibilityState={{ disabled: !!slot.disabled, selected: !!slot.isNow }}
+                className={cn(
+                  'items-center justify-center py-[4px]',
+                  slot.isNow && 'scale-110',
+                )}
               >
-                <TimeChip slot={slot} />
+                <TimeChip active={slot.isNow === true} slot={slot} />
               </Pressable>
             ))}
           </ScrollView>
