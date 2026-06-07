@@ -12,7 +12,6 @@ const ANON =
 const PASSWORD = 'test-pass-1234';
 const REALTIME_TIMEOUT_MS = 10_000;
 const REALTIME_TRANSPORT = WebSocket as unknown as WebSocketLikeConstructor;
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let run = false;
 let admin: SupabaseClient;
@@ -110,40 +109,77 @@ describe.skipIf(!process.env.RUN_INTEGRATION && !process.env.CI)(
       expect(run).toBe(true);
 
       const channel = userB.client.channel(`room-leave-${roomId}-${Date.now()}`);
-      let updateTimer: ReturnType<typeof setTimeout> | undefined;
-      let startUpdateTimeout: () => void;
+      const pendingWaiters = new Set<{
+        label: string;
+        predicate: (row: Record<string, unknown>) => boolean;
+        reject: (error: Error) => void;
+        resolve: (row: Record<string, unknown>) => void;
+        timer: ReturnType<typeof setTimeout>;
+      }>();
 
-      const updatePromise = new Promise<Record<string, unknown>>((resolve, reject) => {
-        channel.on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            filter: `room_id=eq.${roomId}`,
-            schema: 'public',
-            table: 'room_member',
-          },
-          (payload) => {
-            const row = payload.new as Record<string, unknown>;
-            if (row.user_id !== userA.id) return;
-            if (updateTimer) clearTimeout(updateTimer);
-            resolve(row);
-          },
-        );
-        startUpdateTimeout = () => {
-          updateTimer = setTimeout(
-            () => reject(new Error('room_member update timeout')),
-            REALTIME_TIMEOUT_MS,
-          );
-        };
-      });
+      const waitForUpdate = (
+        label: string,
+        predicate: (row: Record<string, unknown>) => boolean,
+      ) =>
+        new Promise<Record<string, unknown>>((resolve, reject) => {
+          const waiter = {
+            label,
+            predicate,
+            reject,
+            resolve,
+            timer: setTimeout(
+              () => {
+                pendingWaiters.delete(waiter);
+                reject(new Error(`${label} timeout`));
+              },
+              REALTIME_TIMEOUT_MS,
+            ),
+          };
+          pendingWaiters.add(waiter);
+        });
+
+      channel.on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          filter: `room_id=eq.${roomId}`,
+          schema: 'public',
+          table: 'room_member',
+        },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          for (const waiter of pendingWaiters) {
+            if (!waiter.predicate(row)) continue;
+            pendingWaiters.delete(waiter);
+            clearTimeout(waiter.timer);
+            waiter.resolve(row);
+            break;
+          }
+        },
+      );
 
       try {
         await waitForSubscribed(channel);
-        startUpdateTimeout!();
-        // Local Realtime can acknowledge the channel before its Postgres CDC binding is ready.
-        await wait(1_000);
+
+        // Realtime can acknowledge the channel before its Postgres CDC binding is ready.
+        // First observe a harmless update so the actual leave event is not raced.
+        const probePromise = waitForUpdate(
+          'room_member probe update',
+          (row) => row.user_id === userB.id,
+        );
+        const { error: probeError } = await admin
+          .from('room_member')
+          .update({ joined_at: new Date().toISOString() })
+          .eq('room_id', roomId)
+          .eq('user_id', userB.id);
+        expect(probeError).toBeNull();
+        await probePromise;
 
         const leftAt = new Date().toISOString();
+        const updatePromise = waitForUpdate(
+          'room_member leave update',
+          (row) => row.user_id === userA.id && row.status === 'left',
+        );
         const { error: leaveError } = await userA.client
           .from('room_member')
           .update({ left_at: leftAt, status: 'left' })
@@ -156,7 +192,10 @@ describe.skipIf(!process.env.RUN_INTEGRATION && !process.env.CI)(
         expect(realtimeRow.status).toBe('left');
         expect(realtimeRow.user_id).toBe(userA.id);
       } finally {
-        if (updateTimer) clearTimeout(updateTimer);
+        for (const waiter of pendingWaiters) {
+          clearTimeout(waiter.timer);
+        }
+        pendingWaiters.clear();
         await userB.client.removeChannel(channel);
       }
 
