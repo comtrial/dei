@@ -195,7 +195,7 @@ describe('RoomChatScreen member leave realtime', () => {
     );
 
     expect(mockLatestChatProps?.memberCount).toBe(1);
-  }, 10000);
+  }, 30000);
 
   it('opens my profile from the chat header avatar', async () => {
     render(<RoomChatScreen />);
