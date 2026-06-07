@@ -2,9 +2,10 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { BackHandler } from 'react-native';
 
-import { logger } from '@dei/shared';
+import { analytics, logger } from '@dei/shared';
 
 import { MatchingWaitingView } from '@/components/matching/MatchingWaitingView';
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { expireMatchQueue, isQueueExpired } from '@/lib/matching';
 import { ROUTES, roomRoutes } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
@@ -123,6 +124,7 @@ export default function QueueScreen() {
       if (cancelled) {
         return;
       }
+      analytics.capture(ANALYTICS_EVENTS.room_matched, { room_id: roomId });
       router.replace(roomRoutes.index(roomId));
     };
 
