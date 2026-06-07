@@ -14,7 +14,7 @@ import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { getPermissionState } from '@/lib/permissions';
 import { recordClip } from '@/lib/video';
 
-const RECORD_MAX_MS = 3000;
+const RECORD_AUTO_MS = 2000;
 
 export default function VideoCaptureScreen() {
   const router = useRouter();
@@ -149,7 +149,7 @@ export default function VideoCaptureScreen() {
     }
   }, []);
 
-  const handleShutterPressIn = useCallback(async () => {
+  const handleShutterPress = useCallback(async () => {
     if (isRecording || !cameraReady) return;
 
     setIsRecording(true);
@@ -160,14 +160,14 @@ export default function VideoCaptureScreen() {
     progressAnim.setValue(0);
     progressAnimRef.current = Animated.timing(progressAnim, {
       toValue: 1,
-      duration: RECORD_MAX_MS,
+      duration: RECORD_AUTO_MS,
       easing: Easing.linear,
       useNativeDriver: false,
     });
     progressAnimRef.current.start();
 
     try {
-      const result = await recordClip(cameraRef as unknown as RefObject<never>);
+      const result = await recordClip(cameraRef as unknown as RefObject<never>, { maxDurationMs: RECORD_AUTO_MS });
       resetProgress();
       setIsRecording(false);
       recordingRef.current = false;
@@ -185,16 +185,11 @@ export default function VideoCaptureScreen() {
     }
   }, [cameraReady, isRecording, progressAnim, resetProgress, roomId, router]);
 
-  const handleShutterPressOut = useCallback(async () => {
-    if (!recordingRef.current) return;
-    await stopRecording();
-  }, [stopRecording]);
-
   return (
     <View style={StyleSheet.absoluteFill} className="bg-black">
       {isFocused && (
         <CameraView
-          key={cameraKey}
+          key={`cam-${cameraKey}-${facing}`}
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           mode="video"
@@ -204,65 +199,58 @@ export default function VideoCaptureScreen() {
         />
       )}
 
-      {/* progress bar — 상단 전체 너비 (landscape 기준), 촬영 중만 표시 */}
       {isRecording && (
-        <View className="absolute top-0 left-0 right-0 h-[3px] bg-white/20">
+        <View className="absolute top-0 bottom-0 right-0 w-[3px] bg-white/20">
           <Animated.View
-            className="h-[3px] bg-accent"
+            className="w-[3px] bg-accent"
             style={[
               {
-                width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+                height: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
               },
             ]}
           />
         </View>
       )}
 
-      {/* X 버튼 — 좌상단 (landscape) */}
       <TouchableOpacity
         onPress={() => router.back()}
         hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
         disabled={isRecording}
-        className={`absolute top-6 left-6 w-11 h-11 rounded-full bg-black/50 items-center justify-center z-10 ${isRecording ? 'opacity-30' : ''}`}
+        className={`absolute top-14 left-6 w-11 h-11 rounded-full bg-black/50 items-center justify-center z-10 ${isRecording ? 'opacity-30' : ''}`}
       >
         <X color="white" size={22} />
       </TouchableOpacity>
 
-      {/* 카메라 전환 — 우상단 (landscape) */}
       <TouchableOpacity
         onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
         disabled={isRecording}
         hitSlop={16}
-        className={`absolute top-6 right-6 w-11 h-11 rounded-full bg-accent/20 border border-accent/50 items-center justify-center z-10 ${isRecording ? 'opacity-30' : ''}`}
+        className={`absolute top-14 right-6 w-11 h-11 rounded-full bg-accent/20 border border-accent/50 items-center justify-center z-10 ${isRecording ? 'opacity-30' : ''}`}
       >
         <RefreshCcw color={color.accent} size={20} />
       </TouchableOpacity>
 
-      {/* 시간 — 화면 중앙 (landscape 정방향) */}
       <View
         pointerEvents="none"
         className="absolute inset-0 items-center justify-center"
       >
-        <Text className="text-white text-[56px] font-extrabold tracking-[2px] opacity-75">
-          {currentTime}
-        </Text>
+        <View className="rotate-90">
+          <Text className="text-white text-[56px] font-extrabold tracking-[2px] opacity-75">
+            {currentTime}
+          </Text>
+        </View>
       </View>
 
-      {/* 셔터 + 안내 텍스트 — 우중앙 (landscape, 오른손 엄지) */}
       <View
         pointerEvents="box-none"
-        className="absolute top-0 bottom-0 right-6 justify-center items-center"
+        className="absolute bottom-16 left-0 right-0 items-center"
       >
-        <Text className="text-white/55 text-[11px] mb-3.5">
-          {isRecording ? '촬영 중…' : cameraReady ? '꾹 눌러서 녹화' : '카메라 준비 중…'}
-        </Text>
         <Pressable
           testID="shutter-button"
           accessibilityRole="button"
           accessibilityLabel="녹화 시작"
-          disabled={!cameraReady}
-          onPressIn={() => { void handleShutterPressIn(); }}
-          onPressOut={() => { void handleShutterPressOut(); }}
+          disabled={!cameraReady || isRecording}
+          onPress={() => { void handleShutterPress(); }}
           style={({ pressed }) => ({
             width: 84,
             height: 84,

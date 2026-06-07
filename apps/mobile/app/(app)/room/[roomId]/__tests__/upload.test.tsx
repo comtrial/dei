@@ -94,7 +94,7 @@ describe('VideoCaptureScreen (S11)', () => {
       expect(screen.getByTestId('shutter-button')).toBeTruthy();
     });
 
-    fireEvent(screen.getByTestId('shutter-button'), 'pressIn');
+    fireEvent.press(screen.getByTestId('shutter-button'));
 
     await waitFor(() => {
       expect(mockRecordClip).toHaveBeenCalledTimes(1);
@@ -102,7 +102,6 @@ describe('VideoCaptureScreen (S11)', () => {
   });
 
   it('onCameraReady 미호출(흰 화면) — 1.2초 뒤 CameraView 강제 재마운트', async () => {
-    // 권한 grant 직후 첫 마운트에서 onCameraReady 가 안 불리는 상황 재현.
     mockGetPermissionState.mockResolvedValue('granted');
     cameraViewState.fireReady = false;
     jest.useFakeTimers();
@@ -110,13 +109,10 @@ describe('VideoCaptureScreen (S11)', () => {
     try {
       render(<VideoCaptureScreen />);
 
-      // 최초 마운트 1회. 셔터는 아직 '카메라 준비 중'.
       await waitFor(() => {
         expect(cameraViewState.mountCount).toBe(1);
       });
-      expect(screen.getByText('카메라 준비 중…')).toBeTruthy();
 
-      // fallback 타이머(1200ms) 경과 → key 변경 → 재마운트.
       act(() => {
         jest.advanceTimersByTime(1300);
       });
@@ -136,9 +132,8 @@ describe('VideoCaptureScreen (S11)', () => {
     render(<VideoCaptureScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText('꾹 눌러서 녹화')).toBeTruthy();
+      expect(screen.getByTestId('shutter-button').props.accessibilityState?.disabled).toBe(false);
     });
-    // 정상 경로에선 첫 마운트 1회로 충분.
     expect(cameraViewState.mountCount).toBe(1);
   });
 
@@ -146,7 +141,7 @@ describe('VideoCaptureScreen (S11)', () => {
     mockGetPermissionState.mockResolvedValue('granted');
     mockRecordClip.mockResolvedValue({
       localUri: 'file://test.mp4',
-      durationMs: 3000,
+      durationMs: 2000,
     });
 
     render(<VideoCaptureScreen />);
@@ -155,7 +150,7 @@ describe('VideoCaptureScreen (S11)', () => {
       expect(screen.getByTestId('shutter-button')).toBeTruthy();
     });
 
-    fireEvent(screen.getByTestId('shutter-button'), 'pressIn');
+    fireEvent.press(screen.getByTestId('shutter-button'));
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
