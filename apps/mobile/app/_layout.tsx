@@ -8,6 +8,7 @@ import { cssInterop } from 'nativewind';
 import { VideoView } from 'expo-video';
 
 import { initPostHog } from '@/lib/posthog';
+import { initPurchases } from '@/lib/purchases';
 import { initSentry } from '@/lib/sentry';
 import { AuthProvider } from '@/providers/auth-provider';
 import { RootGate } from '@/providers/root-gate';
@@ -30,6 +31,7 @@ export default function RootLayout() {
   useEffect(() => {
     initSentry();
     initPostHog();
+    initPurchases();
   }, []);
 
   return (

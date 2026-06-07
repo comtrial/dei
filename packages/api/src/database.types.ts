@@ -462,6 +462,8 @@ export type Database = {
           id: string
           product_id: string | null
           provider: string
+          provider_metadata: Json
+          provider_transaction_id: string | null
           status: string
           user_id: string
         }
@@ -471,6 +473,8 @@ export type Database = {
           id?: string
           product_id?: string | null
           provider?: string
+          provider_metadata?: Json
+          provider_transaction_id?: string | null
           status?: string
           user_id: string
         }
@@ -480,6 +484,8 @@ export type Database = {
           id?: string
           product_id?: string | null
           provider?: string
+          provider_metadata?: Json
+          provider_transaction_id?: string | null
           status?: string
           user_id?: string
         }
@@ -1025,6 +1031,21 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      grant_instant_rematch_purchase: {
+        Args: {
+          p_granted: number
+          p_product_id: string
+          p_provider: string
+          p_provider_metadata: Json
+          p_provider_transaction_id: string
+          p_user_id: string
+        }
+        Returns: {
+          duplicate: boolean
+          granted: number
+          payment_id: string
+        }[]
       }
       is_admin: { Args: never; Returns: boolean }
       is_blocked_between: { Args: { a: string; b: string }; Returns: boolean }

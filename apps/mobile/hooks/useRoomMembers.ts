@@ -62,6 +62,12 @@ export function useRoomMembers(
           onMemberLeftRef.current?.(updated.user_id, updated.status as MemberLeftStatus);
         }
 
+        if (updated.status !== 'active') {
+          return prev.filter(
+            (m) => !(m.user_id === updated.user_id && m.room_id === updated.room_id),
+          );
+        }
+
         if (idx === -1) return [...prev, updated];
         const next = [...prev];
         next[idx] = updated;

@@ -23,6 +23,10 @@ import {
 import { enqueueMatchQueue, isMatchQueueError, isMatchQueueErrorCode } from '@/lib/matching';
 import { getAppNotificationEnabled, registerPushToken } from '@/lib/notifications.stub';
 import { requestPermission } from '@/lib/permissions';
+import {
+  getCachedProfileSnapshot,
+  mergeCachedProfileSnapshot,
+} from '@/lib/profile-session-cache';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
@@ -61,6 +65,26 @@ export default function HomeScreen() {
     photoUrl: null,
     region: null,
   });
+
+  useEffect(() => {
+    const cached = getCachedProfileSnapshot(user?.id);
+    if (!cached) return;
+
+    setProfile((current) => ({
+      ...current,
+      birthYear: cached.birthYear ?? current.birthYear,
+      gender: cached.gender ?? current.gender,
+      lastRoomLeaveAt: cached.lastRoomLeaveAt ?? current.lastRoomLeaveAt,
+      nickname: cached.nickname ?? current.nickname,
+      passCount: cached.passCount ?? current.passCount,
+      photoDisplayUrl: cached.photoDisplayUrl ?? current.photoDisplayUrl,
+      photoUrl: cached.photoUrl ?? current.photoUrl,
+      region: cached.region ?? current.region,
+    }));
+    if (cached.photoDisplayUrl) {
+      setPhotoImageFailed(false);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     analytics.capture(ANALYTICS_EVENTS.home_entered_waiting);
@@ -149,7 +173,7 @@ export default function HomeScreen() {
           photoDisplayUrl = signedPhoto?.signedUrl ?? null;
         }
 
-        setProfile({
+        const nextProfile = {
           birthYear: routedProfile.birth_year,
           gender: routedProfile.gender ?? null,
           lastRoomLeaveAt: routedProfile.last_room_leave_at,
@@ -158,7 +182,10 @@ export default function HomeScreen() {
           photoDisplayUrl,
           photoUrl: routedProfile.photo_url ?? null,
           region: routedProfile.region ?? null,
-        });
+        };
+
+        setProfile(nextProfile);
+        mergeCachedProfileSnapshot(user.id, nextProfile);
         setPhotoImageFailed(false);
       },
       { tags: { screen: 'home', action: 'load-profile' } },

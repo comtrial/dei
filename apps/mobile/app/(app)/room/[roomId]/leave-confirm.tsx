@@ -109,10 +109,11 @@ export default function RoomLeaveConfirmScreen() {
 
           <View className="pb-[22px] pt-[18px]">
             <SlideToConfirm
+              testID="room-leave-slide-confirm"
               tone="ink"
               disabled={!canLeave || isLeaving}
               onConfirm={handleLeave}
-              label={isLeaving ? '나가는 중' : '방 나가기'}
+              label={isLeaving ? '나가는 중' : undefined}
               className={!canLeave || isLeaving ? 'opacity-40' : undefined}
             />
           </View>

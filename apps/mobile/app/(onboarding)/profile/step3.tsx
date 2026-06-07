@@ -19,6 +19,7 @@ import {
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { MBTI_OPTIONS, REGION_OPTIONS, TERMS_VERSION } from '@/lib/b-flow';
+import { mergeCachedProfileSnapshot } from '@/lib/profile-session-cache';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
@@ -133,11 +134,12 @@ export default function ProfilePreferenceStepScreen() {
         setIsSaving(true);
 
         if (user) {
+          const completedAt = new Date().toISOString();
           const { error } = await supabase
             .from('profile')
             .update({
               mbti: mbti || null,
-              onboarding_completed_at: new Date().toISOString(),
+              onboarding_completed_at: completedAt,
               region: region || null,
             })
             .eq('user_id', user.id);
@@ -145,6 +147,12 @@ export default function ProfilePreferenceStepScreen() {
           if (error) {
             throw error;
           }
+
+          mergeCachedProfileSnapshot(user.id, {
+            mbti: mbti || null,
+            onboardingCompletedAt: completedAt,
+            region: region || null,
+          });
         }
 
         analytics.capture(ANALYTICS_EVENTS.profile_step_completed, {

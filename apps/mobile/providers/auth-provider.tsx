@@ -5,6 +5,8 @@ import { analytics, logger } from '@dei/shared';
 
 import { supabase } from '@/lib/supabase';
 import type { ConfirmIdentityVerificationResponse } from '@/lib/portone.stub';
+import { resetPurchasesUser, syncPurchasesUser } from '@/lib/purchases';
+import { clearCachedProfileSnapshot } from '@/lib/profile-session-cache';
 
 /**
  * 인증 골격 (spec §3.3 · A-4)
@@ -102,6 +104,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logger.setUser(userId ? { id: userId } : null);
   }, [session?.user.id]);
 
+  useEffect(() => {
+    const userId = session?.user.id;
+
+    void logger.withErrorCapture(
+      'purchases.sync-user',
+      async () => {
+        if (userId) {
+          await syncPurchasesUser(userId);
+          return;
+        }
+
+        await resetPurchasesUser();
+      },
+      { tags: { feature: 'payment', provider: 'revenuecat', action: 'sync-user' } },
+    ).catch((error) => {
+      logger.captureException(error, {
+        tags: { feature: 'payment', provider: 'revenuecat', action: 'sync-user-catch' },
+      });
+    });
+  }, [session?.user.id]);
+
   const ensureAnonymousSession = useCallback(async () => {
     if (session) {
       return session;
@@ -184,6 +207,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 로그아웃 → analytics·logger 사용자 컨텍스트 초기화.
     analytics.reset();
     logger.setUser(null);
+    clearCachedProfileSnapshot();
+    await resetPurchasesUser();
   }, []);
 
   const value = useMemo<AuthContextValue>(
