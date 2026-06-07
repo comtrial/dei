@@ -719,6 +719,7 @@ export type Database = {
       room_member: {
         Row: {
           joined_at: string
+          last_read_at: string | null
           left_at: string | null
           role: string
           room_id: string
@@ -727,6 +728,7 @@ export type Database = {
         }
         Insert: {
           joined_at?: string
+          last_read_at?: string | null
           left_at?: string | null
           role?: string
           room_id: string
@@ -735,6 +737,7 @@ export type Database = {
         }
         Update: {
           joined_at?: string
+          last_read_at?: string | null
           left_at?: string | null
           role?: string
           room_id?: string
@@ -1025,6 +1028,11 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_blocked_between: { Args: { a: string; b: string }; Returns: boolean }
+      is_team_member: {
+        Args: { p_team_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      mark_room_read: { Args: { p_room_id: string }; Returns: undefined }
       match_and_create: {
         Args: {
           p_side_a_gender: string
@@ -1206,3 +1214,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
