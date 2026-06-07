@@ -38,6 +38,7 @@ export default function VideoFullscreenScreen() {
   const [memberPhotoUrl, setMemberPhotoUrl] = useState<string | null>(null);
   const [memberUserId, setMemberUserId] = useState<string>('');
   const [capturedAtLabel, setCapturedAtLabel] = useState<string | null>(null);
+  const [caption, setCaption] = useState<string | null>(null);
   const [siblings, setSiblings] = useState<{ id: string; url: string; thumbnail: string | null }[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [firstFrameRendered, setFirstFrameRendered] = useState(false);
@@ -125,6 +126,8 @@ export default function VideoFullscreenScreen() {
       } else {
         setCapturedAtLabel(null);
       }
+
+      setCaption(video.caption ?? null);
 
       const members = await getRoomMembersWithProfile(roomId);
       const member = members.find((m) => m.user_id === video.user_id);
@@ -389,14 +392,21 @@ export default function VideoFullscreenScreen() {
         </View>
       ) : null}
 
-      {capturedAtLabel ? (
+      {capturedAtLabel || caption ? (
         <View
           pointerEvents="none"
-          className="absolute inset-0 items-center justify-center"
+          className="absolute inset-0 items-center justify-center px-6"
         >
-          <Text className="text-white text-[56px] font-extrabold tracking-[2px] opacity-75">
-            {capturedAtLabel}
-          </Text>
+          {capturedAtLabel ? (
+            <Text className="text-white text-[56px] font-extrabold tracking-[2px] opacity-75">
+              {capturedAtLabel}
+            </Text>
+          ) : null}
+          {caption?.trim() ? (
+            <Text className="mt-2 text-white text-xl font-semibold text-center">
+              {caption}
+            </Text>
+          ) : null}
         </View>
       ) : null}
 

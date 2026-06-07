@@ -93,6 +93,8 @@ export interface GridRoomFilledCell {
   media?: ReactNode;
   present?: boolean;
   videoId?: string;
+  /** 사용자 멘트 — 시간 아래 작게 표기. 미지정 시 비표시. */
+  caption?: string | null;
   /**
    * 멤버 프로필 사진 URL(서명된 https). 지정 시 presence 아바타가 이니셜 대신
    * 원형 이미지로 렌더하며, 미지정/로드 실패 전까지 `initial` 폴백. expo-image
@@ -310,13 +312,21 @@ const FilledCell = memo(
           />
           <Text className="text-2xs font-bold text-paper">{cell.name}</Text>
         </Pressable>
-        <View className="absolute inset-0 items-center justify-center">
+        <View className="absolute inset-0 items-center justify-center px-[8px]">
           <Text
             className="text-3xl font-black text-paper tracking-tight"
             tabularNums
           >
             {cell.uploadTime}
           </Text>
+          {cell.caption?.trim() ? (
+            <Text
+              className="mt-[4px] text-xs font-semibold text-paper text-center"
+              numberOfLines={2}
+            >
+              {cell.caption}
+            </Text>
+          ) : null}
         </View>
       </Pressable>
     );
@@ -324,6 +334,7 @@ const FilledCell = memo(
   (prev, next) =>
     prev.cell.videoId === next.cell.videoId &&
     prev.cell.uploadTime === next.cell.uploadTime &&
+    prev.cell.caption === next.cell.caption &&
     prev.cell.present === next.cell.present &&
     prev.cell.photoUrl === next.cell.photoUrl &&
     prev.index === next.index,

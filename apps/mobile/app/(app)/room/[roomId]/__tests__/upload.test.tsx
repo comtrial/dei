@@ -84,7 +84,7 @@ describe('VideoCaptureScreen (S11)', () => {
       expect(screen.getByTestId('shutter-button')).toBeTruthy();
     });
 
-    fireEvent(screen.getByTestId('shutter-button'), 'pressIn');
+    fireEvent.press(screen.getByTestId('shutter-button'));
 
     await waitFor(() => {
       expect(mockRecordClip).toHaveBeenCalledTimes(1);
@@ -95,7 +95,7 @@ describe('VideoCaptureScreen (S11)', () => {
     mockGetPermissionState.mockResolvedValue('granted');
     mockRecordClip.mockResolvedValue({
       localUri: 'file://test.mp4',
-      durationMs: 3000,
+      durationMs: 2000,
     });
 
     render(<VideoCaptureScreen />);
@@ -104,7 +104,7 @@ describe('VideoCaptureScreen (S11)', () => {
       expect(screen.getByTestId('shutter-button')).toBeTruthy();
     });
 
-    fireEvent(screen.getByTestId('shutter-button'), 'pressIn');
+    fireEvent.press(screen.getByTestId('shutter-button'));
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
