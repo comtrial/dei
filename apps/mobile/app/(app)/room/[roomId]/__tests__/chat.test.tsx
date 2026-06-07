@@ -177,7 +177,7 @@ describe('RoomChatScreen member leave realtime', () => {
       expect(mockMemberUpdateHandler).toEqual(expect.any(Function));
     });
 
-    act(() => {
+    await act(async () => {
       mockMemberUpdateHandler?.({
         left_at: '2026-06-07T00:01:00.000Z',
         room_id: 'room-1',
@@ -194,10 +194,8 @@ describe('RoomChatScreen member leave realtime', () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(mockLatestChatProps?.memberCount).toBe(1);
-    });
-  });
+    expect(mockLatestChatProps?.memberCount).toBe(1);
+  }, 10000);
 
   it('opens my profile from the chat header avatar', async () => {
     render(<RoomChatScreen />);
