@@ -21,7 +21,7 @@
     "test:e2e:web": "playwright test",
     "test:e2e:web:install": "playwright install --with-deps chromium",
     "harness:web": "vite --config e2e/playwright/vite.config.ts",
-    "posthog:e2e": "tsx scripts/e2e-posthog-funnels.ts"
+    "posthog:e2e": "tsx --tsconfig tsconfig.json scripts/e2e-posthog-funnels.ts"
   },
   "dependencies": {
     "@dei/api": "workspace:^",
