@@ -11,14 +11,14 @@ import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { PAYMENT_PACKS } from '@/lib/b-flow';
 import { ROUTES } from '@/lib/routes';
 
-const PAYMENT_ERROR_CODE = 'card_declined · insufficient_funds (PG: PortOne)';
+const PAYMENT_ERROR_CODE = 'store_purchase_failed · app_store';
 
 export default function BoosterFailedScreen() {
   const router = useRouter();
   const { code, message } = useLocalSearchParams<{ code?: string; message?: string }>();
   const [copied, setCopied] = useState(false);
   const errorCode = code
-    ? `${code}${message && message !== code ? ` · ${message}` : ''} (PG: PortOne)`
+    ? `${code}${message && message !== code ? ` · ${message}` : ''} (App Store)`
     : PAYMENT_ERROR_CODE;
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export default function BoosterFailedScreen() {
 
             <View className="mt-[14px] w-full gap-[6px]">
               <Button fullWidth size="sm" variant="ink" onPress={() => router.replace(ROUTES.booster)}>
-                다른 결제 수단으로 재시도
+                스토어 결제 다시 시도
               </Button>
               <Button
                 fullWidth

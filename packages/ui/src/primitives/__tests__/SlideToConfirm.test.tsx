@@ -4,7 +4,7 @@ import { SlideToConfirm } from '../SlideToConfirm';
 
 /**
  * SlideToConfirm (P18) — 렌더 + tone(danger/ink) 토큰 className +
- * long-press 확정 경로 검증. SSOT: all-screens `.s20 .slide`(S20) /
+ * drag 확정 경로 검증. SSOT: all-screens `.s20 .slide`(S20) /
  * `.sLR .slide`(S16).
  *
  * thumb/label/arrows 는 testID 접미사(`-thumb`/`-label`/`-arrows`)로 접근.
@@ -73,11 +73,35 @@ describe('SlideToConfirm (P18)', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
-  it('fires onConfirm on press (탭 확정 경로 — 단일 탭으로도 확정)', () => {
+  it('does not fire onConfirm on press', () => {
     const onConfirm = jest.fn();
     render(<SlideToConfirm testID="stc" onConfirm={onConfirm} />);
     fireEvent.press(screen.getByTestId('stc'));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('fires onConfirm when the thumb is dragged past the threshold', () => {
+    const onConfirm = jest.fn();
+    render(<SlideToConfirm testID="stc" onConfirm={onConfirm} />);
+    const thumb = screen.getByTestId('stc-thumb');
+
+    fireEvent(thumb, 'responderGrant', { nativeEvent: { pageX: 0 } });
+    fireEvent(thumb, 'responderMove', { nativeEvent: { pageX: 260 } });
+    fireEvent(thumb, 'responderRelease', { nativeEvent: { pageX: 260 } });
+
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets without confirming when the thumb is released before the threshold', () => {
+    const onConfirm = jest.fn();
+    render(<SlideToConfirm testID="stc" onConfirm={onConfirm} />);
+    const thumb = screen.getByTestId('stc-thumb');
+
+    fireEvent(thumb, 'responderGrant', { nativeEvent: { pageX: 0 } });
+    fireEvent(thumb, 'responderMove', { nativeEvent: { pageX: 20 } });
+    fireEvent(thumb, 'responderRelease', { nativeEvent: { pageX: 20 } });
+
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
   it('does not fire onConfirm on press when disabled', () => {

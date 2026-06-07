@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -10,6 +10,7 @@ import {
   MentionAutocomplete,
   NewMessageJumpButton,
   StateView,
+  Text,
   TopNav,
   type MentionCandidate,
 } from '@dei/ui';
@@ -64,6 +65,7 @@ export interface RoomChatViewProps {
   onSelectMention: (c: RoomMemberLite) => void;
   onClearWhisper: () => void;
   onAvatarPress: (userId: string) => void;
+  onSelfProfilePress?: () => void;
   onClose: () => void;
   newCount: number;
   onJump: () => void;
@@ -72,6 +74,7 @@ export interface RoomChatViewProps {
   visible: boolean;
   blockedIds?: Set<string>;
   roomEnded?: boolean;
+  isInitialLoading?: boolean;
   /**
    * 오버레이 모드(피처 플래그 'overlay'): 매칭된 방 영상 위 반투명 레이어.
    * 루트 배경 투명 + 영상 dim scrim(rgba .45) + 헤더/컴포저 dark band(.62),
@@ -156,17 +159,30 @@ export function RoomChatView(props: RoomChatViewProps) {
             className={o ? bandClass : undefined}
             leftAccessory={stackItems.length > 0 ? <AvatarStack items={stackItems} max={3} size={28} /> : undefined}
             rightActions={
-              <Avatar
-                size={32}
-                initial={props.selfInitial}
-                photoUrl={props.selfPhotoUrl}
-                bg={props.selfBg}
+              <Pressable
+                accessibilityRole="button"
                 accessibilityLabel="내 프로필"
-              />
+                testID="chat-header-my-profile"
+                onPress={props.onSelfProfilePress}
+              >
+                <Avatar
+                  size={32}
+                  initial={props.selfInitial}
+                  photoUrl={props.selfPhotoUrl}
+                  bg={props.selfBg}
+                  accessibilityLabel="내 프로필 사진"
+                />
+              </Pressable>
             }
           />
         <View className="flex-1">
-          {props.messages.length === 0 ? (
+          {props.messages.length === 0 && props.isInitialLoading ? (
+            <StateView
+              kind="loading"
+              title="메시지를 불러오고 있어요"
+              desc="잠시만 기다려주세요."
+            />
+          ) : props.messages.length === 0 ? (
             <StateView
               kind="empty"
               icon="💬"
@@ -186,6 +202,22 @@ export function RoomChatView(props: RoomChatViewProps) {
               onScroll={(e) => props.onScroll?.(e.nativeEvent.contentOffset.y)}
               keyExtractor={(m) => m.id}
               renderItem={({ item }) => {
+                if (item.kind === 'system') {
+                  return (
+                    <View className="items-center px-[14px] py-[7px]">
+                      <Text
+                        testID="chat-system-message"
+                        className={cn(
+                          'rounded-full bg-bg-2 px-[10px] py-[5px] text-[12px] font-semibold text-ink-3',
+                          o && 'bg-[rgba(255,255,255,0.16)] text-white',
+                        )}
+                      >
+                        {item.body}
+                      </Text>
+                    </View>
+                  );
+                }
+
                 const mine = item.userId === selfId;
                 const member = members.find((mm) => mm.userId === item.userId);
                 const isWhisper = item.whisperToUserId != null;

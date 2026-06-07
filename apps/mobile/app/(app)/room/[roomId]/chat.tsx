@@ -5,7 +5,7 @@ import { avatarColorFor } from '@dei/ui';
 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
-import { subscribeRoomStatus } from '@/lib/realtime';
+import { subscribeRoomMembers, subscribeRoomStatus } from '@/lib/realtime';
 import { useRoomChat } from '@/hooks/useRoomChat';
 import { RoomChatView } from '@/components/chat/RoomChatView';
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
@@ -20,6 +20,7 @@ import { useChatPresentationMode } from '@/lib/chat/presentation';
 import { getCachedRoomChatMembers, setCachedRoomChatMembers } from '@/lib/chat/member-cache';
 import { resolveProfilePhotoUrls } from '@/lib/profile-photo-cache';
 import { getRoomMembersWithProfile, type RoomMemberWithProfile } from '@/lib/room-rpc';
+import { ROUTES } from '@/lib/routes';
 
 /** 방이 종료/삭제됐는지(읽기전용 전환 신호). status active 가 아니거나 ended_at 존재. */
 function isRoomEnded(row: { status?: string | null; ended_at?: string | null } | null): boolean {
@@ -49,6 +50,35 @@ function buildChatMembers(
         : undefined,
     };
   });
+}
+
+type ProfileRow = {
+  bio: string | null;
+  birth_year: number | null;
+  gender: string | null;
+  mbti: string | null;
+  nickname: string | null;
+  photo_url: string | null;
+  region: string | null;
+  user_id: string;
+};
+
+type RoomMemberUpdateRow = {
+  joined_at?: string | null;
+  left_at?: string | null;
+  role?: string | null;
+  room_id?: string | null;
+  status?: string | null;
+  user_id?: string | null;
+};
+
+function memberLeftNoticeBody(name: string, status: string | null | undefined): string {
+  return `${name}님이 ${status === 'auto_kicked' ? '자동 퇴장됐어요' : '나갔어요'}`;
+}
+
+function toRoomMemberLiteStatus(status: string | null | undefined): RoomMemberLite['status'] {
+  if (status === 'left' || status === 'auto_kicked') return status;
+  return 'active';
 }
 
 /**
@@ -92,7 +122,15 @@ export default function RoomChatScreen() {
   // 아니면 기존 불투명 화면. 라우트 presentation 은 (app)/_layout 이 같은 플래그로 결정.
   const overlay = useChatPresentationMode() === 'overlay';
 
-  const { messages, send, retry } = useRoomChat({ roomId: roomId ?? '', selfId });
+  const { messages, send, retry, addSystemMessage, isInitialLoading } = useRoomChat({
+    roomId: roomId ?? '',
+    selfId,
+  });
+  const membersRef = useRef(members);
+
+  useEffect(() => {
+    membersRef.current = members;
+  }, [members]);
 
   useEffect(() => {
     if (user?.id) setSelfId(user.id);
@@ -119,6 +157,83 @@ export default function RoomChatScreen() {
     const cached = getCachedRoomChatMembers(roomId);
     if (cached.length > 0) setMembers(cached);
   }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    const knownUserIds = new Set(members.map((member) => member.userId));
+    const missingUserIds = [
+      ...new Set(
+        messages
+          .filter((message) => message.kind !== 'system' && !knownUserIds.has(message.userId))
+          .map((message) => message.userId),
+      ),
+    ];
+    if (missingUserIds.length === 0) return;
+
+    let alive = true;
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profile')
+          .select('user_id, nickname, gender, birth_year, region, photo_url, bio, mbti')
+          .in('user_id', missingUserIds);
+
+        if (error) throw error;
+
+        const profiles = (data ?? []) as ProfileRow[];
+        const signedByUser = await resolveProfilePhotoUrls(
+          profiles
+            .filter((profile) => profile.photo_url)
+            .map((profile) => ({
+              path: profile.photo_url,
+              userId: profile.user_id,
+            })),
+          { screen: 'room-chat-authors', roomId },
+        );
+
+        if (!alive) return;
+
+        setMembers((prev) => {
+          const existing = new Set(prev.map((member) => member.userId));
+          const additions = profiles
+            .filter((profile) => !existing.has(profile.user_id))
+            .map((profile): RoomMemberLite => {
+              const name = profile.nickname ?? profile.user_id.slice(0, 6);
+              const photoUrl = signedByUser.get(profile.user_id);
+              return {
+                userId: profile.user_id,
+                status: 'left',
+                name,
+                avatarInitial: name[0],
+                avatarBg: avatarColorFor(profile.user_id),
+                photoUrl,
+                profile: {
+                  avatar_url: photoUrl ?? null,
+                  bio: profile.bio,
+                  birth_year: profile.birth_year,
+                  gender: profile.gender,
+                  mbti: profile.mbti,
+                  nickname: profile.nickname,
+                  photo_url: profile.photo_url,
+                  region: profile.region,
+                },
+              };
+            });
+
+          return additions.length > 0 ? [...prev, ...additions] : prev;
+        });
+      } catch (err) {
+        logger.captureException(err, {
+          tags: { screen: 'room-chat', feature: 'message-author-hydration' },
+          extra: { room_id: roomId, missing_user_count: missingUserIds.length },
+        });
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [members, messages, roomId]);
 
   // 자동스크롤 vs 새 메시지 badge: 하단 근처면 newCount 0(자동 추종), 위로 올라가
   // 있으면 '남이 보낸' 새 메시지 수만큼 newCount 증가. nearBottom 은 onScroll 로 갱신.
@@ -223,6 +338,58 @@ export default function RoomChatScreen() {
     return unsub;
   }, [roomId]);
 
+  useEffect(() => {
+    if (!roomId) return;
+    const unsub = subscribeRoomMembers(roomId, (row) => {
+      const updated = row as RoomMemberUpdateRow;
+      const userId = updated.user_id;
+      if (!userId || updated.room_id !== roomId) return;
+
+      const status = updated.status ?? 'active';
+      const previous = membersRef.current.find((member) => member.userId === userId);
+
+      if (
+        previous?.status === 'active' &&
+        (status === 'left' || status === 'auto_kicked')
+      ) {
+        const createdAt = updated.left_at ?? new Date().toISOString();
+        addSystemMessage({
+          id: `member-${status}-${roomId}-${userId}-${createdAt}`,
+          clientMsgId: null,
+          userId,
+          body: memberLeftNoticeBody(previous.name, status),
+          whisperToUserId: null,
+          createdAt,
+        });
+      }
+
+      setMembers((prev) => {
+        const idx = prev.findIndex((member) => member.userId === userId);
+        if (idx === -1) {
+          const name = userId.slice(0, 6);
+          return [
+            ...prev,
+            {
+              userId,
+              status: toRoomMemberLiteStatus(status),
+              name,
+              avatarInitial: name[0],
+              avatarBg: avatarColorFor(userId),
+            },
+          ];
+        }
+
+        const next = [...prev];
+        next[idx] = {
+          ...next[idx],
+          status: toRoomMemberLiteStatus(status),
+        };
+        return next;
+      });
+    });
+    return unsub;
+  }, [addSystemMessage, roomId]);
+
   // whisper-mode-5/6/11 (E): 멤버 변동 시 귓속말 대상이 더 이상 active 가 아니거나
   // 차단되면 대상을 해제한다(탭 시점 스냅샷이 members.status 와 어긋나는 레이스 방지).
   useEffect(() => {
@@ -320,12 +487,14 @@ export default function RoomChatScreen() {
           },
         } as never);
       }}
+      onSelfProfilePress={() => router.push(ROUTES.myProfile)}
       onClose={() => router.back()}
       newCount={newCount}
       onJump={onJump}
       onScroll={onScroll}
       blockedIds={blockedIds}
       roomEnded={roomEnded}
+      isInitialLoading={isInitialLoading}
       overlay={overlay}
       visible
     />

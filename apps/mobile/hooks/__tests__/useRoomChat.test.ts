@@ -24,15 +24,28 @@ jest.mock('@/lib/realtime', () => ({
   subscribeRoomMessages: (...a: unknown[]) => mockSubscribeRoomMessages(...a),
 }));
 
+const mockTableRows: Record<string, unknown[]> = {
+  message: [],
+  profile: [],
+  room_lifecycle: [],
+};
+
 jest.mock('@/lib/supabase', () => ({
   supabase: {
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          order: () => ({ limit: async () => ({ data: [], error: null }) }),
-        }),
-      }),
-    }),
+    from: (table: string) => {
+      const query = {
+        select: jest.fn(() => query),
+        eq: jest.fn(() => query),
+        in: jest.fn(() => query),
+        order: jest.fn(() => query),
+        limit: jest.fn(() =>
+          Promise.resolve({ data: mockTableRows[table] ?? [], error: null }),
+        ),
+        then: (resolve: (value: { data: unknown[]; error: null }) => unknown) =>
+          Promise.resolve({ data: mockTableRows[table] ?? [], error: null }).then(resolve),
+      };
+      return query;
+    },
   },
 }));
 
@@ -53,9 +66,19 @@ import { useRoomChat } from '../useRoomChat';
 beforeEach(() => {
   mockSendRoomMessage.mockReset();
   mockSubscribeRoomMessages.mockClear();
+  mockTableRows.message = [];
+  mockTableRows.profile = [];
+  mockTableRows.room_lifecycle = [];
 });
 
 describe('useRoomChat', () => {
+  it('reports initial loading until message history has been fetched', async () => {
+    const { result } = renderHook(() => useRoomChat({ roomId: 'r', selfId: 'me' }));
+
+    expect(result.current.isInitialLoading).toBe(true);
+    await waitFor(() => expect(result.current.isInitialLoading).toBe(false));
+  });
+
   it('adds optimistic bubble immediately then reconciles on success', async () => {
     mockSendRoomMessage.mockResolvedValue({
       message: {
@@ -103,5 +126,59 @@ describe('useRoomChat', () => {
     expect(mockSendRoomMessage).toHaveBeenLastCalledWith(
       expect.objectContaining({ clientMsgId: failed.clientMsgId }),
     );
+  });
+
+  it('loads member_left lifecycle rows as system messages', async () => {
+    mockTableRows.room_lifecycle = [
+      {
+        actor_user_id: 'user-left',
+        created_at: '2026-06-07T00:02:00.000Z',
+        event: 'member_left',
+        id: 'life-1',
+      },
+    ];
+    mockTableRows.profile = [{ nickname: '수아', user_id: 'user-left' }];
+
+    const { result } = renderHook(() => useRoomChat({ roomId: 'r', selfId: 'me' }));
+
+    await waitFor(() =>
+      expect(result.current.messages.some((message) => message.kind === 'system')).toBe(true),
+    );
+
+    expect(result.current.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          body: '수아님이 나갔어요',
+          id: 'lifecycle-life-1',
+          kind: 'system',
+          userId: 'user-left',
+        }),
+      ]),
+    );
+  });
+
+  it('addSystemMessage merges a realtime leave notice without duplicating the same id', async () => {
+    const { result } = renderHook(() => useRoomChat({ roomId: 'r', selfId: 'me' }));
+
+    await act(async () => {
+      result.current.addSystemMessage({
+        id: 'member-left-r-user-a-t1',
+        clientMsgId: null,
+        userId: 'user-a',
+        body: '수아님이 나갔어요',
+        whisperToUserId: null,
+        createdAt: '2026-06-07T00:03:00.000Z',
+      });
+      result.current.addSystemMessage({
+        id: 'member-left-r-user-a-t1',
+        clientMsgId: null,
+        userId: 'user-a',
+        body: '수아님이 나갔어요',
+        whisperToUserId: null,
+        createdAt: '2026-06-07T00:03:00.000Z',
+      });
+    });
+
+    expect(result.current.messages.filter((message) => message.kind === 'system')).toHaveLength(1);
   });
 });

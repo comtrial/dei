@@ -1,224 +1,217 @@
-import { corsHeaders, jsonResponse, errorResponse } from '../_shared/cors.ts';
-import { getAuthenticatedUser } from '../_shared/auth.ts';
-import { captureEdgeError, captureEdgeMessage } from '../_shared/log.ts';
+import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { getAuthenticatedUser } from "../_shared/auth.ts";
+import { captureEdgeError, captureEdgeMessage } from "../_shared/log.ts";
 import {
-  getInstantRematchProduct,
+  getInstantRematchProductForRevenueCat,
   getRequiredPaymentEnv,
-} from '../_shared/instant-rematch-payment.ts';
+} from "../_shared/instant-rematch-payment.ts";
+import {
+  findVerifiedRevenueCatTransaction,
+  getRevenueCatTransactionIdentifier,
+  getString,
+  type RevenueCatSubscriberResponse,
+  type RevenueCatTransaction,
+} from "../_shared/revenuecat-purchase.ts";
 
-type ConfirmPaymentBody = {
-  code?: unknown;
-  message?: unknown;
-  paymentId?: unknown;
+type ConfirmPurchaseBody = {
+  appUserId?: unknown;
+  customerInfoRequestDate?: unknown;
   productId?: unknown;
-  txId?: unknown;
+  revenueCatProductId?: unknown;
+  transactionId?: unknown;
 };
 
-type PortOnePayment = {
-  amount?: number | { total?: number };
-  id?: string;
-  paidAt?: string;
-  paymentId?: string;
-  status?: string;
-  totalAmount?: number;
+type GrantPurchaseResult = {
+  duplicate: boolean;
+  granted: number;
+  payment_id: string;
 };
 
-const getPaymentAmount = (payment: PortOnePayment) => {
-  if (typeof payment.totalAmount === 'number') {
-    return payment.totalAmount;
+const REVENUECAT_PROVIDER = "revenuecat";
+
+async function fetchRevenueCatSubscriber(appUserId: string) {
+  const apiKey = getRequiredPaymentEnv("REVENUECAT_REST_API_KEY");
+  const response = await fetch(
+    `https://api.revenuecat.com/v1/subscribers/${
+      encodeURIComponent(appUserId)
+    }`,
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+    },
+  );
+  const body = await response.json().catch(() => ({})) as
+    & RevenueCatSubscriberResponse
+    & {
+      message?: string;
+    };
+
+  if (!response.ok) {
+    throw new Error(
+      body.message ??
+        `RevenueCat subscriber lookup failed (${response.status})`,
+    );
   }
 
-  if (typeof payment.amount === 'number') {
-    return payment.amount;
-  }
-
-  if (payment.amount && typeof payment.amount === 'object') {
-    return typeof payment.amount.total === 'number' ? payment.amount.total : null;
-  }
-
-  return null;
-};
-
-const isPaid = (payment: PortOnePayment) => {
-  const status = payment.status?.toUpperCase();
-  return status === 'PAID' || status === 'DONE' || status === 'COMPLETED' || Boolean(payment.paidAt);
-};
+  return body;
+}
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
-  if (req.method !== 'POST') {
-    return errorResponse('method not allowed', 405);
+  if (req.method !== "POST") {
+    return errorResponse("method not allowed", 405);
   }
 
-  // catch 에서 식별자를 잃지 않도록 hoist(user/product 는 try 내부 선언).
   let userId: string | undefined;
-  let capturedPaymentId: string | undefined;
   let capturedProductId: string | undefined;
+  let capturedTransactionId: string | undefined;
 
   try {
     const { supabase, user } = await getAuthenticatedUser(req);
     userId = user.id;
-    const body = await req.json().catch(() => ({})) as ConfirmPaymentBody;
-    const paymentId = typeof body.paymentId === 'string' ? body.paymentId.trim() : '';
-    const productId = typeof body.productId === 'string' ? body.productId.trim() : null;
-    const sdkCode = typeof body.code === 'string' ? body.code.trim() : null;
-    const sdkMessage = typeof body.message === 'string' ? body.message.trim() : null;
-    const product = getInstantRematchProduct(productId);
-    capturedPaymentId = paymentId || undefined;
-    capturedProductId = product.id;
 
-    if (!paymentId) {
-      return errorResponse('paymentId is required', 400);
-    }
+    const body = await req.json().catch(() => ({})) as ConfirmPurchaseBody;
+    const logicalProductId = getString(body.productId) || null;
+    const revenueCatProductIdFromClient = getString(body.revenueCatProductId) ||
+      null;
+    const transactionIdFromClient = getString(body.transactionId);
+    const appUserId = getString(body.appUserId);
 
-    if (sdkCode) {
-      await supabase
-        .from('payment')
-        .update({ status: 'failed' })
-        .eq('id', paymentId)
-        .eq('user_id', user.id);
-
-      return errorResponse(sdkMessage || 'payment failed', 400, { code: sdkCode });
-    }
-
-    const storeId = getRequiredPaymentEnv('PORTONE_STORE_ID');
-    const apiSecret = getRequiredPaymentEnv('PORTONE_API_SECRET');
-    const portOneResponse = await fetch(
-      `https://api.portone.io/payments/${encodeURIComponent(paymentId)}`,
-      {
-        headers: {
-          Authorization: `PortOne ${apiSecret}`,
+    if (appUserId && appUserId !== user.id) {
+      return errorResponse(
+        "RevenueCat app user id does not match authenticated user",
+        403,
+        {
+          code: "APP_USER_MISMATCH",
         },
+      );
+    }
+
+    if (!transactionIdFromClient) {
+      return errorResponse("transactionId is required", 400, {
+        code: "TRANSACTION_ID_REQUIRED",
+      });
+    }
+
+    const product = getInstantRematchProductForRevenueCat({
+      logicalProductId,
+      revenueCatProductId: revenueCatProductIdFromClient,
+    });
+    capturedProductId = product.id;
+    capturedTransactionId = transactionIdFromClient;
+
+    const subscriber = await fetchRevenueCatSubscriber(user.id);
+    const revenueCatTransaction = findVerifiedRevenueCatTransaction({
+      revenueCatProductId: product.revenueCatProductId,
+      subscriber,
+      transactionId: transactionIdFromClient,
+    });
+
+    if (!revenueCatTransaction) {
+      captureEdgeMessage(
+        "confirm-instant-rematch-payment",
+        "RevenueCat transaction not found",
+        {
+          stage: "verify_revenuecat_purchase",
+          status: 400,
+          userId: user.id,
+          tags: {
+            feature: "payment",
+            provider: REVENUECAT_PROVIDER,
+            code: "transaction_not_found",
+          },
+          extra: {
+            productId: product.id,
+            revenueCatProductId: product.revenueCatProductId,
+            transactionId: transactionIdFromClient,
+          },
+        },
+      );
+
+      return errorResponse("RevenueCat purchase verification failed", 400, {
+        code: "TRANSACTION_NOT_FOUND",
+      });
+    }
+
+    const verifiedTransactionId = getRevenueCatTransactionIdentifier(
+      revenueCatTransaction,
+    );
+    if (!verifiedTransactionId) {
+      return errorResponse(
+        "RevenueCat transaction identifier is missing",
+        400,
+        {
+          code: "TRANSACTION_ID_MISSING",
+        },
+      );
+    }
+
+    const { data, error } = await supabase.rpc(
+      "grant_instant_rematch_purchase",
+      {
+        p_granted: product.granted,
+        p_product_id: product.id,
+        p_provider: REVENUECAT_PROVIDER,
+        p_provider_metadata: {
+          customerInfoRequestDate: getString(body.customerInfoRequestDate) ||
+            null,
+          isSandbox: typeof revenueCatTransaction.is_sandbox === "boolean"
+            ? revenueCatTransaction.is_sandbox
+            : null,
+          purchaseDate: getString(revenueCatTransaction.purchase_date) || null,
+          revenueCatProductId: product.revenueCatProductId,
+          store: getString(revenueCatTransaction.store) || null,
+          transactionIdFromClient,
+        },
+        p_provider_transaction_id: verifiedTransactionId,
+        p_user_id: user.id,
       },
     );
-    const portOneBody = await portOneResponse.json().catch(() => ({}));
 
-    if (!portOneResponse.ok) {
-      await supabase
-        .from('payment')
-        .update({ status: 'failed' })
-        .eq('id', paymentId)
-        .eq('user_id', user.id);
-
-      // PortOne 인프라 장애 — 사용자 결제 검증 자체가 불가. 사용자 잘못 아님.
-      captureEdgeMessage('confirm-instant-rematch-payment', 'PortOne payment lookup failed', {
-        stage: 'fetch_portone',
-        status: 502,
-        level: 'warning',
-        userId: user.id,
-        tags: { feature: 'payment' },
-        extra: { paymentId, portoneStatus: portOneResponse.status },
-      });
-
-      return errorResponse(portOneBody?.message ?? 'PortOne payment lookup failed', 502);
+    if (error) {
+      throw error;
     }
 
-    const payment = (portOneBody.payment ?? portOneBody) as PortOnePayment;
-    const amount = getPaymentAmount(payment);
-
-    if (!isPaid(payment) || amount !== product.amount) {
-      await supabase
-        .from('payment')
-        .update({ status: 'failed' })
-        .eq('id', paymentId)
-        .eq('user_id', user.id);
-
-      // 결제 미완 또는 금액 불일치 — 정합성/위변조 reconciliation 신호로 기록.
-      captureEdgeMessage('confirm-instant-rematch-payment', 'payment_verification_mismatch', {
-        stage: 'verify_payment',
-        status: 400,
-        level: 'warning',
-        userId: user.id,
-        tags: { feature: 'payment', code: 'payment_verification_mismatch' },
-        extra: {
-          paymentId,
-          paymentStatus: payment.status ?? null,
-          expectedAmount: product.amount,
-          gotAmount: amount,
-        },
-      });
-
-      return errorResponse('payment verification failed', 400, {
-        paymentStatus: payment.status ?? null,
-      });
-    }
-
-    const { error: paymentUpdateError } = await supabase
-      .from('payment')
-      .update({
-        amount: product.amount,
-        product_id: product.id,
-        provider: 'portone',
-        status: 'completed',
-      })
-      .eq('id', paymentId)
-      .eq('user_id', user.id);
-
-    if (paymentUpdateError) {
-      throw paymentUpdateError;
-    }
-
-    const { data: existingPass, error: passLoadError } = await supabase
-      .from('pass')
-      .select('id, granted, remaining')
-      .eq('user_id', user.id)
-      .eq('kind', 'booster')
-      .eq('status', 'active')
-      .limit(1)
-      .maybeSingle();
-
-    if (passLoadError) {
-      throw passLoadError;
-    }
-
-    if (existingPass) {
-      const { error: passUpdateError } = await supabase
-        .from('pass')
-        .update({
-          granted: existingPass.granted + product.granted,
-          remaining: existingPass.remaining + product.granted,
-          source: 'purchase',
-        })
-        .eq('id', existingPass.id);
-
-      if (passUpdateError) {
-        throw passUpdateError;
-      }
-    } else {
-      const { error: passInsertError } = await supabase.from('pass').insert({
-        granted: product.granted,
-        kind: 'booster',
-        remaining: product.granted,
-        source: 'purchase',
-        status: 'active',
-        user_id: user.id,
-      });
-
-      if (passInsertError) {
-        throw passInsertError;
-      }
+    const grant = (Array.isArray(data) ? data[0] : data) as
+      | GrantPurchaseResult
+      | undefined;
+    if (!grant) {
+      throw new Error("grant_instant_rematch_purchase returned no result");
     }
 
     return jsonResponse({
-      granted: product.granted,
+      duplicate: grant.duplicate,
+      granted: grant.granted,
       ok: true,
-      paymentId,
-      storeId,
+      paymentId: grant.payment_id,
+      productId: product.id,
+      provider: REVENUECAT_PROVIDER,
+      revenueCatProductId: product.revenueCatProductId,
+      transactionId: verifiedTransactionId,
     });
   } catch (error) {
-    // MONEY PATH — payment update/pass load/update/insert 어디서 throw 하든
-    // '사용자 결제했는데 아무것도 못 받음' 이 조용히 사라지던 지점. 반드시 기록.
-    captureEdgeError('confirm-instant-rematch-payment', error, {
-      stage: 'confirm_payment_grant',
+    captureEdgeError("confirm-instant-rematch-payment", error, {
+      stage: "confirm_revenuecat_purchase",
       status: 500,
       userId,
-      tags: { feature: 'payment', code: 'confirm_failed' },
-      extra: { paymentId: capturedPaymentId, productId: capturedProductId },
+      tags: {
+        feature: "payment",
+        provider: REVENUECAT_PROVIDER,
+        code: "confirm_failed",
+      },
+      extra: {
+        productId: capturedProductId,
+        transactionId: capturedTransactionId,
+      },
     });
-    const message = error instanceof Error ? error.message : 'failed to confirm payment';
+    const message = error instanceof Error
+      ? error.message
+      : "failed to confirm purchase";
     return errorResponse(message, 400);
   }
 });

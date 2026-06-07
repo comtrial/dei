@@ -17,6 +17,7 @@ function setup(overrides = {}) {
     messages: MSGS, members: MEMBERS, input: '', whisperTarget: null,
     onChangeInput: jest.fn(), onSend: jest.fn(), onRetry: jest.fn(),
     onSelectMention: jest.fn(), onClearWhisper: jest.fn(), onAvatarPress: jest.fn(), onClose: jest.fn(),
+    onSelfProfilePress: jest.fn(),
     newCount: 0, onJump: jest.fn(), visible: true, ...overrides,
   };
   render(<RoomChatView {...props} />);
@@ -28,6 +29,27 @@ describe('RoomChatView', () => {
     setup();
     expect(screen.getByText('안녕하세요')).toBeTruthy();
     expect(screen.getByText('반가워요')).toBeTruthy();
+  });
+
+  it('renders system leave notices as centered chat events', () => {
+    setup({
+      messages: [
+        {
+          id: 'system-1',
+          clientMsgId: null,
+          userId: 'u1',
+          body: '수아님이 나갔어요',
+          whisperToUserId: null,
+          createdAt: 't3',
+          sendState: 'sent',
+          kind: 'system',
+        },
+      ],
+    });
+
+    expect(screen.getByTestId('chat-system-message')).toBeTruthy();
+    expect(screen.getByText('수아님이 나갔어요')).toBeTruthy();
+    expect(screen.queryByTestId('chat-bubble-avatar')).toBeNull();
   });
 
   it('failed me message shows retry firing onRetry with clientMsgId', () => {
@@ -137,6 +159,19 @@ describe('RoomChatView', () => {
     const props = setup();
     fireEvent.press(screen.getByLabelText('뒤로'));
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('header self avatar opens my profile', () => {
+    const props = setup();
+    fireEvent.press(screen.getByTestId('chat-header-my-profile'));
+    expect(props.onSelfProfilePress).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows loading instead of empty state while initial messages load', () => {
+    setup({ isInitialLoading: true, messages: [] });
+    expect(screen.getByText('메시지를 불러오고 있어요')).toBeTruthy();
+    expect(screen.queryByText('아직 메시지가 없어요')).toBeNull();
+    expect(screen.getByTestId('input-bar-input')).toBeTruthy();
   });
 
   // 빈 상태: 메시지 0건이면 안내 + 컴포저 유지.

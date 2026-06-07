@@ -1,8 +1,6 @@
 import type {
   IdentityVerificationRequest,
   IdentityVerificationResponse,
-  PaymentRequest,
-  PaymentResponse,
 } from '@portone/browser-sdk/v2';
 
 import { supabase } from '@/lib/supabase';
@@ -259,52 +257,6 @@ export async function withdrawAccount({
 
   if (error || !data) {
     throw await getFunctionError('탈퇴 처리에 실패했어요.', error);
-  }
-
-  return data;
-}
-
-export async function startInstantRematchPayment(productId: string): Promise<PaymentRequest> {
-  const { data, error } = await supabase.functions.invoke<{ request: PaymentRequest }>(
-    'start-instant-rematch-payment',
-    {
-      body: {
-        productId,
-      },
-    },
-  );
-
-  if (error || !data?.request) {
-    throw await getFunctionError('결제를 시작할 수 없어요.', error);
-  }
-
-  return data.request;
-}
-
-export async function confirmInstantRematchPayment(
-  response: PaymentResponse,
-  productId: string,
-): Promise<{ granted: number; ok: true; paymentId: string }> {
-  if (!response.paymentId) {
-    throw new Error('결제 결과 식별자를 확인할 수 없어요.');
-  }
-
-  const { data, error } = await supabase.functions.invoke<{
-    granted: number;
-    ok: true;
-    paymentId: string;
-  }>('confirm-instant-rematch-payment', {
-    body: {
-      code: response.code,
-      message: response.message,
-      paymentId: response.paymentId,
-      productId,
-      txId: response.txId,
-    },
-  });
-
-  if (error || !data) {
-    throw await getFunctionError('결제를 확인할 수 없어요.', error);
   }
 
   return data;
