@@ -37,7 +37,7 @@ export const POLICY = {
     /** 큐 만료. 초과 시 S09(매칭 실패/만료). */
     queueExpiryHours: 24,
     /** 방 이탈 후 재매칭 제한. 여성은 결제 없이 자동 면제된다. */
-    rematchCooldownHours: 24,
+    rematchCooldownHours: 12,
   },
 
   // ── 팀(묶음) 구성 (D4 · S06) ───────────────────────────────────
