@@ -26,12 +26,21 @@ function dateToKey(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
+type DayMarking = {
+  selected?: boolean;
+  selectedColor?: string;
+  marked?: boolean;
+  dotColor?: string;
+};
+
 export interface CalendarSheetProps {
   visible: boolean;
   onClose: () => void;
   selectedDate: Date;
   onSelect: (date: Date) => void;
   minDate?: Date;
+  /** 영상이 1개라도 있는 KST 날짜 키('YYYY-MM-DD') 집합 — 점으로 표기 */
+  markedDateKeys?: Set<string>;
 }
 
 export function CalendarSheet({
@@ -40,11 +49,28 @@ export function CalendarSheet({
   selectedDate,
   onSelect,
   minDate,
+  markedDateKeys,
 }: CalendarSheetProps) {
   const today = useMemo(() => new Date(), []);
   const todayKey = dateToKey(today);
   const selectedKey = dateToKey(selectedDate);
   const minKey = minDate ? dateToKey(minDate) : undefined;
+
+  const markedDates = useMemo(() => {
+    const marks: Record<string, DayMarking> = {};
+    if (markedDateKeys) {
+      for (const key of markedDateKeys) {
+        marks[key] = { marked: true, dotColor: color.accent };
+      }
+    }
+    // 선택일 강조 — 영상 있는 날과 겹치면 점+강조 둘 다 유지
+    marks[selectedKey] = {
+      ...marks[selectedKey],
+      selected: true,
+      selectedColor: color.accent,
+    };
+    return marks;
+  }, [markedDateKeys, selectedKey]);
 
   return (
     <BottomSheet visible={visible} onClose={onClose} heightPct={56}>
@@ -61,9 +87,7 @@ export function CalendarSheet({
             const picked = new Date(day.year, day.month - 1, day.day);
             onSelect(picked);
           }}
-          markedDates={{
-            [selectedKey]: { selected: true, selectedColor: color.accent },
-          }}
+          markedDates={markedDates}
           theme={{
             backgroundColor: color.paper,
             calendarBackground: color.paper,
