@@ -69,10 +69,10 @@ export default function BoosterFailedScreen() {
           </View>
 
           <Text variant="h1" className="mt-[26px] text-[26px] leading-[34px]">
-            24시간 기다리지 말고 지금 시작
+            12시간 기다리지 말고 지금 시작
           </Text>
           <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-            방을 나간 후 24시간 제한을 면제해드려요
+            방을 나간 후 12시간 제한을 면제해드려요
           </Text>
 
           <View className="mt-[26px] gap-[10px]">
@@ -98,7 +98,7 @@ export default function BoosterFailedScreen() {
               결제가 완료되지 않았어요
             </Text>
             <Text className="mt-[6px] text-center text-[12.5px] leading-[20px] text-ink-3">
-              결제 도중 문제가 생겼어요.{'\n'}24시간 제한은 그대로 유지돼요.
+              결제 도중 문제가 생겼어요.{'\n'}12시간 제한은 그대로 유지돼요.
             </Text>
 
             <Pressable

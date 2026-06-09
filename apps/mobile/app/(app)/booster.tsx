@@ -253,10 +253,10 @@ export default function BoosterScreen() {
             }}
           />
           <Text variant="h1" className="mt-[26px] text-[26px] leading-[34px]">
-            24시간 기다리지 말고 지금 시작
+            12시간 기다리지 말고 지금 시작
           </Text>
           <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-            방을 나간 후 24시간 제한을 면제해드려요
+            방을 나간 후 12시간 제한을 면제해드려요
           </Text>
 
           <View className="mt-[26px]">

@@ -621,7 +621,7 @@ export default function MyProfileScreen() {
                     잔여 {profile.passCount}회
                   </Text>
                   <Text className="mt-[3px] text-[11.5px] text-ink-3">
-                    24시간 제한 면제권
+                    12시간 제한 면제권
                   </Text>
                 </View>
                 <Button

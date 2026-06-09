@@ -38,7 +38,7 @@ describe('policy (L2 config SSOT)', () => {
     expect(POLICY.room.autoExpireDays).toBe(7);
     expect(POLICY.blurGate.visibilityWindowHours).toBe(24);
     expect(POLICY.matching.queueExpiryHours).toBe(24);
-    expect(POLICY.matching.rematchCooldownHours).toBe(24);
+    expect(POLICY.matching.rematchCooldownHours).toBe(12);
   });
 
   it('가격은 product id 만(하드코딩 가격 금지, D11)', () => {

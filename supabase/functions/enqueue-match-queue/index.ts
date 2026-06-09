@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
 
     if (rematchRestriction.restricted) {
       if (ownerProfile.gender === 'female' && POLICY.payment.femaleInstantRematchFree) {
-        // 여성 사용자는 PRD §13에 따라 방 이탈 후 24h 제한을 자동 면제한다.
+        // 여성 사용자는 PRD §13에 따라 방 이탈 후 재매칭 제한을 자동 면제한다.
       } else {
         const { data: activePass, error: passError } = await supabase
           .from('pass')
@@ -203,7 +203,7 @@ Deno.serve(async (req) => {
         }
 
         if (!activePass) {
-          return errorResponse('다음 매칭은 24시간 후부터 가능해요.', 402, {
+          return errorResponse('다음 매칭은 12시간 후부터 가능해요.', 402, {
             availableAt: rematchRestriction.availableAt,
             code: 'REMATCH_RESTRICTED',
             remainingMs: rematchRestriction.remainingMs,
