@@ -157,6 +157,44 @@ describe('GridRoom (X10)', () => {
     expect(screen.getByTestId('thumb')).toBeTruthy();
   });
 
+  // 회귀: 비동기 캐시 URI 다운로드 완료 시, 동일 videoId 셀에 새 media 가 주입되어도
+  // FilledCell 의 React.memo 가 ReactNode 비교를 못 해 검은박스가 영구 잔류했던 버그.
+  // mediaKey 가 바뀌면 memo skip 무효화되어 media 가 교체되어야 한다.
+  it('swaps the media node when mediaKey changes (async URI swap memo-bust)', () => {
+    const baseCell = {
+      name: '도경',
+      uploadTime: '14:02',
+      videoId: 'v1',
+    } as const;
+
+    const { rerender } = render(
+      <GridRoom
+        cells={[
+          {
+            ...baseCell,
+            media: <View testID="media-pending" />,
+            mediaKey: 'v1|',
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('media-pending')).toBeTruthy();
+
+    rerender(
+      <GridRoom
+        cells={[
+          {
+            ...baseCell,
+            media: <View testID="media-ready" />,
+            mediaKey: 'v1|file:///cache/v1.mp4',
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('media-ready')).toBeTruthy();
+    expect(screen.queryByTestId('media-pending')).toBeNull();
+  });
+
   it('renders the presence avatar profile photo when photoUrl is provided', () => {
     render(
       <GridRoom
