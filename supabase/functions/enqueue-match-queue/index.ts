@@ -322,22 +322,6 @@ Deno.serve(async (req) => {
       throw queueError ?? new Error('queue was not created');
     }
 
-    if (passToConsume) {
-      const remaining = Math.max(passToConsume.remaining - 1, 0);
-      const { error: passConsumeError } = await supabase
-        .from('pass')
-        .update({
-          remaining,
-          status: remaining > 0 ? 'active' : 'consumed',
-        })
-        .eq('id', passToConsume.id)
-        .eq('user_id', user.id);
-
-      if (passConsumeError) {
-        throw passConsumeError;
-      }
-    }
-
     // 자동 즉시 매칭 (config 게이트 — 앱 재빌드 없이 DB 토글). 매칭 규칙·임계값은
     // 전부 RPC(try_match) + match_config 에 있어 Edge 는 게이트만 본다.
     const { data: cfg } = await supabase
@@ -421,7 +405,7 @@ Deno.serve(async (req) => {
         && POLICY.payment.femaleInstantRematchFree,
       matched: false,
       memberCount: memberIds.length,
-      passConsumed: Boolean(passToConsume),
+      passConsumed: false,
       queueId: queue.id,
       reused: false,
       status: 'queued',

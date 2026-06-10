@@ -3,5 +3,5 @@ export function getRoomRematchCooldownAnchor(
   fallbackLeftAt: string,
 ) {
   const createdAtMs = roomCreatedAt ? new Date(roomCreatedAt).getTime() : Number.NaN;
-  return Number.isFinite(createdAtMs) ? roomCreatedAt! : fallbackLeftAt;
+  return Number.isFinite(createdAtMs) && roomCreatedAt ? roomCreatedAt : fallbackLeftAt;
 }
