@@ -363,11 +363,33 @@ describe.skipIf(!SHOULD_RUN)('여정 관통 (매칭 → 방 나가기 → 재참
     const r2 = await resolveRoute(a.client, a.id);
     expect(r2.route).toBe('home');
 
-    // 4) A 가 다시 혼자 참여 → 큐 등록 후 try_match 가 C 와 즉시 성사.
+    // 4) A 가 다시 혼자 참여 → 12h 재매칭 제한 중이므로 booster pass 를 room 생성 시 1회 소비한다.
+    const { data: pass, error: passErr } = await admin
+      .from('pass')
+      .insert({
+        granted: 1,
+        kind: 'booster',
+        remaining: 1,
+        source: 'purchase',
+        status: 'active',
+        user_id: a.id,
+      })
+      .select('id')
+      .single();
+    expect(passErr).toBeNull();
+
     const aReTeam = await mkTeamQueue([a], 'male', { enqueue: true });
     const tm = await admin.rpc('try_match', { p_queue_id: aReTeam.queueId });
     expect(tm.error).toBeNull();
     expect(tm.data).not.toBeNull(); // group_match.id 반환 = 성사
+
+    const { data: consumedPass } = await admin
+      .from('pass')
+      .select('remaining, status')
+      .eq('id', pass!.id)
+      .single();
+    expect(consumedPass?.remaining).toBe(0);
+    expect(consumedPass?.status).toBe('consumed');
 
     // 5) A 와 C 가 같은 새 방에 함께, A route=room. C 큐는 matched.
     const r3 = await resolveRoute(a.client, a.id);
