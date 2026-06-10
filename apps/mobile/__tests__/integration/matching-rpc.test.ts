@@ -552,6 +552,21 @@ describe.skipIf(!SHOULD_RUN)('try_match — tier-relaxed pairing + solo merge', 
     expect(await queueStatusByTeam(b.teamId)).toBe('matched');
   });
 
+  it('Tier0 정확일치면 지역이 달라도 즉시 매칭한다', async () => {
+    const males = await makeUsers('male', 2, 'tm2r');
+    const females = await makeUsers('female', 2, 'tf2r');
+    const b = await mkTeamQueue(females, 'female', { region: 'incheon' });
+    const a = await mkTeamQueue(males, 'male', { region: 'seoul' });
+
+    const { data: ret, error } = await admin.rpc('try_match', { p_queue_id: a.queueId });
+    expect(error).toBeNull();
+    const gm = await resolveMatch(ret as string | null);
+    expect(gm).not.toBeNull();
+    expect(await roomMemberCount(gm!.room_id!)).toBe(4);
+    expect(await queueStatusByTeam(a.teamId)).toBe('matched');
+    expect(await queueStatusByTeam(b.teamId)).toBe('matched');
+  });
+
   it('Tier0 size 불일치(1 vs 3) → null, 둘 다 waiting', async () => {
     const m1 = await makeUser('male', 't0m');
     const females = await makeUsers('female', 3, 't0f');
@@ -562,6 +577,79 @@ describe.skipIf(!SHOULD_RUN)('try_match — tier-relaxed pairing + solo merge', 
     expect(ret).toBeNull();
     expect(await queueStatusByTeam(a.teamId)).toBe('waiting');
     expect(await queueStatusByTeam(b.teamId)).toBe('waiting');
+  });
+
+  it('재매칭 pass는 후보가 없어 queued 상태로 남으면 차감하지 않는다', async () => {
+    const m1 = await makeUser('male', 'rpmq');
+    await admin
+      .from('profile')
+      .update({ last_room_leave_at: new Date().toISOString() })
+      .eq('user_id', m1.id);
+    const { data: pass, error: passErr } = await admin
+      .from('pass')
+      .insert({
+        granted: 3,
+        kind: 'booster',
+        remaining: 3,
+        source: 'purchase',
+        status: 'active',
+        user_id: m1.id,
+      })
+      .select('id')
+      .single();
+    expect(passErr).toBeNull();
+
+    const a = await mkTeamQueue([m1], 'male');
+    const { data: ret, error } = await admin.rpc('try_match', { p_queue_id: a.queueId });
+    expect(error).toBeNull();
+    expect(ret).toBeNull();
+
+    const { data: after } = await admin
+      .from('pass')
+      .select('remaining, status')
+      .eq('id', pass!.id)
+      .single();
+    expect(after?.remaining).toBe(3);
+    expect(after?.status).toBe('active');
+  });
+
+  it('재매칭 pass는 실제 room 생성 시점에만 1회 차감한다', async () => {
+    const m1 = await makeUser('male', 'rpm');
+    const f1 = await makeUser('female', 'rpf');
+    await admin
+      .from('profile')
+      .update({ last_room_leave_at: new Date().toISOString() })
+      .eq('user_id', m1.id);
+    const { data: pass, error: passErr } = await admin
+      .from('pass')
+      .insert({
+        granted: 3,
+        kind: 'booster',
+        remaining: 3,
+        source: 'purchase',
+        status: 'active',
+        user_id: m1.id,
+      })
+      .select('id')
+      .single();
+    expect(passErr).toBeNull();
+
+    const b = await mkTeamQueue([f1], 'female');
+    const a = await mkTeamQueue([m1], 'male');
+    const { data: ret, error } = await admin.rpc('try_match', { p_queue_id: a.queueId });
+    expect(error).toBeNull();
+    const gm = await resolveMatch(ret as string | null);
+    expect(gm).not.toBeNull();
+    expect(await queueStatusByTeam(a.teamId)).toBe('matched');
+    expect(await queueStatusByTeam(b.teamId)).toBe('matched');
+
+    const { data: after } = await admin
+      .from('pass')
+      .select('remaining, status')
+      .eq('id', pass!.id)
+      .single();
+    expect(after?.remaining).toBe(2);
+    expect(after?.status).toBe('active');
   });
 
   it('Tier1 진입(backdate) 후 1↔3 비대칭 성사 → room_member 4', async () => {

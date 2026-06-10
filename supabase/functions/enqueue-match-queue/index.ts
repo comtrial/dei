@@ -92,6 +92,16 @@ Deno.serve(async (req) => {
       return errorResponse('묶음 인원을 다시 확인해주세요.', 400, { code: 'INVALID_MEMBERS' });
     }
 
+    const { data: ownerProfileForQueue, error: ownerProfileForQueueError } = await supabase
+      .from('profile')
+      .select('last_room_leave_at')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (ownerProfileForQueueError) {
+      throw ownerProfileForQueueError;
+    }
+
     const { data: existingTeams, error: existingTeamsError } = await supabase
       .from('team_member')
       .select('team_id')
@@ -118,7 +128,39 @@ Deno.serve(async (req) => {
       }
 
       if (existingQueue) {
-        if (!existingQueue.expires_at || existingQueue.expires_at > now) {
+        const lastRoomLeaveAt = ownerProfileForQueue?.last_room_leave_at ?? null;
+        if (lastRoomLeaveAt && existingQueue.enqueued_at <= lastRoomLeaveAt) {
+          const { data: staleQueues, error: staleQueueLookupError } = await supabase
+            .from('match_queue')
+            .select('id, team_id')
+            .in('team_id', existingTeamIds)
+            .eq('status', 'waiting')
+            .lte('enqueued_at', lastRoomLeaveAt);
+
+          if (staleQueueLookupError) {
+            throw staleQueueLookupError;
+          }
+
+          const staleQueueIds = staleQueues?.map((queue) => queue.id) ?? [];
+          const staleTeamIds = [...new Set(staleQueues?.map((queue) => queue.team_id) ?? [])];
+
+          if (staleQueueIds.length > 0) {
+            const [{ error: staleQueueUpdateError }, { error: staleTeamUpdateError }] = await Promise.all([
+              supabase
+                .from('match_queue')
+                .update({ status: 'cancelled' })
+                .in('id', staleQueueIds),
+              supabase
+                .from('team')
+                .update({ disbanded_at: now, status: 'disbanded' })
+                .in('id', staleTeamIds),
+            ]);
+
+            if (staleQueueUpdateError || staleTeamUpdateError) {
+              throw staleQueueUpdateError ?? staleTeamUpdateError;
+            }
+          }
+        } else if (!existingQueue.expires_at || existingQueue.expires_at > now) {
           return jsonResponse({
             enqueuedAt: existingQueue.enqueued_at,
             expiresAt: existingQueue.expires_at,
@@ -280,22 +322,6 @@ Deno.serve(async (req) => {
       throw queueError ?? new Error('queue was not created');
     }
 
-    if (passToConsume) {
-      const remaining = Math.max(passToConsume.remaining - 1, 0);
-      const { error: passConsumeError } = await supabase
-        .from('pass')
-        .update({
-          remaining,
-          status: remaining > 0 ? 'active' : 'consumed',
-        })
-        .eq('id', passToConsume.id)
-        .eq('user_id', user.id);
-
-      if (passConsumeError) {
-        throw passConsumeError;
-      }
-    }
-
     // 자동 즉시 매칭 (config 게이트 — 앱 재빌드 없이 DB 토글). 매칭 규칙·임계값은
     // 전부 RPC(try_match) + match_config 에 있어 Edge 는 게이트만 본다.
     const { data: cfg } = await supabase
@@ -379,7 +405,7 @@ Deno.serve(async (req) => {
         && POLICY.payment.femaleInstantRematchFree,
       matched: false,
       memberCount: memberIds.length,
-      passConsumed: Boolean(passToConsume),
+      passConsumed: false,
       queueId: queue.id,
       reused: false,
       status: 'queued',
