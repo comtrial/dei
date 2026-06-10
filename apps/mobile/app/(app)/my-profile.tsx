@@ -139,7 +139,6 @@ function formatDateLabel(date: Date) {
 export default function MyProfileScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [termsVisible, setTermsVisible] = useState(false);
   const [editor, setEditor] = useState<ProfileEditor>(null);
   const [draft, setDraft] = useState<ProfileDraft>(EMPTY_DRAFT);
   const [isSaving, setIsSaving] = useState(false);
@@ -645,7 +644,7 @@ export default function MyProfileScreen() {
             />
             <SettingsRow
               label="약관 보기"
-              onPress={() => setTermsVisible(true)}
+              onPress={() => router.push(ROUTES.termsDocument)}
             />
             <SettingsRow
               label="고객센터"
@@ -676,16 +675,6 @@ export default function MyProfileScreen() {
           ) : null}
         </View>
       </ScrollView>
-
-      <AlertDialog
-        visible={termsVisible}
-        tone="info"
-        icon="i"
-        title="약관 보기"
-        description="서비스 이용약관, 개인정보 처리방침, 위치정보 수집, 마케팅 정보 수신 약관을 확인할 수 있어요."
-        actions={[{ label: '확인', variant: 'ink', onPress: () => setTermsVisible(false) }]}
-        onDismiss={() => setTermsVisible(false)}
-      />
 
       <BottomSheet
         visible={editor !== null}
