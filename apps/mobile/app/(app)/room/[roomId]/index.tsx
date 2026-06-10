@@ -221,6 +221,15 @@ function buildCells(
         })
       : '--:--';
 
+    // 비동기 캐시 다운로드 완료 후 URI 가 채워지면 `media` JSX 가 새로 만들어지지만
+    // FilledCell 의 React.memo 가 `media` 변경을 감지 못해 검은박스가 영구 잔류한다.
+    // (회귀 방지) `mediaKey` 로 의미적 변경을 명시 — URI 가 비어있다가 채워지는
+    // 순간 키가 바뀌어 memo skip 을 무효화한다.
+    const uris = video.storage_path ? mediaUriByVideo.get(video.id) : undefined;
+    const mediaKey = video.storage_path
+      ? `${video.id}|${uris?.thumbnailUri ?? ''}|${uris?.videoUri ?? ''}`
+      : undefined;
+
     return {
       kind: undefined,
       name: displayName,
@@ -230,10 +239,11 @@ function buildCells(
       videoId: video.id,
       present: onlineUserIds.has(member.user_id),
       photoUrl,
+      mediaKey,
       media: video.storage_path ? (
         <CellVideoMedia
-          thumbnailUri={mediaUriByVideo.get(video.id)?.thumbnailUri}
-          videoUri={mediaUriByVideo.get(video.id)?.videoUri}
+          thumbnailUri={uris?.thumbnailUri}
+          videoUri={uris?.videoUri}
         />
       ) : undefined,
     };

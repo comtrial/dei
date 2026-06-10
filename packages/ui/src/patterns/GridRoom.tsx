@@ -91,6 +91,13 @@ export interface GridRoomFilledCell {
   uploadTime: string;
   gradient?: CellGradient;
   media?: ReactNode;
+  /**
+   * `media` 컨텐츠 식별자. `media` 는 ReactNode(JSX) 라 매 렌더마다 새 객체이므로
+   * `React.memo` 비교에 직접 못 쓴다. URI/소스가 의미적으로 바뀐 시점에 이 키도
+   * 바뀌도록 호출측이 부여하면, memo 가 자식까지 새 props 를 전달하도록 강제한다.
+   * 캐시 다운로드 완료 같은 비동기 media 교체 시 필수(검은 박스 영구 잔류 회귀 방지).
+   */
+  mediaKey?: string;
   present?: boolean;
   videoId?: string;
   /** 사용자 멘트 — 시간 아래 작게 표기. 미지정 시 비표시. */
@@ -337,6 +344,8 @@ const FilledCell = memo(
     prev.cell.caption === next.cell.caption &&
     prev.cell.present === next.cell.present &&
     prev.cell.photoUrl === next.cell.photoUrl &&
+    // mediaKey: 비동기 media 교체 감지. 누락 시 캐시 URI 도착해도 검은박스 유지 회귀.
+    prev.cell.mediaKey === next.cell.mediaKey &&
     prev.index === next.index,
 );
 
