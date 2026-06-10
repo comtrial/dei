@@ -23,6 +23,19 @@ export function hourSlotLabel(hour: number): string {
   return String(hour).padStart(2, '0');
 }
 
+/**
+ * epoch ms → KST(UTC+9) 기준 'YYYY-MM-DD' 날짜 키.
+ * getKstHour 와 동일한 고정 오프셋 변환 규칙을 사용해, 영상 created_at 과
+ * 캘린더 날짜 표기가 같은 날짜 경계(KST 자정)를 공유하도록 한다.
+ */
+export function kstDateKey(ms: number): string {
+  const kst = new Date(ms + 9 * 60 * 60_000);
+  const y = kst.getUTCFullYear();
+  const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(kst.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export interface TimeStripSlot {
   hour: number;
   label: string;
