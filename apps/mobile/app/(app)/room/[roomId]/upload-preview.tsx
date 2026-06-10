@@ -134,6 +134,10 @@ export default function UploadPreviewScreen() {
         { roomId, localUri, durationMs: safeDurationMs, capturedAtIso, muted, caption },
         { onProgress: setUploadProgress },
       );
+      analytics.capture(ANALYTICS_EVENTS.video_uploaded, {
+        room_id: roomId,
+        duration_sec: safeDurationMs / 1000,
+      });
       router.replace({
         pathname: '/(app)/room/[roomId]',
         params: { roomId },

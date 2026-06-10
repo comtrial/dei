@@ -161,6 +161,8 @@ export default function ProfilePreferenceStepScreen() {
           step: 3,
         });
 
+        analytics.capture(ANALYTICS_EVENTS.onboarding_completed);
+
         router.replace(ROUTES.home);
       },
       { tags: { screen: 'onboarding-step3', action: 'save' } },

@@ -70,6 +70,20 @@ export const ANALYTICS_EVENTS = {
   notification_master_toggled: 'S22:notification_master_toggled',
   support_form_opened: 'S23:support_form_opened',
   inquiry_submitted: 'S23:inquiry_submitted',
+
+  // ── 퍼널 spine (F##:) — rooms/queue 4대 퍼널 (2026-06-07 design) ──
+  // A Activation
+  app_opened: 'F0:app_opened',
+  phone_verification_succeeded: 'F0:phone_verification_succeeded',
+  onboarding_completed: 'F0:onboarding_completed',
+  // B Match
+  room_matched: 'F1:room_matched',
+  // C Engagement
+  video_uploaded: 'F2:video_uploaded',
+  // D Monetization(결제 신호)
+  booster_paywall_shown: 'F3:booster_paywall_shown',
+  booster_purchase_attempted: 'F3:booster_purchase_attempted',
+  booster_purchase_succeeded: 'F3:booster_purchase_succeeded',
 } as const;
 
 export type AnalyticsEventKey = keyof typeof ANALYTICS_EVENTS;

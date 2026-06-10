@@ -162,6 +162,9 @@ export default function VerifyScreen() {
           request?.identityVerificationId,
         );
         await promoteWithIdentity(result);
+        analytics.capture(ANALYTICS_EVENTS.phone_verification_succeeded, {
+          existing_member: Boolean(result.existingMember),
+        });
         setVerificationRequest(null);
         verificationRequestRef.current = null;
 

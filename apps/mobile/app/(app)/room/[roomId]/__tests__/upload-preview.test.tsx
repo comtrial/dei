@@ -82,6 +82,10 @@ describe('UploadPreviewScreen (S11b)', () => {
         expect.objectContaining({ roomId: 'room-123', localUri: 'file://test.mp4' }),
         expect.objectContaining({ onProgress: expect.any(Function) }),
       );
+      expect(mockAnalyticsCapture).toHaveBeenCalledWith('F2:video_uploaded', {
+        room_id: 'room-123',
+        duration_sec: 2.3,
+      });
       expect(mockReplace).toHaveBeenCalledWith(
         expect.objectContaining({
           pathname: '/(app)/room/[roomId]',
