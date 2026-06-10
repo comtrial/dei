@@ -1,6 +1,7 @@
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
 import { captureEdgeError } from '../_shared/log.ts';
+import { getRoomRematchCooldownAnchor } from '../_shared/rematch-room.ts';
 
 type LeaveRoomBody = {
   detail?: unknown;
@@ -67,7 +68,21 @@ Deno.serve(async (req) => {
       return errorResponse('이미 나간 방이에요.', 409, { code: 'NOT_ACTIVE_MEMBER' });
     }
 
+    const { data: room, error: roomLookupError } = await supabase
+      .from('room')
+      .select('created_at')
+      .eq('id', roomId)
+      .maybeSingle();
+
+    if (roomLookupError) {
+      throw roomLookupError;
+    }
+
     const leftAt = new Date().toISOString();
+    const rematchCooldownAnchorAt = getRoomRematchCooldownAnchor(
+      room?.created_at,
+      leftAt,
+    );
     const [{ error: memberError }, { error: profileError }] = await Promise.all([
       supabase
         .from('room_member')
@@ -76,12 +91,54 @@ Deno.serve(async (req) => {
         .eq('user_id', user.id),
       supabase
         .from('profile')
-        .update({ is_in_active_room: false, last_room_leave_at: leftAt })
+        .update({ is_in_active_room: false, last_room_leave_at: rematchCooldownAnchorAt })
         .eq('user_id', user.id),
     ]);
 
     if (memberError || profileError) {
       throw memberError ?? profileError;
+    }
+
+    const { data: teamMembers, error: teamLookupError } = await supabase
+      .from('team_member')
+      .select('team_id')
+      .eq('user_id', user.id);
+
+    if (teamLookupError) {
+      throw teamLookupError;
+    }
+
+    const teamIds = teamMembers?.map((team) => team.team_id) ?? [];
+    if (teamIds.length > 0) {
+      const { data: queues, error: queueLookupError } = await supabase
+        .from('match_queue')
+        .select('id, team_id')
+        .in('team_id', teamIds)
+        .eq('status', 'waiting');
+
+      if (queueLookupError) {
+        throw queueLookupError;
+      }
+
+      const queueIds = queues?.map((queue) => queue.id) ?? [];
+      const queuedTeamIds = [...new Set(queues?.map((queue) => queue.team_id) ?? [])];
+
+      if (queueIds.length > 0) {
+        const [{ error: queueUpdateError }, { error: teamUpdateError }] = await Promise.all([
+          supabase
+            .from('match_queue')
+            .update({ status: 'cancelled' })
+            .in('id', queueIds),
+          supabase
+            .from('team')
+            .update({ disbanded_at: leftAt, status: 'disbanded' })
+            .in('id', queuedTeamIds),
+        ]);
+
+        if (queueUpdateError || teamUpdateError) {
+          throw queueUpdateError ?? teamUpdateError;
+        }
+      }
     }
 
     const { error: lifecycleError } = await supabase.from('room_lifecycle').insert({
