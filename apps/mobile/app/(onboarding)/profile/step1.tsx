@@ -33,6 +33,7 @@ import {
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
+import { mergeCachedProfileSnapshot } from '@/lib/profile-session-cache';
 
 function birthDateLongLabel(birthDate?: string | null, birthYear?: number | null) {
   if (!birthDate) {
@@ -240,18 +241,27 @@ export default function ProfileStep1Screen() {
 
         if (user && selectedGender) {
           const nicknameChanged = normalized !== normalizeNickname(originalNickname ?? '');
+          const nicknameChangedAt = nicknameChanged ? new Date().toISOString() : undefined;
           const { error } = await supabase
             .from('profile')
             .update({
               gender: selectedGender,
               nickname: normalized,
-              ...(nicknameChanged ? { nickname_changed_at: new Date().toISOString() } : {}),
+              ...(nicknameChangedAt ? { nickname_changed_at: nicknameChangedAt } : {}),
             })
             .eq('user_id', user.id);
 
           if (error) {
             throw error;
           }
+
+          mergeCachedProfileSnapshot(user.id, {
+            birthDate: verifiedProfile.birthDate,
+            birthYear: verifiedProfile.birthYear,
+            gender: selectedGender,
+            nickname: normalized,
+            ...(nicknameChangedAt ? { nicknameChangedAt } : {}),
+          });
         }
 
         analytics.capture(ANALYTICS_EVENTS.profile_step_completed, {

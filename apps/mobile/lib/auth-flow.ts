@@ -91,10 +91,6 @@ export function mergeProfileWithVerifiedIdentity<
   profile: Profile | null | undefined,
   verification?: IdentityVerificationSnapshot | null,
 ): Profile | (Profile & VerifiedIdentityProfileSnapshot) | null {
-  if (!profile) {
-    return null;
-  }
-
   if (hasVerifiedIdentity(profile)) {
     return profile;
   }
@@ -102,7 +98,11 @@ export function mergeProfileWithVerifiedIdentity<
   const identity = getVerifiedIdentityFromVerification(verification);
 
   if (!identity) {
-    return profile;
+    return profile ?? null;
+  }
+
+  if (!profile) {
+    return identity as Profile & VerifiedIdentityProfileSnapshot;
   }
 
   return {

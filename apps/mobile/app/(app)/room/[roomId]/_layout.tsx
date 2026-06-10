@@ -6,7 +6,7 @@ export default function RoomLayout() {
       <Stack.Screen
         name="upload"
         options={{
-          orientation: 'landscape',
+          orientation: 'portrait',
           gestureEnabled: false,
         }}
       />

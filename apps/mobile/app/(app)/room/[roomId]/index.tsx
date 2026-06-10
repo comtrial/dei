@@ -28,11 +28,13 @@ import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { getCachedVideoUri, getCachedThumbnailUri } from '@/lib/video';
 import { useAuth } from '@/providers/auth-provider';
 import { useRoomVideos } from '@/hooks/useRoomVideos';
+import { useRoomVideoDates } from '@/hooks/useRoomVideoDates';
 import { useRoomMembers } from '@/hooks/useRoomMembers';
 import { useRoomPresence } from '@/hooks/useRoomPresence';
 import { useHourSlot } from '@/hooks/useHourSlot';
 import { useAppStateRefetch } from '@/hooks/useAppStateRefetch';
 import { useRoomEndedDetector } from '@/hooks/useRoomEndedDetector';
+import { useRoomUnread } from '@/hooks/useRoomUnread';
 import {
   getSelfVideoCount24h,
   getRoomMembersSnapshot,
@@ -224,6 +226,7 @@ function buildCells(
       name: displayName,
       userId: member.user_id,
       uploadTime: uploadHour,
+      caption: video.caption ?? null,
       videoId: video.id,
       present: onlineUserIds.has(member.user_id),
       photoUrl,
@@ -314,6 +317,19 @@ export default function RoomScreen() {
     return d;
   }, []);
 
+  // 캘린더 "영상 있는 날" 점 표기용 범위: minDate 자정 ~ 오늘 자정 다음날(exclusive)
+  const calendarRange = useMemo(() => {
+    const fromMs = new Date(
+      calendarMinDate.getFullYear(),
+      calendarMinDate.getMonth(),
+      calendarMinDate.getDate(),
+    ).getTime();
+    const now = new Date();
+    const todayStartMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return { fromMs, toMsExclusive: todayStartMs + 24 * 60 * 60 * 1000 };
+  }, [calendarMinDate]);
+  const { dateKeys: videoDateKeys } = useRoomVideoDates(roomId, calendarRange, calendarOpen);
+
   const { videosByHour, loading: videosLoading, refetch: refetchVideos } = useRoomVideos(
     roomId,
     currentHour,
@@ -331,6 +347,7 @@ export default function RoomScreen() {
     },
   });
   const { onlineUserIds } = useRoomPresence(roomId, { selfUserId: user?.id ?? null });
+  const { hasUnread } = useRoomUnread(roomId, user?.id ?? null);
 
   useRoomEndedDetector(roomId, members, {
     selfUserId: user?.id ?? '',
@@ -793,9 +810,11 @@ export default function RoomScreen() {
                       router.push(`/room/${roomId}/chat`);
                     }}
                   />
-                  <View className="absolute top-[2px] right-[2px]">
-                    <Badge variant="dot" />
-                  </View>
+                  {hasUnread ? (
+                    <View className="absolute top-[2px] right-[2px]">
+                      <Badge variant="dot" />
+                    </View>
+                  ) : null}
                 </View>
                 <IconButton
                   glyph={MoreHorizontal}
@@ -993,6 +1012,7 @@ export default function RoomScreen() {
             selectedDate={selectedDate}
             onSelect={handleSelectDate}
             minDate={calendarMinDate}
+            markedDateKeys={videoDateKeys}
           />
         </SafeAreaView>
       ) : null}

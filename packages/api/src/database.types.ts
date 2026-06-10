@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -204,6 +209,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      identity_rejoin_lock: {
+        Row: {
+          ci_hash: string
+          created_at: string
+          id: string
+          locked_until: string
+          reason: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          ci_hash: string
+          created_at?: string
+          id?: string
+          locked_until: string
+          reason?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          ci_hash?: string
+          created_at?: string
+          id?: string
+          locked_until?: string
+          reason?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       match_config: {
         Row: {
@@ -427,6 +462,8 @@ export type Database = {
           id: string
           product_id: string | null
           provider: string
+          provider_metadata: Json
+          provider_transaction_id: string | null
           status: string
           user_id: string
         }
@@ -436,6 +473,8 @@ export type Database = {
           id?: string
           product_id?: string | null
           provider?: string
+          provider_metadata?: Json
+          provider_transaction_id?: string | null
           status?: string
           user_id: string
         }
@@ -445,6 +484,8 @@ export type Database = {
           id?: string
           product_id?: string | null
           provider?: string
+          provider_metadata?: Json
+          provider_transaction_id?: string | null
           status?: string
           user_id?: string
         }
@@ -684,6 +725,7 @@ export type Database = {
       room_member: {
         Row: {
           joined_at: string
+          last_read_at: string | null
           left_at: string | null
           role: string
           room_id: string
@@ -692,6 +734,7 @@ export type Database = {
         }
         Insert: {
           joined_at?: string
+          last_read_at?: string | null
           left_at?: string | null
           role?: string
           room_id: string
@@ -700,6 +743,7 @@ export type Database = {
         }
         Update: {
           joined_at?: string
+          last_read_at?: string | null
           left_at?: string | null
           role?: string
           room_id?: string
@@ -893,6 +937,7 @@ export type Database = {
       }
       video: {
         Row: {
+          caption: string | null
           created_at: string
           duration_ms: number | null
           hour_slot: number | null
@@ -905,6 +950,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          caption?: string | null
           created_at?: string
           duration_ms?: number | null
           hour_slot?: number | null
@@ -917,6 +963,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          caption?: string | null
           created_at?: string
           duration_ms?: number | null
           hour_slot?: number | null
@@ -966,6 +1013,7 @@ export type Database = {
       get_room_videos: {
         Args: { p_hour_from: number; p_hour_to: number; p_room_id: string }
         Returns: {
+          caption: string | null
           created_at: string
           duration_ms: number | null
           hour_slot: number | null
@@ -984,8 +1032,28 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      grant_instant_rematch_purchase: {
+        Args: {
+          p_granted: number
+          p_product_id: string
+          p_provider: string
+          p_provider_metadata: Json
+          p_provider_transaction_id: string
+          p_user_id: string
+        }
+        Returns: {
+          duplicate: boolean
+          granted: number
+          payment_id: string
+        }[]
+      }
       is_admin: { Args: never; Returns: boolean }
       is_blocked_between: { Args: { a: string; b: string }; Returns: boolean }
+      is_team_member: {
+        Args: { p_team_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      mark_room_read: { Args: { p_room_id: string }; Returns: undefined }
       match_and_create: {
         Args: {
           p_side_a_gender: string
@@ -1006,6 +1074,30 @@ export type Database = {
       room_is_member: {
         Args: { p_room_id: string; p_user_id: string }
         Returns: boolean
+      }
+      send_room_message: {
+        Args: {
+          p_body: string
+          p_client_msg_id?: string
+          p_room_id: string
+          p_whisper_to_user_id?: string
+        }
+        Returns: {
+          body: string
+          client_msg_id: string | null
+          created_at: string
+          id: string
+          room_id: string
+          status: string
+          user_id: string
+          whisper_to_user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "message"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       try_match: { Args: { p_queue_id: string }; Returns: string }
     }
@@ -1143,3 +1235,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

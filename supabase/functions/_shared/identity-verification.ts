@@ -43,7 +43,12 @@ export async function hashIdentityValue(type: 'ci' | 'di', value?: string | null
   }
 
   const salt = getRequiredEnv('PHONE_HASH_SALT');
-  return sha256(`${salt}:${type}:${value}`);
+  // DEV-ONLY: 동일 CI 매 verification 마다 unique hash 생성 → CI 중복 매칭 회피 →
+  // 같은 사용자가 PortOne 인증할 때마다 새 계정 발급 (멀티 계정 테스트용).
+  // 반드시 production secrets 에는 set 하지 말 것 — CI 중복 가입 방지 우회됨.
+  const devFreshUser = Deno.env.get('DEV_IDENTITY_FRESH_USER_PER_VERIFICATION') === 'true';
+  const nonce = devFreshUser ? `:${crypto.randomUUID()}` : '';
+  return sha256(`${salt}:${type}:${value}${nonce}`);
 }
 
 export function toIdentityVerificationId() {

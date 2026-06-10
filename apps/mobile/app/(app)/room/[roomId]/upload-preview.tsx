@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { useEvent } from 'expo';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Volume2, VolumeX } from 'lucide-react-native';
 
@@ -46,15 +47,18 @@ export default function UploadPreviewScreen() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [caption, setCaption] = useState('');
 
   const player = useVideoPlayer(
     localUri ? { uri: localUri } : null,
     (p) => {
       p.loop = true;
       p.muted = false;
-      p.play();
     },
   );
+
+  const { status } = useEvent(player, 'statusChange', { status: player.status });
+  const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
 
   useEffect(() => {
     player.volume = 1.0;
@@ -64,6 +68,21 @@ export default function UploadPreviewScreen() {
   useEffect(() => {
     player.muted = muted;
   }, [muted, player]);
+
+  // iOS .mov 비동기 로딩 + setup callback 1회만 실행 race — setup 의 play() 가
+  // source-ready 전 호출되면 silently no-op. 첫 진입 시 영상 멈춤 현상의 근본 원인.
+  // statusChange 로 readyToPlay 확정 후 play() 호출 + isPlaying 가 끊긴 케이스도 복구.
+  useEffect(() => {
+    if (status === 'readyToPlay') {
+      try { player.play(); } catch {}
+    }
+  }, [status, player]);
+
+  useEffect(() => {
+    if (!isPlaying && status === 'readyToPlay') {
+      try { player.play(); } catch {}
+    }
+  }, [isPlaying, status, player]);
 
   const handleClose = useCallback(() => {
     if (uploading) return;
@@ -112,7 +131,7 @@ export default function UploadPreviewScreen() {
 
     try {
       await uploadClip(
-        { roomId, localUri, durationMs: safeDurationMs, capturedAtIso, muted },
+        { roomId, localUri, durationMs: safeDurationMs, capturedAtIso, muted, caption },
         { onProgress: setUploadProgress },
       );
       analytics.capture(ANALYTICS_EVENTS.video_uploaded, {
@@ -139,7 +158,7 @@ export default function UploadPreviewScreen() {
     } finally {
       setUploading(false);
     }
-  }, [uploading, roomId, localUri, safeDurationMs, capturedAtIso, muted, router]);
+  }, [uploading, roomId, localUri, safeDurationMs, capturedAtIso, muted, caption, router]);
 
   return (
     <View className="flex-1 bg-black">
@@ -171,16 +190,27 @@ export default function UploadPreviewScreen() {
         {muted ? <VolumeX color="white" size={22} /> : <Volume2 color="white" size={22} />}
       </Pressable>
 
-      {capturedAtLabel ? (
-        <View
-          pointerEvents="none"
-          className="absolute inset-0 items-center justify-center"
-        >
+      <View
+        pointerEvents="box-none"
+        className="absolute inset-0 items-center justify-center"
+      >
+        {capturedAtLabel ? (
           <Text className="text-white text-[56px] font-extrabold tracking-[2px] opacity-75">
             {capturedAtLabel}
           </Text>
-        </View>
-      ) : null}
+        ) : null}
+        <TextInput
+          testID="caption-input"
+          value={caption}
+          onChangeText={setCaption}
+          placeholder="멘트 입력"
+          placeholderTextColor="rgba(255,255,255,0.45)"
+          maxLength={200}
+          editable={!uploading}
+          textAlign="center"
+          className="mt-2 px-4 py-1 text-white text-xl font-semibold min-w-[140px]"
+        />
+      </View>
 
       <View className="absolute bottom-0 left-0 right-0">
         {uploading ? (

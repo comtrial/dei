@@ -6,6 +6,7 @@ import {
   isQuietHourKst,
   hourSlotLabel,
   formatTimeStripSlots,
+  kstDateKey,
 } from '../timeOfDay';
 
 describe('getKstHour', () => {
@@ -58,6 +59,33 @@ describe('hourSlotLabel', () => {
   it('두 자리 → 그대로', () => {
     expect(hourSlotLabel(14)).toBe('14');
     expect(hourSlotLabel(23)).toBe('23');
+  });
+});
+
+describe('kstDateKey', () => {
+  it('UTC 05:00 → KST 같은 날 14:00 → 그 날 키', () => {
+    const ms = new Date('2026-05-30T05:00:00Z').getTime();
+    expect(kstDateKey(ms)).toBe('2026-05-30');
+  });
+
+  it('UTC 15:00 → KST 다음 날 00:00 → 날짜 넘어감', () => {
+    const ms = new Date('2026-05-30T15:00:00Z').getTime();
+    expect(kstDateKey(ms)).toBe('2026-05-31');
+  });
+
+  it('UTC 14:59 → KST 23:59 → 아직 같은 날', () => {
+    const ms = new Date('2026-05-30T14:59:00Z').getTime();
+    expect(kstDateKey(ms)).toBe('2026-05-30');
+  });
+
+  it('월/일 0 패딩', () => {
+    const ms = new Date('2026-01-05T01:00:00Z').getTime();
+    expect(kstDateKey(ms)).toBe('2026-01-05');
+  });
+
+  it('UTC 자정 직전 23:00 → KST 다음 날 08:00', () => {
+    const ms = new Date('2026-12-31T23:00:00Z').getTime();
+    expect(kstDateKey(ms)).toBe('2027-01-01');
   });
 });
 

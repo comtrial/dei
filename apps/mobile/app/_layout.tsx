@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { initPostHog } from '@/lib/posthog';
+import { initPurchases } from '@/lib/purchases';
 import { initSentry } from '@/lib/sentry';
 import { supabase } from '@/lib/supabase';
 import { AuthProvider } from '@/providers/auth-provider';
@@ -33,6 +34,7 @@ export default function RootLayout() {
   useEffect(() => {
     initSentry();
     initPostHog();
+    initPurchases();
     // app_opened — Activation 퍼널 분모. 토큰 보유 여부는 저장된 세션으로 판정.
     void supabase.auth.getSession().then(({ data }) => {
       analytics.capture(ANALYTICS_EVENTS.app_opened, {

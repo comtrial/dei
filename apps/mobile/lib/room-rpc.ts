@@ -1,5 +1,5 @@
 import type { Database } from '@dei/api';
-import { POLICY, logger } from '@dei/shared';
+import { POLICY, kstDateKey, logger } from '@dei/shared';
 
 import { supabase } from '@/lib/supabase';
 import { cacheProfilePhotoUrl } from '@/lib/profile-photo-cache';
@@ -129,6 +129,43 @@ export async function getRoomVideos(
       extra: { hourFrom, hourTo },
     });
     return [];
+  }
+}
+
+/**
+ * 날짜 범위 [fromMs, toMsExclusive) 안에서 ready 영상이 1개라도 존재하는
+ * KST 날짜 키('YYYY-MM-DD') 집합을 반환한다. 캘린더에 "영상 있는 날" 점을
+ * 찍기 위한 경량 조회 — created_at 만 select 한다.
+ * 실패 시 빈 Set 을 반환해 캘린더는 점 없이 정상 동작한다.
+ */
+export async function getRoomVideoDates(
+  roomId: string,
+  fromMs: number,
+  toMsExclusive: number,
+): Promise<Set<string>> {
+  try {
+    const { data, error } = await supabase
+      .from('video')
+      .select('created_at')
+      .eq('room_id', roomId)
+      .eq('status', 'ready')
+      .gte('created_at', new Date(fromMs).toISOString())
+      .lt('created_at', new Date(toMsExclusive).toISOString());
+
+    if (error) throw error;
+
+    const keys = new Set<string>();
+    for (const row of data ?? []) {
+      if (!row.created_at) continue;
+      keys.add(kstDateKey(new Date(row.created_at).getTime()));
+    }
+    return keys;
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'room_rpc', rpc: 'get_room_video_dates', room_id: roomId },
+      extra: { fromMs, toMsExclusive },
+    });
+    return new Set();
   }
 }
 

@@ -1,7 +1,4 @@
-import { Payment } from '@portone/react-native-sdk';
-import type { PaymentRequest, PaymentResponse } from '@portone/browser-sdk/v2';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,21 +12,23 @@ import {
   Card,
   ChoiceList,
   CompareCard,
-  IconButton,
-  Spinner,
   Text,
   TopNav,
 } from '@dei/ui';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
-import { PAYMENT_PACKS } from '@/lib/b-flow';
+import { PAYMENT_PACKS, type PaymentPackId } from '@/lib/b-flow';
 import { enqueueMatchQueue } from '@/lib/matching';
 import { getAppNotificationEnabled, registerPushToken } from '@/lib/notifications.stub';
 import { requestPermission } from '@/lib/permissions';
 import {
-  confirmInstantRematchPayment,
-  startInstantRematchPayment,
-} from '@/lib/portone.stub';
+  confirmInstantRematchPurchase,
+  getBoosterPackageOptions,
+  isPurchaseCancelled,
+  syncPurchasesUser,
+  type BoosterPackageOption,
+  purchaseInstantRematchPackage,
+} from '@/lib/purchases';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
@@ -63,17 +62,21 @@ export default function BoosterScreen() {
   const router = useRouter();
   const { memberIds } = useLocalSearchParams<{ memberIds?: string }>();
   const { user } = useAuth();
-  const [selectedProductId, setSelectedProductId] = useState<string>(
+  const [selectedProductId, setSelectedProductId] = useState<PaymentPackId>(
     PAYMENT_PACKS[1]?.id ?? PAYMENT_PACKS[0].id,
   );
   const [isPaying, setIsPaying] = useState(false);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [startFailed, setStartFailed] = useState(false);
   const [lastRoomLeaveAt, setLastRoomLeaveAt] = useState<string | null>(null);
   const [passCount, setPassCount] = useState(0);
-  const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
-  const [paymentProductId, setPaymentProductId] = useState<string | null>(null);
+  const [packageOptions, setPackageOptions] = useState<Map<PaymentPackId, BoosterPackageOption>>(
+    () => new Map(),
+  );
   const selectedPack =
     PAYMENT_PACKS.find((pack) => pack.id === selectedProductId) ?? PAYMENT_PACKS[0];
+  const selectedPackageOption = packageOptions.get(selectedPack.id);
+  const selectedPrice = selectedPackageOption?.price ?? selectedPack.price;
   const queueMemberIds = memberIds
     ? memberIds.split(',').map((id) => id.trim()).filter(Boolean)
     : [];
@@ -123,6 +126,79 @@ export default function BoosterScreen() {
     });
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+
+    setIsLoadingProducts(true);
+    void logger.withErrorCapture(
+      'booster.load-store-products',
+      async () => {
+        const options = await getBoosterPackageOptions();
+        if (mounted) {
+          setPackageOptions(options);
+        }
+      },
+      { tags: { screen: 'booster', action: 'load-store-products' } },
+    )
+      .catch((error) => {
+        logger.captureException(error, {
+          tags: { screen: 'booster', action: 'load-store-products-catch' },
+        });
+        if (mounted) {
+          setStartFailed(true);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setIsLoadingProducts(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const goPaymentFailed = (code: string, message: string) => {
+    router.replace({
+      pathname: '/(app)/booster-failed',
+      params: { code, message },
+    });
+  };
+
+  const continueAfterPurchase = async () => {
+    if (!user?.id) {
+      throw new Error('authentication required');
+    }
+
+    const appNotificationEnabled = await getAppNotificationEnabled(user.id);
+    if (!appNotificationEnabled) {
+      router.replace({
+        pathname: '/(app)/permission/notification',
+        params: { memberIds: queueMemberIds.length > 0 ? queueMemberIds.join(',') : user.id },
+      });
+      return;
+    }
+
+    const status = await requestPermission('notification');
+    if (status !== 'granted') {
+      router.replace({
+        pathname: '/(app)/permission/notification',
+        params: { memberIds: queueMemberIds.length > 0 ? queueMemberIds.join(',') : user.id },
+      });
+      return;
+    }
+
+    await registerPushToken(user.id).catch((error) => {
+      logger.captureMessage('push token registration skipped', 'warning', {
+        tags: { screen: 'booster', action: 'register-push-token' },
+        extra: { reason: getErrorMessage(error) },
+      });
+    });
+    await enqueueMatchQueue(queueMemberIds);
+    router.replace(ROUTES.queue);
+  };
+
   const handlePay = () => {
     analytics.capture(ANALYTICS_EVENTS.booster_purchase_attempted, {
       product_id: selectedPack.id,
@@ -131,144 +207,39 @@ export default function BoosterScreen() {
       'booster.purchase',
       async () => {
         setIsPaying(true);
-        const request = await startInstantRematchPayment(selectedPack.id);
-        setPaymentProductId(selectedPack.id);
-        setPaymentRequest(request);
-      },
-      { tags: { screen: 'booster', action: 'purchase' } },
-    )
-      .catch((error) => {
-        logger.captureException(error, {
-          tags: { screen: 'booster', action: 'purchase-catch' },
-        });
-        setStartFailed(true);
-      })
-      .finally(() => setIsPaying(false));
-  };
-
-  const closePayment = () => {
-    setPaymentRequest(null);
-    setPaymentProductId(null);
-    setIsPaying(false);
-  };
-
-  const handlePaymentComplete = (response: PaymentResponse) => {
-    if (response.code) {
-      const failure = response as PaymentResponse & { message?: string };
-      closePayment();
-      router.replace({
-        pathname: '/(app)/booster-failed',
-        params: {
-          code: response.code,
-          message: failure.message ?? response.code,
-        },
-      });
-      return;
-    }
-
-    void logger.withErrorCapture(
-      'booster.payment-complete',
-      async () => {
-        setIsPaying(true);
-        await confirmInstantRematchPayment(
-          response,
-          paymentProductId ?? selectedPack.id,
-        );
-        analytics.capture(ANALYTICS_EVENTS.booster_purchase_succeeded, {
-          product_id: paymentProductId ?? selectedPack.id,
-        });
-
         if (!user?.id) {
           throw new Error('authentication required');
         }
 
-        const appNotificationEnabled = await getAppNotificationEnabled(user.id);
-        if (!appNotificationEnabled) {
-          closePayment();
-          router.replace({
-            pathname: '/(app)/permission/notification',
-            params: { memberIds: queueMemberIds.length > 0 ? queueMemberIds.join(',') : user.id },
-          });
-          return;
-        }
-
-        const status = await requestPermission('notification');
-        if (status !== 'granted') {
-          closePayment();
-          router.replace({
-            pathname: '/(app)/permission/notification',
-            params: { memberIds: queueMemberIds.length > 0 ? queueMemberIds.join(',') : user.id },
-          });
-          return;
-        }
-
-        await registerPushToken(user.id).catch((error) => {
-          logger.captureMessage('push token registration skipped', 'warning', {
-            tags: { screen: 'booster', action: 'register-push-token' },
-            extra: { reason: getErrorMessage(error) },
-          });
+        await syncPurchasesUser(user.id);
+        const purchase = await purchaseInstantRematchPackage(selectedPack.id);
+        await confirmInstantRematchPurchase({
+          appUserId: purchase.appUserId,
+          customerInfoRequestDate: purchase.customerInfoRequestDate,
+          productId: purchase.productId,
+          revenueCatProductId: purchase.revenueCatProductId,
+          transactionId: purchase.transactionId,
         });
-        await enqueueMatchQueue(queueMemberIds);
-        closePayment();
-        router.replace(ROUTES.queue);
+        analytics.capture(ANALYTICS_EVENTS.booster_purchase_succeeded, {
+          product_id: selectedPack.id,
+        });
+        await continueAfterPurchase();
       },
-      { tags: { screen: 'booster', action: 'payment-complete' } },
+      { tags: { screen: 'booster', action: 'purchase' } },
     )
       .catch((error) => {
+        if (isPurchaseCancelled(error)) {
+          goPaymentFailed('purchase_cancelled', '스토어 결제가 취소됐어요.');
+          return;
+        }
+
         logger.captureException(error, {
-          tags: { screen: 'booster', action: 'payment-complete-catch' },
+          tags: { screen: 'booster', action: 'purchase-catch' },
         });
-        closePayment();
-        router.replace(ROUTES.boosterFailed);
+        goPaymentFailed('purchase_failed', getErrorMessage(error));
       })
       .finally(() => setIsPaying(false));
   };
-
-  const handlePaymentError = (error: Error) => {
-    logger.captureException(error, {
-      tags: { screen: 'booster', action: 'payment-sdk-error' },
-    });
-    closePayment();
-    router.replace({
-      pathname: '/(app)/booster-failed',
-      params: {
-        code: 'payment_sdk_error',
-        message: error.message,
-      },
-    });
-  };
-
-  if (paymentRequest) {
-    return (
-      <SafeAreaView className="flex-1 bg-bg">
-        <View className="items-end px-[18px] pt-[8px]">
-          <IconButton
-            glyph={X}
-            variant="filled-circle"
-            size={36}
-            accessibilityLabel="결제 닫기"
-            onPress={closePayment}
-          />
-        </View>
-        <View className="flex-1">
-          <Payment
-            request={paymentRequest}
-            onComplete={handlePaymentComplete}
-            onError={handlePaymentError}
-          />
-        </View>
-
-        {isPaying ? (
-          <View className="absolute inset-0 items-center justify-center bg-bg/80 px-[32px]">
-            <Spinner size={80} accessibilityLabel="결제 확인 중" />
-            <Text variant="body" tone="ink-3" className="mt-[18px] text-center">
-              결제 결과를 확인하고 있어요
-            </Text>
-          </View>
-        ) : null}
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
@@ -295,10 +266,10 @@ export default function BoosterScreen() {
             }}
           />
           <Text variant="h1" className="mt-[26px] text-[26px] leading-[34px]">
-            24시간 기다리지 말고 지금 시작
+            12시간 기다리지 말고 지금 시작
           </Text>
           <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
-            방을 나간 후 24시간 제한을 면제해드려요
+            방을 나간 후 12시간 제한을 면제해드려요
           </Text>
 
           <View className="mt-[26px]">
@@ -308,7 +279,7 @@ export default function BoosterScreen() {
             <ChoiceList
               tone="accent"
               value={selectedProductId}
-              onChange={setSelectedProductId}
+              onChange={(value) => setSelectedProductId(value as PaymentPackId)}
               options={PAYMENT_PACKS.map((pack) => ({
                 label: (
                   <View className="flex-1 flex-row items-center justify-between gap-[10px]">
@@ -324,7 +295,9 @@ export default function BoosterScreen() {
                       </Text>
                       <Text className="mt-[2px] text-[11.5px] text-ink-3">{pack.sub}</Text>
                     </View>
-                    <Text className="text-[13.5px] font-extrabold text-ink">{pack.price}</Text>
+                    <Text className="text-[13.5px] font-extrabold text-ink">
+                      {packageOptions.get(pack.id)?.price ?? pack.price}
+                    </Text>
                   </View>
                 ),
                 value: pack.id,
@@ -335,15 +308,15 @@ export default function BoosterScreen() {
 
           <Card className="mt-[24px] px-[16px] py-[16px]">
             <View className="flex-row flex-wrap gap-[6px]">
-              {['PortOne', 'VISA', 'KB Pay'].map((label) => (
+              {['App Store', 'Apple IAP', 'RevenueCat'].map((label) => (
                 <Badge key={label} variant="count">{label}</Badge>
               ))}
             </View>
             <Text className="mt-[14px] text-[12.5px] leading-[19px] text-ink-2">
-              ✓ 1회 결제 · 정기결제 아님
+              ✓ 스토어 1회 결제 · 정기결제 아님
             </Text>
             <Text className="mt-[5px] text-[12.5px] leading-[19px] text-ink-2">
-              ✓ 미사용 시 7일 내 환불
+              ✓ 환불은 App Store 정책에 따라 처리돼요
             </Text>
           </Card>
 
@@ -351,8 +324,12 @@ export default function BoosterScreen() {
       </ScrollView>
 
       <BottomActionBar fixed>
-        <Button fullWidth disabled={isPaying} onPress={handlePay}>
-          {isPaying ? '결제 진행 중' : `${selectedPack.price} · 바로 매치 시작`}
+        <Button fullWidth disabled={isPaying || isLoadingProducts} onPress={handlePay}>
+          {isPaying
+            ? '결제 진행 중'
+            : isLoadingProducts
+              ? '상품 불러오는 중'
+              : `${selectedPrice} · 바로 매치 시작`}
         </Button>
       </BottomActionBar>
 
@@ -361,7 +338,7 @@ export default function BoosterScreen() {
         tone="warn"
         icon="!"
         title="결제를 시작하지 못했어요"
-        description="가격 옵션과 결제 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요."
+        description="스토어 상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요."
         actions={[
           { label: '확인', variant: 'secondary', onPress: () => setStartFailed(false) },
           {

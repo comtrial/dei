@@ -7,6 +7,7 @@ export interface ChatMessage {
   whisperToUserId: string | null;
   createdAt: string;
   sendState: 'sending' | 'sent' | 'failed';
+  kind?: 'user' | 'system';
 }
 
 /**

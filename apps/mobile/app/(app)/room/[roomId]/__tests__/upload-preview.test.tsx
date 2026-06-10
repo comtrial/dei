@@ -18,11 +18,21 @@ jest.mock('expo-router', () => ({
 
 jest.mock('expo-video', () => ({
   useVideoPlayer: (_source: unknown, setup: (p: Record<string, unknown>) => void) => {
-    const player = { loop: false, muted: true, play: jest.fn() };
+    const player = {
+      loop: false,
+      muted: true,
+      status: 'readyToPlay',
+      playing: false,
+      play: jest.fn(),
+    };
     setup(player);
     return player;
   },
   VideoView: 'VideoView',
+}));
+
+jest.mock('expo', () => ({
+  useEvent: (_player: unknown, _event: string, initial: Record<string, unknown>) => initial,
 }));
 
 jest.mock('expo-file-system/legacy', () => ({

@@ -1,5 +1,12 @@
-import { forwardRef } from 'react';
-import { Pressable, Text, View, type PressableProps } from 'react-native';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Pressable,
+  Text,
+  View,
+  type LayoutChangeEvent,
+  type PressableProps,
+  type GestureResponderEvent,
+} from 'react-native';
 
 import { cn } from '../lib/cn';
 
@@ -23,24 +30,14 @@ import { cn } from '../lib/cn';
  *
  * --- 인터랙션 ---
  * `@dei/ui` 는 의존성 표면을 최소로 유지하므로(peer: react/react-native/
- * nativewind/lucide 만) 이 primitive 는 코어 RN `Pressable` 만 사용한다.
- * 실제 동작 경로 = thumb 길게 눌러 확정(long-press fallback) → `onConfirm`.
- * 화면(apps/mobile)에서 물리 드래그가 필요하면 아래 패턴으로 thumb 을 감싼다:
- *
- *   // import { Gesture, GestureDetector } from 'react-native-gesture-handler';
- *   // import Animated, { useSharedValue } from 'react-native-reanimated';
- *   // const x = useSharedValue(0);
- *   // const pan = Gesture.Pan()
- *   //   .onUpdate(e => { x.value = clamp(e.translationX, 0, trackW - 42); })
- *   //   .onEnd(() => { if (x.value > (trackW - 42) * 0.85) runOnJS(onConfirm)(); });
- *   // <GestureDetector gesture={pan}><Animated.View .../></GestureDetector>
- *
- * 제스처 라이브러리는 앱 레이어에만 있으므로 여기서는 import 하지 않는다.
+ * nativewind/lucide 만) 코어 RN responder handler 로 실제 thumb drag 를 처리한다.
+ * 실제 동작 경로 = thumb 를 레일 끝까지 밀기(85% 이상) → `onConfirm`.
+ * 길게 누르기는 접근성/테스트 보조 경로로만 남기고, 단순 탭은 confirm 하지 않는다.
  */
 export type SlideToConfirmTone = 'danger' | 'ink';
 
 export interface SlideToConfirmProps
-  extends Omit<PressableProps, 'children' | 'style' | 'onLongPress'> {
+  extends Omit<PressableProps, 'children' | 'style' | 'onLongPress' | 'onPress'> {
   /** 색 변형. 기본 `danger`(S20). `ink` = S16 방 나가기 레일. */
   tone?: SlideToConfirmTone;
   /** 레일 안내 카피. 미지정 시 tone 기본값(밀어서 확인하기). */
@@ -75,6 +72,15 @@ const LABEL_FG: Record<SlideToConfirmTone, string> = {
   ink: 'text-ink-3',
 };
 
+const THUMB_SIZE = 42;
+const TRACK_PADDING = 6;
+const DEFAULT_TRACK_WIDTH = 280;
+const CONFIRM_THRESHOLD = 0.85;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
 export const SlideToConfirm = forwardRef<View, SlideToConfirmProps>(
   function SlideToConfirm(
     {
@@ -89,9 +95,63 @@ export const SlideToConfirm = forwardRef<View, SlideToConfirmProps>(
     },
     ref,
   ) {
+    const disabled = Boolean(pressableProps.disabled);
+    const [trackWidth, setTrackWidth] = useState(DEFAULT_TRACK_WIDTH);
+    const [dragX, setDragX] = useState(0);
+    const dragXRef = useRef(0);
+    const dragStartXRef = useRef(0);
+    const confirmedRef = useRef(false);
     const text = label ?? DEFAULT_LABEL[tone];
     // arrows: 미지정 시 ink(S16) 만 노출 — S20 markup 엔 arrows 없음.
     const renderArrows = showArrows ?? tone === 'ink';
+    const maxTranslate = Math.max(0, trackWidth - THUMB_SIZE - TRACK_PADDING * 2);
+
+    const setDrag = useCallback((next: number) => {
+      const clamped = clamp(next, 0, maxTranslate);
+      dragXRef.current = clamped;
+      setDragX(clamped);
+    }, [maxTranslate]);
+
+    const confirm = useCallback(() => {
+      if (disabled || confirmedRef.current) return;
+      confirmedRef.current = true;
+      setDrag(maxTranslate);
+      onConfirm?.();
+    }, [disabled, maxTranslate, onConfirm, setDrag]);
+
+    useEffect(() => {
+      if (disabled) return;
+      confirmedRef.current = false;
+      setDrag(0);
+    }, [disabled, setDrag]);
+
+    const handleLayout = useCallback((event: LayoutChangeEvent) => {
+      setTrackWidth(event.nativeEvent.layout.width || DEFAULT_TRACK_WIDTH);
+    }, []);
+
+    const eventPageX = useCallback((event: GestureResponderEvent) => {
+      return event.nativeEvent.pageX ?? event.nativeEvent.locationX ?? 0;
+    }, []);
+
+    const handleDragStart = useCallback((event: GestureResponderEvent) => {
+      dragStartXRef.current = eventPageX(event);
+      setDrag(0);
+    }, [eventPageX, setDrag]);
+
+    const handleDragMove = useCallback((event: GestureResponderEvent) => {
+      if (disabled || confirmedRef.current) return;
+      setDrag(eventPageX(event) - dragStartXRef.current);
+    }, [disabled, eventPageX, setDrag]);
+
+    const handleDragRelease = useCallback((event: GestureResponderEvent) => {
+      if (disabled || confirmedRef.current) return;
+      const releasedX = clamp(eventPageX(event) - dragStartXRef.current, 0, maxTranslate);
+      if (releasedX >= maxTranslate * CONFIRM_THRESHOLD) {
+        confirm();
+        return;
+      }
+      setDrag(0);
+    }, [confirm, disabled, eventPageX, maxTranslate, setDrag]);
 
     // .slide 컨테이너: r-full, padding 6px, height 54px, overflow-hidden,
     // thumb/arrows 절대배치 기준이므로 relative.
@@ -106,13 +166,10 @@ export const SlideToConfirm = forwardRef<View, SlideToConfirmProps>(
         ref={ref}
         testID={testID}
         accessibilityRole="button"
-        accessibilityState={{ disabled: pressableProps.disabled ?? undefined, ...accessibilityState }}
-        // 확정 경로: 탭(onPress) + 길게누름(onLongPress) 둘 다 onConfirm 호출.
-        // 제스처 라이브러리 미의존이라 물리 드래그는 없고, 단일 탭으로도 확정되게 한다
-        // (밀기/롱프레스만 기대하면 '버튼이 안 먹는다'는 혼동을 줌 — 실제 발생). disabled
-        // 면 Pressable 이 onPress/onLongPress 를 자동 무시한다.
-        onPress={onConfirm}
-        onLongPress={onConfirm}
+        accessibilityState={{ disabled: disabled || undefined, ...accessibilityState }}
+        onLayout={handleLayout}
+        // 단순 탭은 confirm 하지 않는다. 길게 누르기는 접근성 보조 경로.
+        onLongPress={confirm}
         className={containerClassName}
         {...pressableProps}
       >
@@ -135,7 +192,16 @@ export const SlideToConfirm = forwardRef<View, SlideToConfirmProps>(
         {/* thumb — 42x42 danger 원형 + white '→' (z 위로). */}
         <View
           testID={testID ? `${testID}-thumb` : undefined}
+          onStartShouldSetResponder={() => !disabled}
+          onMoveShouldSetResponder={() => !disabled}
+          onResponderGrant={handleDragStart}
+          onResponderMove={handleDragMove}
+          onResponderRelease={handleDragRelease}
+          onResponderTerminate={() => {
+            if (!confirmedRef.current) setDrag(0);
+          }}
           className="z-10 h-[42px] w-[42px] items-center justify-center rounded-full bg-danger"
+          style={dragX ? { transform: [{ translateX: dragX }] } : undefined}
         >
           <Text className="text-[18px] font-extrabold leading-none text-white">
             {THUMB_GLYPH}

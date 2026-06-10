@@ -4,14 +4,12 @@ const mockReplace = jest.fn();
 const mockBack = jest.fn();
 const mockPush = jest.fn();
 const mockAnalyticsCapture = jest.fn();
-const mockStartInstantRematchPayment = jest.fn();
-const mockConfirmInstantRematchPayment = jest.fn();
+const mockConfirmInstantRematchPurchase = jest.fn();
+const mockGetBoosterPackageOptions = jest.fn();
+const mockIsPurchaseCancelled = jest.fn();
+const mockPurchaseInstantRematchPackage = jest.fn();
+const mockSyncPurchasesUser = jest.fn();
 const mockSupabaseFrom = jest.fn();
-
-// PortOne 결제 위젯은 SUT 동작과 무관 — 의존 트리(네이티브 모듈)를 끊기 위해 스텁.
-jest.mock('@portone/react-native-sdk', () => ({
-  Payment: () => null,
-}));
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace, back: mockBack, push: mockPush }),
@@ -29,11 +27,15 @@ jest.mock('@/lib/supabase', () => ({
   },
 }));
 
-jest.mock('@/lib/portone.stub', () => ({
-  startInstantRematchPayment: (...args: unknown[]) =>
-    mockStartInstantRematchPayment(...args),
-  confirmInstantRematchPayment: (...args: unknown[]) =>
-    mockConfirmInstantRematchPayment(...args),
+jest.mock('@/lib/purchases', () => ({
+  confirmInstantRematchPurchase: (...args: unknown[]) =>
+    mockConfirmInstantRematchPurchase(...args),
+  getBoosterPackageOptions: (...args: unknown[]) =>
+    mockGetBoosterPackageOptions(...args),
+  isPurchaseCancelled: (...args: unknown[]) => mockIsPurchaseCancelled(...args),
+  purchaseInstantRematchPackage: (...args: unknown[]) =>
+    mockPurchaseInstantRematchPackage(...args),
+  syncPurchasesUser: (...args: unknown[]) => mockSyncPurchasesUser(...args),
 }));
 
 jest.mock('@/lib/matching', () => ({
@@ -62,7 +64,7 @@ jest.mock('@dei/shared', () => ({
   },
   getRematchRestriction: () => ({ restricted: true, remainingMs: 1000 }),
   POLICY: {
-    matching: { rematchCooldownHours: 24 },
+    matching: { rematchCooldownHours: 12 },
     // b-flow(requireActual) 가 PAYMENT_PACKS id 를 만들 때 사용.
     payment: { instantRematchProductId: 'booster_instant_rematch_v1' },
   },
@@ -144,16 +146,17 @@ describe('BoosterScreen — booster 결제 신호 계측', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    mockStartInstantRematchPayment.mockResolvedValue({
-      storeId: 'store-1',
-      paymentId: 'pay-1',
-      orderName: 'instant-rematch',
-      totalAmount: 1000,
-      currency: 'KRW',
-      channelKey: 'channel-1',
-      payMethod: 'CARD',
+    mockGetBoosterPackageOptions.mockResolvedValue(new Map());
+    mockIsPurchaseCancelled.mockReturnValue(false);
+    mockSyncPurchasesUser.mockResolvedValue(undefined);
+    mockPurchaseInstantRematchPackage.mockResolvedValue({
+      appUserId: 'u1',
+      customerInfoRequestDate: '2026-06-10T00:00:00.000Z',
+      productId: 'booster_instant_rematch_v1_pack3',
+      revenueCatProductId: 'rc_booster_pack3',
+      transactionId: 'tx-1',
     });
-    mockConfirmInstantRematchPayment.mockResolvedValue(undefined);
+    mockConfirmInstantRematchPurchase.mockResolvedValue(undefined);
 
     mockSupabaseFrom.mockImplementation((table: string) => {
       if (table === 'profile') {
@@ -203,7 +206,7 @@ describe('BoosterScreen — booster 결제 신호 계측', () => {
 
     // press 가 트리거한 async 결제 시작 state 업데이트를 flush 해 act 경고 방지.
     await waitFor(() => {
-      expect(mockStartInstantRematchPayment).toHaveBeenCalled();
+      expect(mockPurchaseInstantRematchPackage).toHaveBeenCalled();
     });
     await act(async () => {
       await Promise.resolve();

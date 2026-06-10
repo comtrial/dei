@@ -5,6 +5,7 @@ const mockGetSession = jest.fn();
 
 // 관측 init 은 부수효과만 — no-op 으로 차단(실제 Sentry/PostHog 미접촉).
 jest.mock('@/lib/posthog', () => ({ initPostHog: jest.fn() }));
+jest.mock('@/lib/purchases', () => ({ initPurchases: jest.fn() }));
 jest.mock('@/lib/sentry', () => ({ initSentry: jest.fn() }));
 
 jest.mock('@/lib/supabase', () => ({

@@ -108,6 +108,8 @@ export const PAYMENT_PACKS = [
   },
 ] as const;
 
+export type PaymentPackId = (typeof PAYMENT_PACKS)[number]['id'];
+
 export type NicknameValidation =
   | { state: 'idle'; message: string }
   | { state: 'checking'; message: string }

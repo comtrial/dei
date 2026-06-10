@@ -78,7 +78,7 @@ export default function RoomLeaveConfirmScreen() {
             한 번 나가면 같은 방으로 돌아올 수 없어요.
           </Text>
 
-          <Banner tone="danger" icon="!" title="다음 매칭은 24시간 후부터 가능해요">
+          <Banner tone="danger" icon="!" title="다음 매칭은 12시간 후부터 가능해요">
             바로 다시 매칭하려면 부스터가 필요해요. 마지막 멤버가 나가면 방의 모든 영상·채팅이 영구 소멸돼요.
           </Banner>
 
@@ -109,10 +109,11 @@ export default function RoomLeaveConfirmScreen() {
 
           <View className="pb-[22px] pt-[18px]">
             <SlideToConfirm
+              testID="room-leave-slide-confirm"
               tone="ink"
               disabled={!canLeave || isLeaving}
               onConfirm={handleLeave}
-              label={isLeaving ? '나가는 중' : '방 나가기'}
+              label={isLeaving ? '나가는 중' : undefined}
               className={!canLeave || isLeaving ? 'opacity-40' : undefined}
             />
           </View>

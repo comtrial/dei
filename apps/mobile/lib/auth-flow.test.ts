@@ -125,4 +125,25 @@ describe('auth-flow', () => {
       nickname: '하루산책',
     });
   });
+
+  it('builds a verified profile snapshot from auth_verification even before profile row appears', () => {
+    const profile = mergeProfileWithVerifiedIdentity(null, {
+      provider_metadata: {
+        verifiedCustomer: {
+          birthDate: '1999-04-05',
+          birthYear: 1999,
+          gender: 'male',
+        },
+      },
+      verified_at: '2026-06-07T00:00:00.000Z',
+    });
+
+    expect(profile).toMatchObject({
+      birth_date: '1999-04-05',
+      birth_year: 1999,
+      gender: 'male',
+      is_adult: true,
+    });
+    expect(getAuthGateRoute(profile)).toBe('profileStep1');
+  });
 });

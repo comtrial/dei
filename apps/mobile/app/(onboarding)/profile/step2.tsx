@@ -21,6 +21,7 @@ import {
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { PROFILE_BIO_MAX_LENGTH } from '@/lib/b-flow';
 import { openSystemSettings, requestPermission } from '@/lib/permissions';
+import { mergeCachedProfileSnapshot } from '@/lib/profile-session-cache';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
@@ -126,6 +127,12 @@ export default function ProfilePhotoStepScreen() {
           if (error) {
             throw error;
           }
+
+          mergeCachedProfileSnapshot(user.id, {
+            bio: bio.trim() || null,
+            photoDisplayUrl: photoUri,
+            photoUrl: photoPath,
+          });
         }
 
         analytics.capture(ANALYTICS_EVENTS.profile_step_completed, {

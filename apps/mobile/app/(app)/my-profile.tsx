@@ -41,6 +41,10 @@ import {
   VERIFIED_IDENTITY_SELECT,
 } from '@/lib/identity-profile';
 import { openSystemSettings, requestPermission } from '@/lib/permissions';
+import {
+  getCachedProfileSnapshot,
+  mergeCachedProfileSnapshot,
+} from '@/lib/profile-session-cache';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
@@ -162,6 +166,38 @@ export default function MyProfileScreen() {
   });
 
   useEffect(() => {
+    const cached = getCachedProfileSnapshot(user?.id);
+    if (!cached) return;
+
+    setProfile((current) => ({
+      ...current,
+      bio: cached.bio ?? current.bio,
+      birthDate: cached.birthDate ?? current.birthDate,
+      birthYear: cached.birthYear ?? current.birthYear,
+      gender: cached.gender ?? current.gender,
+      mbti: cached.mbti ?? current.mbti,
+      nickname: cached.nickname ?? current.nickname,
+      nicknameChangedAt: cached.nicknameChangedAt ?? current.nicknameChangedAt,
+      notificationEnabled: cached.notificationEnabled ?? current.notificationEnabled,
+      passCount: cached.passCount ?? current.passCount,
+      photoDisplayUrl: cached.photoDisplayUrl ?? current.photoDisplayUrl,
+      photoUrl: cached.photoUrl ?? current.photoUrl,
+      region: cached.region ?? current.region,
+    }));
+    setDraft((current) => ({
+      ...current,
+      bio: cached.bio ?? current.bio,
+      gender: cached.gender ?? current.gender,
+      mbti: cached.mbti ?? current.mbti,
+      nickname: cached.nickname ?? current.nickname,
+      region: cached.region ?? current.region,
+    }));
+    if (cached.photoDisplayUrl) {
+      setPhotoImageFailed(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
     analytics.capture(ANALYTICS_EVENTS.profile_hub_opened);
 
     if (!user) {
@@ -252,6 +288,7 @@ export default function MyProfileScreen() {
         };
 
         setProfile(nextProfile);
+        mergeCachedProfileSnapshot(user.id, nextProfile);
         setPhotoImageFailed(false);
         setDraft({
           bio: nextProfile.bio,
@@ -373,6 +410,14 @@ export default function MyProfileScreen() {
           nicknameChangedAt: changedAt,
           region: draft.region || null,
         }));
+        mergeCachedProfileSnapshot(user.id, {
+          bio: trimmedNullable(draft.bio),
+          gender: draft.gender || null,
+          mbti: draft.mbti || null,
+          nickname: nextNickname,
+          nicknameChangedAt: changedAt,
+          region: draft.region || null,
+        });
         setSaveSucceeded(true);
       },
       { tags: { screen: 'my-profile', action: 'save' } },
@@ -443,6 +488,10 @@ export default function MyProfileScreen() {
           photoDisplayUrl: signedPhoto.signedUrl,
           photoUrl: path,
         }));
+        mergeCachedProfileSnapshot(user.id, {
+          photoDisplayUrl: signedPhoto.signedUrl,
+          photoUrl: path,
+        });
       },
       { tags: { screen: 'my-profile', action: 'photo-edit' } },
     )
@@ -572,7 +621,7 @@ export default function MyProfileScreen() {
                     잔여 {profile.passCount}회
                   </Text>
                   <Text className="mt-[3px] text-[11.5px] text-ink-3">
-                    24시간 제한 면제권
+                    12시간 제한 면제권
                   </Text>
                 </View>
                 <Button
