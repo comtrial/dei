@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
@@ -178,11 +178,6 @@ describe('BoosterScreen — booster 결제 신호 계측', () => {
       });
     });
 
-    // load-state effect(profile/pass) 의 async state 업데이트가 settle 될 때까지
-    // 대기해 잔여 act(...) 경고를 방지한다.
-    await act(async () => {
-      await Promise.resolve();
-    });
   });
 
   it('결제 버튼을 누르면 booster_purchase_attempted 가 capture 된다', async () => {
@@ -207,9 +202,6 @@ describe('BoosterScreen — booster 결제 신호 계측', () => {
     // press 가 트리거한 async 결제 시작 state 업데이트를 flush 해 act 경고 방지.
     await waitFor(() => {
       expect(mockPurchaseInstantRematchPackage).toHaveBeenCalled();
-    });
-    await act(async () => {
-      await Promise.resolve();
     });
   });
 });
