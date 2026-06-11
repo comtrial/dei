@@ -82,4 +82,15 @@ describe('TermsScreen — 약관 전문 보기', () => {
       params: { section: 'service' },
     });
   });
+
+  it('위치정보 수집 보기 버튼은 위치정보 약관 전문 화면으로 이동한다', () => {
+    render(<TermsScreen />);
+
+    fireEvent.press(screen.getByLabelText('위치정보 수집 전문 보기'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/(auth)/terms-document',
+      params: { section: 'location' },
+    });
+  });
 });

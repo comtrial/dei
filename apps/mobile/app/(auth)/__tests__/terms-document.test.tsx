@@ -1,8 +1,11 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
+
+const mockPush = jest.fn();
+let mockParams: { section?: string } = { section: 'location' };
 
 jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ section: 'location' }),
-  useRouter: () => ({ back: jest.fn() }),
+  useLocalSearchParams: () => mockParams,
+  useRouter: () => ({ back: jest.fn(), push: mockPush }),
 }));
 
 jest.mock('@dei/ui', () => {
@@ -22,10 +25,30 @@ jest.mock('@dei/ui', () => {
 import TermsDocumentScreen from '../terms-document';
 
 describe('TermsDocumentScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockParams = { section: 'location' };
+  });
+
   it('앱 안에서 위치정보 약관 전문 내용을 보여준다', () => {
     render(<TermsDocumentScreen />);
 
-    expect(screen.getByText('위치정보 수집 및 이용 동의')).toBeTruthy();
-    expect(screen.getByText(/현재 위치는 지역 자동 입력과 매칭 추천 지역 보정에 사용돼요/)).toBeTruthy();
+    expect(screen.getByText('위치정보 이용약관')).toBeTruthy();
+    expect(screen.getByText('제16조 (사업자 및 위치정보관리책임자 정보)')).toBeTruthy();
+    expect(screen.getByText('공고일자 : 【2026년 06월 01일】')).toBeTruthy();
+    expect(screen.getByText(/본 약관은 커맨드소프트웨어/)).toBeTruthy();
+  });
+
+  it('전체 약관 화면에서 위치정보 수집 칩을 누르면 위치정보 전문으로 이동한다', () => {
+    mockParams = {};
+
+    render(<TermsDocumentScreen />);
+
+    fireEvent.press(screen.getByLabelText('위치정보 수집 보기'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/(auth)/terms-document',
+      params: { section: 'location' },
+    });
   });
 });
