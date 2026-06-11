@@ -157,6 +157,23 @@ function makeProfileChain() {
   };
 }
 
+function installFastSearchDebounce() {
+  const realSetTimeout = global.setTimeout;
+  const spy = jest.spyOn(global, 'setTimeout').mockImplementation(
+    ((...args: Parameters<typeof global.setTimeout>) => {
+      const [handler, timeout, ...rest] = args;
+      return realSetTimeout(handler, timeout === 500 ? 0 : timeout, ...rest);
+    }) as typeof global.setTimeout,
+  );
+  return () => spy.mockRestore();
+}
+
+function changeSearchText(value: string) {
+  const restoreSearchDebounce = installFastSearchDebounce();
+  fireEvent.changeText(screen.getByPlaceholderText('닉네임으로 검색'), value);
+  restoreSearchDebounce();
+}
+
 describe('TeamNewScreen — college gwating mode', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -202,7 +219,7 @@ describe('TeamNewScreen — college gwating mode', () => {
 
     render(<TeamNewScreen />);
 
-    fireEvent.changeText(screen.getByPlaceholderText('닉네임으로 검색'), '민준');
+    changeSearchText('민준');
 
     await waitFor(() => expect(screen.getByText('대학생 프로필이 필요해요')).toBeTruthy(), {
       timeout: 1500,
@@ -223,7 +240,7 @@ describe('TeamNewScreen — college gwating mode', () => {
 
     render(<TeamNewScreen />);
 
-    fireEvent.changeText(screen.getByPlaceholderText('닉네임으로 검색'), '민준');
+    changeSearchText('민준');
     await waitFor(() => expect(screen.getByText('초대 가능')).toBeTruthy(), {
       timeout: 1500,
     });
