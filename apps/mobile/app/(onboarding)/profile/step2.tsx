@@ -167,7 +167,7 @@ export default function ProfilePhotoStepScreen() {
             <Text variant="h1" className="text-[25px] leading-[33px]">
               당신을 보여줄{'\n'}사진을 올려주세요
             </Text>
-            <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+            <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
               본인 얼굴이 보이는 사진 1장
             </Text>
           </View>
@@ -181,7 +181,7 @@ export default function ProfilePhotoStepScreen() {
               onPress={handleCapture}
               testID="onboarding-photo-upload"
             />
-            <Text className="mt-[18px] text-center text-[11.5px] leading-[17px] text-ink-3">
+            <Text className="mt-[18px] text-center text-[13.5px] leading-[17px] text-ink-3">
               선정적이거나 타인의 사진은 신고 대상이에요
             </Text>
 

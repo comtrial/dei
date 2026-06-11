@@ -255,7 +255,7 @@ export default function TeamNewScreen() {
           <Text variant="h1" className="text-[25px] leading-[33px]">
             같이 갈 친구를{'\n'}닉네임으로 불러봐
           </Text>
-          <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+          <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
             수락 절차 없이 초대자가 바로 진행해요
           </Text>
 
@@ -272,8 +272,8 @@ export default function TeamNewScreen() {
           <View className="mt-[18px] gap-[10px]">
             {query && results.length === 0 && !isSearching ? (
               <Card className="items-center px-[18px] py-[24px]">
-                <Text className="text-[14px] font-bold text-ink">그런 닉네임의 친구가 없어요</Text>
-                <Text className="mt-[4px] text-center text-[12px] leading-[18px] text-ink-3">
+                <Text className="text-[16px] font-bold text-ink">그런 닉네임의 친구가 없어요</Text>
+                <Text className="mt-[4px] text-center text-[14px] leading-[18px] text-ink-3">
                   철자나 띄어쓰기를 다시 확인해주세요.
                 </Text>
               </Card>
@@ -283,8 +283,8 @@ export default function TeamNewScreen() {
               <Card key={member.id} className="flex-row items-center gap-[12px] px-[14px] py-[14px]">
                 <Avatar initial={member.initial} size={36} />
                 <View className="flex-1">
-                  <Text className="text-[14px] font-bold text-ink">{member.nickname}</Text>
-                  <Text className="mt-[2px] text-[11.5px] text-ink-3">
+                  <Text className="text-[16px] font-bold text-ink">{member.nickname}</Text>
+                  <Text className="mt-[2px] text-[13.5px] text-ink-3">
                     {member.blocked
                       ? '초대할 수 없는 친구예요'
                       : member.busy

@@ -39,7 +39,12 @@ const mockFrom = jest.fn((table: string) => {
   throw new Error(`unexpected table: ${table}`);
 });
 
-let mockParams: { roomId?: string; targetId?: string } = {
+let mockParams: {
+  roomId?: string;
+  targetAvatarUrl?: string;
+  targetId?: string;
+  targetNickname?: string;
+} = {
   roomId: ROOM_ID,
   targetId: TARGET_ID,
 };
@@ -120,6 +125,21 @@ describe('ReportCategoryScreen', () => {
       });
     });
 
+    expect(mockBlockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('본인 target이면 신고 화면 대신 내 프로필로 보낸다', async () => {
+    mockParams = { roomId: ROOM_ID, targetId: USER_ID };
+
+    render(<ReportCategoryScreen />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/(app)/my-profile');
+    });
+
+    expect(mockGetMemberProfile).not.toHaveBeenCalled();
+    expect(mockProfileMaybeSingle).not.toHaveBeenCalled();
+    expect(mockReportInsert).not.toHaveBeenCalled();
     expect(mockBlockUpsert).not.toHaveBeenCalled();
   });
 

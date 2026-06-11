@@ -63,7 +63,7 @@ export const BrandTransitionFrame = React.forwardRef<View, BrandTransitionFrameP
 
         {/* .portone: ink-3 14px/700, bg-2 pill, padding 6px 12px, r-sm */}
         <View testID="brand-target-pill" className="rounded-sm bg-bg-2 px-[12px] py-[6px]">
-          <Text className="text-[14px] font-bold text-ink-3">{target}</Text>
+          <Text className="text-[16px] font-bold text-ink-3">{target}</Text>
         </View>
       </View>
     );

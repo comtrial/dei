@@ -340,7 +340,7 @@ export default function HomeScreen() {
           <Text variant="h1" className="text-[28px] leading-[36px]">
             오늘은 어떤{'\n'}일상을 공유할까요?
           </Text>
-          <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+          <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
             혼자 또는 친구와 함께 · 방은 마지막 1명이 남을 때까지 유지돼요
           </Text>
         </View>
@@ -365,7 +365,7 @@ export default function HomeScreen() {
               </View>
               <View className="flex-1">
                 <Text className="text-[16px] font-extrabold text-ink">혼자 참여</Text>
-                <Text className="mt-[3px] text-[12.5px] leading-[18px] text-ink-3">
+                <Text className="mt-[3px] text-[14.5px] leading-[18px] text-ink-3">
                   바로 매칭 큐로 들어가요
                 </Text>
               </View>
@@ -380,7 +380,7 @@ export default function HomeScreen() {
               </View>
               <View className="flex-1">
                 <Text className="text-[16px] font-extrabold text-ink">친구와 함께</Text>
-                <Text className="mt-[3px] text-[12.5px] leading-[18px] text-ink-3">
+                <Text className="mt-[3px] text-[14.5px] leading-[18px] text-ink-3">
                   닉네임으로 친구를 초대해요 (최대 {POLICY.team.maxMembers}명)
                 </Text>
               </View>
@@ -390,7 +390,7 @@ export default function HomeScreen() {
         </View>
 
         <View className="mt-auto border-t border-line pt-[14px]">
-          <Text className="text-center text-[12.5px] leading-[19px] text-ink-3">
+          <Text className="text-center text-[14.5px] leading-[19px] text-ink-3">
             우상단 아바타 dot = <Text className="font-semibold text-ink-2">프로필 미완성</Text>. 탭 = 프로필 수정 진입.
           </Text>
         </View>

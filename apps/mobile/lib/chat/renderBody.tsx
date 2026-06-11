@@ -33,9 +33,9 @@ export interface RenderBodyOpts {
 
 /** 평문 조각 본문 색 className(ChatBubble BUBBLE_TEXT_CLASS 와 동일 토큰). */
 const PLAIN_TEXT_CLASS: Record<RenderBodyVariant, string> = {
-  them: 'text-[13px] leading-[18px] text-ink',
-  me: 'text-[13px] leading-[18px] text-white',
-  whisper: 'text-[13px] leading-[18px] italic text-accent-deep',
+  them: 'text-[15px] leading-[18px] text-ink',
+  me: 'text-[15px] leading-[18px] text-white',
+  whisper: 'text-[15px] leading-[18px] italic text-accent-deep',
 };
 
 /** `@토큰`(최소 1자) 전역 매칭. 글로벌 플래그라 호출마다 새로 만든다(lastIndex 안전). */

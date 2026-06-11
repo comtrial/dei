@@ -190,6 +190,22 @@ export default function AppLayout() {
           gestureEnabled: false,
         }}
       />
+      <Stack.Screen
+        name="match/cancel-confirm"
+        options={{
+          presentation: 'transparentModal',
+          animation: 'fade',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="report/block-report"
+        options={{
+          presentation: 'transparentModal',
+          animation: 'fade',
+          gestureEnabled: false,
+        }}
+      />
     </Stack>
   );
 }

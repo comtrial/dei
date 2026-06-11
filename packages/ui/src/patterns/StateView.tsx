@@ -95,7 +95,7 @@ export const StateView = React.forwardRef<View, StateViewProps>(function StateVi
         <Text
           variant="caption"
           tone="ink-3"
-          className="mt-[10px] text-center text-[13.5px] leading-[1.55]"
+          className="mt-[10px] text-center text-[15.5px] leading-[1.55]"
         >
           {desc}
         </Text>

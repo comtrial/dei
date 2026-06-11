@@ -59,6 +59,7 @@ export default function ReportCategoryScreen() {
   const paramAvatarUrl = paramValue(params.targetAvatarUrl);
   const activeRoomId = roomIdValue && isUuidLike(roomIdValue) ? roomIdValue : null;
   const validTargetId = targetIdValue && isUuidLike(targetIdValue) ? targetIdValue : null;
+  const isSelfTarget = user?.id != null && validTargetId === user.id;
   const [category, setCategory] = useState<string | null>(null);
   const [detail, setDetail] = useState('');
   const [blockToo, setBlockToo] = useState(false);
@@ -76,7 +77,7 @@ export default function ReportCategoryScreen() {
   });
 
   const needsDetail = category === 'other';
-  const canUseTarget = validTargetId != null;
+  const canUseTarget = validTargetId != null && !isSelfTarget;
   const canSubmit = canUseTarget && !!category && (!needsDetail || detail.trim().length > 0);
   const returnAfterComplete = useCallback(() => {
     if (activeRoomId) {
@@ -92,7 +93,13 @@ export default function ReportCategoryScreen() {
   }, []);
 
   useEffect(() => {
-    if (!validTargetId) {
+    if (isSelfTarget) {
+      router.replace(ROUTES.myProfile);
+    }
+  }, [isSelfTarget, router]);
+
+  useEffect(() => {
+    if (!validTargetId || isSelfTarget) {
       return;
     }
 
@@ -152,7 +159,7 @@ export default function ReportCategoryScreen() {
       },
       { tags: { screen: 'report-category', action: 'load-target' } },
     );
-  }, [activeRoomId, validTargetId]);
+  }, [activeRoomId, isSelfTarget, validTargetId]);
 
   useEffect(() => {
     if (!complete) {
@@ -164,6 +171,11 @@ export default function ReportCategoryScreen() {
   }, [complete, returnAfterComplete]);
 
   const handleSubmit = () => {
+    if (isSelfTarget) {
+      router.replace(ROUTES.myProfile);
+      return;
+    }
+
     if (!canSubmit || isSubmitting) {
       return;
     }
@@ -237,7 +249,7 @@ export default function ReportCategoryScreen() {
           <Text variant="h1" className="text-[25px] leading-[33px]">
             어떤 점이 불편했나요?
           </Text>
-          <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+          <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
             신고 시 운영팀이 검토합니다.
           </Text>
 
@@ -269,7 +281,7 @@ export default function ReportCategoryScreen() {
             className="mt-[18px] flex-row items-center gap-[10px]"
           >
             <Checkbox checked={blockToo} variant="square" />
-            <Text className="flex-1 text-[13px] leading-[19px] text-ink-2">
+            <Text className="flex-1 text-[15px] leading-[19px] text-ink-2">
               신고 제출 후 이 사용자를 함께 차단할게요.
             </Text>
           </Pressable>
@@ -304,7 +316,7 @@ export default function ReportCategoryScreen() {
       {complete ? (
         <View className="absolute bottom-[34px] left-0 right-0 items-center px-[24px]">
           <View className="rounded-full bg-ink px-[16px] py-[10px]">
-            <Text className="text-center text-[12.5px] font-bold text-white">
+            <Text className="text-center text-[14.5px] font-bold text-white">
               신고 접수됐어요. 운영팀이 검토합니다.
             </Text>
           </View>

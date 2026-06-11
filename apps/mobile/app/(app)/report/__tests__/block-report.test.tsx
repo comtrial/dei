@@ -32,7 +32,12 @@ const mockFrom = jest.fn((table: string) => {
   throw new Error(`unexpected table: ${table}`);
 });
 
-let mockParams: { roomId?: string; targetId?: string } = {
+let mockParams: {
+  roomId?: string;
+  targetAvatarUrl?: string;
+  targetId?: string;
+  targetNickname?: string;
+} = {
   roomId: ROOM_ID,
   targetId: TARGET_ID,
 };
@@ -104,6 +109,20 @@ describe('BlockReportSheetScreen', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('bottom-sheet-surface')).toBeNull();
     });
+  });
+
+  it('본인 target이면 신고/차단 sheet 대신 내 프로필로 보낸다', async () => {
+    mockParams = { roomId: ROOM_ID, targetId: USER_ID };
+
+    render(<BlockReportSheetScreen />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/(app)/my-profile');
+    });
+
+    expect(mockGetMemberProfile).not.toHaveBeenCalled();
+    expect(mockProfileMaybeSingle).not.toHaveBeenCalled();
+    expect(mockBlockUpsert).not.toHaveBeenCalled();
   });
 
   it('route param에 사진이 있으면 네트워크 조회 전 첫 렌더부터 사진을 보여준다', () => {

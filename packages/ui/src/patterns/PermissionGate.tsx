@@ -166,7 +166,7 @@ export const PermissionGate = React.forwardRef<View, PermissionGateProps>(
             <Text
               variant="caption"
               tone="ink-3"
-              className="mt-[10px] text-center text-[13.5px] leading-[1.6]"
+              className="mt-[10px] text-center text-[15.5px] leading-[1.6]"
             >
               {description}
             </Text>
@@ -175,14 +175,14 @@ export const PermissionGate = React.forwardRef<View, PermissionGateProps>(
           {/* .why: bg-2 + r-md, 좌측 정렬, bold title 블록 + 불릿 리스트. mt-auto 로 CTA 위로 밀착 */}
           {hasWhy ? (
             <View className="mb-auto mt-[18px] w-full rounded-md bg-bg-2 px-[16px] py-[14px]">
-              <Text className="mb-[6px] text-[12.5px] font-bold leading-[1.6] text-ink">
+              <Text className="mb-[6px] text-[14.5px] font-bold leading-[1.6] text-ink">
                 {whyTitle}
               </Text>
               <View className="pl-[16px]">
                 {reasons!.map((reason, i) => (
                   <View key={i} className="my-[2px] flex-row">
-                    <Text className="text-[12.5px] leading-[1.6] text-ink-2">{'• '}</Text>
-                    <Text className="flex-1 text-[12.5px] leading-[1.6] text-ink-2">
+                    <Text className="text-[14.5px] leading-[1.6] text-ink-2">{'• '}</Text>
+                    <Text className="flex-1 text-[14.5px] leading-[1.6] text-ink-2">
                       {reason.text}
                     </Text>
                   </View>
@@ -200,7 +200,7 @@ export const PermissionGate = React.forwardRef<View, PermissionGateProps>(
                   onPress={onPrimary}
                   className="items-center rounded-md bg-ink py-[16px]"
                 >
-                  <Text className="text-[15px] font-bold text-white">{primaryLabel}</Text>
+                  <Text className="text-[17px] font-bold text-white">{primaryLabel}</Text>
                 </Pressable>
               ) : null}
               {secondaryLabel != null ? (
@@ -209,7 +209,7 @@ export const PermissionGate = React.forwardRef<View, PermissionGateProps>(
                   onPress={onSecondary}
                   className="items-center rounded-md bg-bg-2 py-[16px]"
                 >
-                  <Text className="text-[14px] font-semibold text-ink-2">{secondaryLabel}</Text>
+                  <Text className="text-[16px] font-semibold text-ink-2">{secondaryLabel}</Text>
                 </Pressable>
               ) : null}
             </View>

@@ -31,7 +31,7 @@ import { cn } from '../lib/cn';
  * 합성:
  *  - 입력 필드는 **Input** primitive(P2)를 재사용하되, HTML 의 pill 모양/치수를
  *    `inputClassName` 로 덮는다. Input base 는 `rounded-md` / `py-[14px]` /
- *    `text-[15px]` 이므로 S13a 값(`rounded-full` / `py-[10px]` / `text-[13px]`,
+ *    `text-[17px]` 이므로 S13a 값(`rounded-full` / `py-[10px]` / `text-[15px]`,
  *    bg-2 는 base 와 동일)으로 last-wins 오버라이드한다.
  *  - 전송 버튼은 **IconButton**(P15) + ArrowUp 글리프. accent 원형 + white 글리프는
  *    기본 variant 에 없다. IconButton 은 글리프 색을 variant 로만 정하므로(색 override
@@ -101,7 +101,7 @@ const ROW_CLASS = 'flex-row items-center gap-[8px]';
  * 멀티라인 자동높이를 쓰므로 세로 패딩은 줄이고(py-8) 높이는 측정값으로 제어한다.
  * 한 줄일 땐 rounded-full(알약), 여러 줄로 커지면 rounded-2xl 이 자연스럽다.
  */
-const INPUT_OVERRIDE_CLASS = 'py-[8px] text-[15px] leading-[20px]';
+const INPUT_OVERRIDE_CLASS = 'py-[8px] text-[17px] leading-[20px]';
 
 /** 멀티라인 입력 높이 경계(px). 한 줄 ~40, 최대 ~120(약 5줄) 후 내부 스크롤. */
 const INPUT_MIN_H = 40;

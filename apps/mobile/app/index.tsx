@@ -241,7 +241,7 @@ export default function SplashRouter() {
         <Text className="mb-[8px] text-center text-[18px] font-bold leading-[24px] text-ink">
           오늘 하루, 누군가의 일상으로
         </Text>
-        <Text className="mb-auto text-center text-[14px] leading-[21px] text-ink-3">
+        <Text className="mb-auto text-center text-[16px] leading-[21px] text-ink-3">
           혼자도, 친구와도. 3초로 자연스럽게
         </Text>
 

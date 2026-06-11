@@ -29,18 +29,18 @@ export default function MatchFailedScreen() {
           <Text variant="h1" className="mt-[16px] text-center text-[25px] leading-[33px]">
             매칭 상대를{'\n'}찾지 못했어요
           </Text>
-          <Text className="mt-[10px] text-center text-[13.5px] leading-[21px] text-ink-3">
+          <Text className="mt-[10px] text-center text-[15.5px] leading-[21px] text-ink-3">
             큐가 24시간 만료됐어요.{'\n'}다시 시작하면 새로운 인연을 찾아드려요.
           </Text>
         </View>
 
         <Card className="mt-[28px] border-0 bg-bg-2 px-[16px] py-[14px]">
-          <Text className="text-[12.5px] font-bold leading-[20px] text-ink">
+          <Text className="text-[14.5px] font-bold leading-[20px] text-ink">
             왜 만료됐나요?
           </Text>
           <View className="mt-[6px] gap-[4px]">
             {EXPIRE_REASONS.map((reason) => (
-              <Text key={reason} className="text-[12.5px] leading-[20px] text-ink-2">
+              <Text key={reason} className="text-[14.5px] leading-[20px] text-ink-2">
                 • {reason}
               </Text>
             ))}

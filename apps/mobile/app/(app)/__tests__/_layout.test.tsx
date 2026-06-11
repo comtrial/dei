@@ -195,4 +195,30 @@ describe('AppLayout auth gate', () => {
       undefined,
     );
   });
+
+  it('presents bottom-sheet routes as transparent modal overlays', async () => {
+    render(<AppLayout />);
+
+    await waitFor(() => {
+      expect(mockStack).toHaveBeenCalled();
+    });
+
+    for (const name of [
+      'room/[roomId]/leave-confirm',
+      'match/cancel-confirm',
+      'report/block-report',
+    ]) {
+      expect(mockStackScreen).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name,
+          options: expect.objectContaining({
+            animation: 'fade',
+            gestureEnabled: false,
+            presentation: 'transparentModal',
+          }),
+        }),
+        undefined,
+      );
+    }
+  });
 });

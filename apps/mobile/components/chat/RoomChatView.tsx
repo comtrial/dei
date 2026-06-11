@@ -221,7 +221,7 @@ export function RoomChatView(props: RoomChatViewProps) {
                       <Text
                         testID="chat-system-message"
                         className={cn(
-                          'rounded-full bg-bg-2 px-[10px] py-[5px] text-[12px] font-semibold text-ink-3',
+                          'rounded-full bg-bg-2 px-[10px] py-[5px] text-[14px] font-semibold text-ink-3',
                           o && 'bg-[rgba(255,255,255,0.16)] text-white',
                         )}
                       >

@@ -20,6 +20,7 @@ import {
   isBlockedBetween,
   getRoomMembersWithProfile,
 } from '@/lib/room-rpc';
+import { ROUTES } from '@/lib/routes';
 
 type FetchState = 'loading' | 'error' | 'ready';
 
@@ -37,6 +38,7 @@ export default function VideoFullscreenScreen() {
   const [memberNickname, setMemberNickname] = useState<string>('');
   const [memberPhotoUrl, setMemberPhotoUrl] = useState<string | null>(null);
   const [memberUserId, setMemberUserId] = useState<string>('');
+  const [selfUserId, setSelfUserId] = useState<string>('');
   const [capturedAtLabel, setCapturedAtLabel] = useState<string | null>(null);
   const [caption, setCaption] = useState<string | null>(null);
   const [siblings, setSiblings] = useState<{ id: string; url: string; thumbnail: string | null }[]>([]);
@@ -82,7 +84,8 @@ export default function VideoFullscreenScreen() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const selfUserId = user?.id ?? '';
+      const fetchedSelfUserId = user?.id ?? '';
+      setSelfUserId(fetchedSelfUserId);
 
       const video = await getVideoById(videoId);
       if (!video || !video.storage_path) {
@@ -90,8 +93,8 @@ export default function VideoFullscreenScreen() {
         return;
       }
 
-      if (selfUserId && video.user_id) {
-        const blocked = await isBlockedBetween(selfUserId, video.user_id);
+      if (fetchedSelfUserId && video.user_id) {
+        const blocked = await isBlockedBetween(fetchedSelfUserId, video.user_id);
         if (blocked) {
           router.back();
           return;
@@ -136,18 +139,18 @@ export default function VideoFullscreenScreen() {
 
       if (video.hour_slot != null) {
         const siblingRows = await getSiblingVideos(roomId, video.hour_slot);
-        const blockedIds = selfUserId
+        const blockedIds = fetchedSelfUserId
           ? new Set(
               (
                 await supabase
                   .from('block')
                   .select('blocked_user_id, blocker_user_id')
                   .or(
-                    `blocker_user_id.eq.${selfUserId},blocked_user_id.eq.${selfUserId}`,
+                    `blocker_user_id.eq.${fetchedSelfUserId},blocked_user_id.eq.${fetchedSelfUserId}`,
                   )
                   .is('unblocked_at', null)
               ).data?.flatMap((r) =>
-                r.blocker_user_id === selfUserId
+                r.blocker_user_id === fetchedSelfUserId
                   ? [r.blocked_user_id]
                   : [r.blocker_user_id],
               ) ?? [],
@@ -327,6 +330,11 @@ export default function VideoFullscreenScreen() {
       textClassName="text-paper"
       onStartShouldSetResponder={() => true}
       onResponderRelease={() => {
+        if (memberUserId === selfUserId) {
+          router.push(ROUTES.myProfile);
+          return;
+        }
+
         router.push(
           `/(app)/room/${roomId}/members?userId=${memberUserId}` as never,
         );

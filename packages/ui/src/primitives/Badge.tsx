@@ -98,22 +98,22 @@ function containerClass(variant: BadgeVariant, tone: BadgeTone): string {
 function labelClass(variant: BadgeVariant, tone: BadgeTone): string {
   switch (variant) {
     case 'age':
-      return 'text-[11px] font-bold text-white';
+      return 'text-[13px] font-bold text-white';
     // .req: 11px/700 accent; .optional → ink-3 (tone=info 로 muted 표현)
     case 'required':
-      return cn('text-[11px] font-bold', tone === 'info' ? 'text-ink-3' : 'text-accent');
+      return cn('text-[13px] font-bold', tone === 'info' ? 'text-ink-3' : 'text-accent');
     // .lock-pill: 11px/600 white@80%
     case 'lock':
-      return 'text-[11px] font-semibold text-white/80';
+      return 'text-[13px] font-semibold text-white/80';
     // .count: 11px/600 ink-3
     case 'count':
-      return 'text-[11px] font-semibold text-ink-3';
-    // .price .badge: 9.5px/700 accent
+      return 'text-[13px] font-semibold text-ink-3';
+    // .price .badge: 9.5px/700 accent, 심사 대응으로 +2px
     case 'discount':
-      return 'text-[9.5px] font-bold text-accent';
+      return 'text-[11.5px] font-bold text-accent';
     // IconBadge glyph: 14px, tone 전경색
     case 'icon':
-      return cn('text-[14px]', ICON_TONE_FG[tone]);
+      return cn('text-[16px]', ICON_TONE_FG[tone]);
     case 'dot':
       return '';
   }
@@ -143,7 +143,7 @@ const AgeBadge = React.forwardRef<View, BadgeProps>(function AgeBadge(
       ) : null}
       {inner != null ? (
         <View className="rounded-full bg-accent px-[6px] py-[1px]">
-          <Text className="text-[10px] text-white">{inner}</Text>
+          <Text className="text-[12px] text-white">{inner}</Text>
         </View>
       ) : null}
     </View>

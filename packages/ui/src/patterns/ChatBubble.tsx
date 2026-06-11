@@ -68,10 +68,10 @@ const BUBBLE_CLASS: Record<Exclude<ChatBubbleVariant, 'mention'>, string> = {
 
 /** 버블 본문 Text className (15px/21 + variant 별 색). 카톡 수준 가독성. */
 const BUBBLE_TEXT_CLASS: Record<Exclude<ChatBubbleVariant, 'mention'>, string> = {
-  them: 'text-[15px] leading-[21px] text-ink',
-  me: 'text-[15px] leading-[21px] text-white',
+  them: 'text-[17px] leading-[21px] text-ink',
+  me: 'text-[17px] leading-[21px] text-white',
   // whisper: accent-deep + italic (HTML font-style:italic)
-  whisper: 'text-[15px] leading-[21px] italic text-accent-deep',
+  whisper: 'text-[17px] leading-[21px] italic text-accent-deep',
 };
 
 export interface ChatBubbleProps extends ViewProps {
@@ -141,7 +141,7 @@ export const MentionToken = React.forwardRef<RNTextRef, MentionTokenProps>(funct
     <Text
       ref={ref}
       className={cn(
-        'text-[13px] font-bold',
+        'text-[15px] font-bold',
         onDark ? 'text-accent-soft' : 'text-accent',
         className,
       )}
@@ -258,7 +258,7 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
             {showName ? (
               <Text
                 className={cn(
-                  'text-[11px] font-semibold',
+                  'text-[13px] font-semibold',
                   variant === 'whisper' ? 'font-bold text-accent' : 'text-ink-3',
                 )}
               >
@@ -268,14 +268,14 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
             {showWhisperTag ? (
               <Text
                 testID="chat-bubble-whisper-tag"
-                className="overflow-hidden rounded-full bg-accent px-[6px] py-[1px] text-[8.5px] font-extrabold text-white"
+                className="overflow-hidden rounded-full bg-accent px-[6px] py-[1px] text-[10.5px] font-extrabold text-white"
               >
                 귓속말
               </Text>
             ) : null}
             {showWhisperTarget ? (
               // 내가 보낸 귓속말: 누구에게 보냈는지 '@수신자'(accent 볼드).
-              <Text testID="chat-bubble-whisper-target" className="text-[11px] font-bold text-accent">
+              <Text testID="chat-bubble-whisper-target" className="text-[13px] font-bold text-accent">
                 {`@${name}`}
               </Text>
             ) : null}
@@ -295,7 +295,7 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
           {timeLabel ? (
             <Text
               testID="chat-bubble-time"
-              className="mb-[1px] text-[10.5px] font-semibold text-ink-3"
+              className="mb-[1px] text-[12.5px] font-semibold text-ink-3"
             >
               {timeLabel}
             </Text>
@@ -312,7 +312,7 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
             className="mt-[2px] flex-row items-center gap-[3px] self-end"
           >
             <AlertCircle size={13} color="#D62D2D" />
-            <Text className="text-[10.5px] font-semibold text-danger">재시도</Text>
+            <Text className="text-[12.5px] font-semibold text-danger">재시도</Text>
           </Pressable>
         ) : null}
       </View>

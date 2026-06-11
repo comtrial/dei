@@ -39,7 +39,7 @@ const inputBaseClassName =
   'min-h-[80px] leading-[20px]';
 
 /** HTML `.charcount` — 10.5px / ink-4 / 우측 정렬 / margin-top 4px. */
-const countClassName = 'mt-1 text-right text-[10.5px] text-ink-4';
+const countClassName = 'mt-1 text-right text-[12.5px] text-ink-4';
 
 export const Textarea = forwardRef<TextInput, TextareaProps>(
   (

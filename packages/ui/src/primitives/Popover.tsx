@@ -59,7 +59,7 @@ const MENU_CLASS =
 
 // .menu .it: padding 9px/12px, 12.5px/600, ink-2, r-sm. danger → danger.
 const ITEM_CLASS = 'rounded-sm px-[12px] py-[9px]';
-const ITEM_LABEL_CLASS = 'text-[12.5px] font-semibold';
+const ITEM_LABEL_CLASS = 'text-[14.5px] font-semibold';
 
 /**
  * Popover primitive. trigger 를 누르면 absolute overlay 로 메뉴를 띄우고,

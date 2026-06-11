@@ -44,6 +44,7 @@ import {
 import { resolveProfilePhotoUrls } from '@/lib/profile-photo-cache';
 import { setCachedRoomChatMembers } from '@/lib/chat/member-cache';
 import type { RoomMemberLite } from '@/lib/chat/mention';
+import { ROUTES } from '@/lib/routes';
 import { MatchingWaitingView } from '@/components/matching/MatchingWaitingView';
 import { CalendarSheet } from '@/components/calendar-sheet';
 
@@ -1019,6 +1020,10 @@ export default function RoomScreen() {
                         (m) => m.profile?.nickname === cell.name || m.user_id.slice(0, 6) === cell.name,
                       )?.user_id;
                     if (!userId) return;
+                    if (user?.id && userId === user.id) {
+                      router.push(ROUTES.myProfile);
+                      return;
+                    }
                     const member = membersWithProfile.find((m) => m.user_id === userId);
                     const name = member?.profile?.nickname ?? cell.name;
                     const photoUrl = photoUrlByUser.get(userId) ?? member?.profile?.avatar_url ?? undefined;

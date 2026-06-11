@@ -257,7 +257,7 @@ export default function BoosterScreen() {
           <Text variant="h1" className="mt-[26px] text-[26px] leading-[34px]">
             12시간 기다리지 말고 지금 시작
           </Text>
-          <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+          <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
             방을 나간 후 12시간 제한을 면제해드려요
           </Text>
 
@@ -273,18 +273,18 @@ export default function BoosterScreen() {
                 label: (
                   <View className="flex-1 flex-row items-center justify-between gap-[10px]">
                     <View className="flex-1">
-                      <Text className="text-[13.5px] font-extrabold text-ink">
+                      <Text className="text-[15.5px] font-extrabold text-ink">
                         {pack.label}
                         {pack.badge ? (
-                          <Text className="text-[11px] font-extrabold text-accent">
+                          <Text className="text-[13px] font-extrabold text-accent">
                             {' '}
                             {pack.badge}
                           </Text>
                         ) : null}
                       </Text>
-                      <Text className="mt-[2px] text-[11.5px] text-ink-3">{pack.sub}</Text>
+                      <Text className="mt-[2px] text-[13.5px] text-ink-3">{pack.sub}</Text>
                     </View>
-                    <Text className="text-[13.5px] font-extrabold text-ink">
+                    <Text className="text-[15.5px] font-extrabold text-ink">
                       {packageOptions.get(pack.id)?.price ?? pack.price}
                     </Text>
                   </View>
@@ -301,10 +301,10 @@ export default function BoosterScreen() {
                 <Badge key={label} variant="count">{label}</Badge>
               ))}
             </View>
-            <Text className="mt-[14px] text-[12.5px] leading-[19px] text-ink-2">
+            <Text className="mt-[14px] text-[14.5px] leading-[19px] text-ink-2">
               ✓ 스토어 1회 결제 · 정기결제 아님
             </Text>
-            <Text className="mt-[5px] text-[12.5px] leading-[19px] text-ink-2">
+            <Text className="mt-[5px] text-[14.5px] leading-[19px] text-ink-2">
               ✓ 환불은 App Store 정책에 따라 처리돼요
             </Text>
           </Card>

@@ -72,7 +72,7 @@ export function MentionAutocomplete({
           className="flex-row items-center gap-[8px] px-[14px] py-[8px] active:bg-bg-2"
         >
           <Avatar initial={c.avatarInitial} size={28} bg={c.avatarBg} />
-          <Text className="text-[13px] text-ink">{c.name}</Text>
+          <Text className="text-[15px] text-ink">{c.name}</Text>
           {c.secondaryLabel != null ? (
             <Text
               testID={`mention-row-${c.userId}-secondary`}

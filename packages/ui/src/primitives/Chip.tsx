@@ -74,12 +74,12 @@ const CONTAINER_CLASS: Record<ChipVariant, string> = {
 
 /** 변형별 라벨 className (.name 13px/500 ink, busy→warn, add→ink-3 12.5px) */
 const LABEL_CLASS: Record<ChipVariant, string> = {
-  default: 'text-[13px] font-medium text-ink',
-  me: 'text-[13px] font-medium text-ink',
+  default: 'text-[15px] font-medium text-ink',
+  me: 'text-[15px] font-medium text-ink',
   // .chip.busy .name: warn
-  busy: 'text-[13px] font-medium text-warn',
+  busy: 'text-[15px] font-medium text-warn',
   // .chip.add: ink-3 12.5px
-  add: 'text-[12.5px] font-medium text-ink-3',
+  add: 'text-[14.5px] font-medium text-ink-3',
 };
 
 /**
@@ -119,7 +119,7 @@ export const Chip = React.forwardRef<View, ChipProps>(function Chip(
       {/* me 변형 보조 배지 (.bdg accent-soft pill) */}
       {variant === 'me' && badge != null ? (
         <View className="rounded-full bg-accent-soft px-[5px] py-[1px]">
-          <Text className="text-[9px] font-bold text-accent">{badge}</Text>
+          <Text className="text-[11px] font-bold text-accent">{badge}</Text>
         </View>
       ) : null}
 
@@ -138,7 +138,7 @@ export const Chip = React.forwardRef<View, ChipProps>(function Chip(
           className="ml-[2px]"
           testID={removeTestID}
         >
-          <Text className="text-[11px] text-ink-4">×</Text>
+          <Text className="text-[13px] text-ink-4">×</Text>
         </Pressable>
       ) : null}
     </View>

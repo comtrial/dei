@@ -476,6 +476,11 @@ export default function RoomChatScreen() {
       onSelectMention={onSelectMention}
       onClearWhisper={() => setWhisperTarget(null)}
       onAvatarPress={(userId) => {
+        if (userId === selfId) {
+          router.push(ROUTES.myProfile);
+          return;
+        }
+
         const member = members.find((m) => m.userId === userId);
         router.push({
           pathname: '/(app)/room/[roomId]/members',

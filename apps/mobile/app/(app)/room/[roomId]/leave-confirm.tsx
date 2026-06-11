@@ -74,7 +74,7 @@ export default function RoomLeaveConfirmScreen() {
           <Text variant="h2" className="text-center text-[22px] font-extrabold">
             정말 방을 나가시겠어요?
           </Text>
-          <Text className="mt-[8px] text-center text-[13.5px] leading-[20px] text-ink-3">
+          <Text className="mt-[8px] text-center text-[15.5px] leading-[20px] text-ink-3">
             한 번 나가면 같은 방으로 돌아올 수 없어요.
           </Text>
 

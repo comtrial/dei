@@ -21,11 +21,14 @@ import {
   resolveProfilePhotoUrl,
 } from '@/lib/profile-photo-cache';
 import { getCachedRoomChatMembers } from '@/lib/chat/member-cache';
+import { ROUTES } from '@/lib/routes';
+import { useAuth } from '@/providers/auth-provider';
 
 type DialogKind = 'left' | 'error' | null;
 
 export default function MemberProfileScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { roomId, targetAvatarUrl, targetNickname, userId } = useLocalSearchParams<{
     roomId?: string;
     targetAvatarUrl?: string;
@@ -78,6 +81,11 @@ export default function MemberProfileScreen() {
       return;
     }
 
+    if (user?.id && userId === user.id) {
+      router.replace(ROUTES.myProfile);
+      return;
+    }
+
     let cancelled = false;
     if (!cachedNickname) setIsLoading(true);
 
@@ -110,7 +118,7 @@ export default function MemberProfileScreen() {
     return () => {
       cancelled = true;
     };
-  }, [cachedNickname, roomId, router, userId]);
+  }, [cachedNickname, roomId, router, user?.id, userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +173,11 @@ export default function MemberProfileScreen() {
   }, [profile?.avatar_url, profile?.photo_url, roomId, userId]);
 
   function handleMore() {
+    if (user?.id && userId === user.id) {
+      router.replace(ROUTES.myProfile);
+      return;
+    }
+
     analytics.capture(ANALYTICS_EVENTS.room_overflow_menu_opened, {
       roomId: roomId ?? '',
       targetUserId: userId,
@@ -209,11 +222,15 @@ export default function MemberProfileScreen() {
         left="back"
         onLeftPress={() => router.back()}
         rightActions={
-          <IconButton
-            glyph={MoreHorizontal}
-            accessibilityLabel="더보기"
-            onPress={handleMore}
-          />
+          user?.id && userId === user.id
+            ? null
+            : (
+                <IconButton
+                  glyph={MoreHorizontal}
+                  accessibilityLabel="더보기"
+                  onPress={handleMore}
+                />
+              )
         }
       />
 
@@ -222,7 +239,7 @@ export default function MemberProfileScreen() {
         contentContainerClassName="items-center px-[24px] pt-[32px] pb-[40px] gap-[16px]"
       >
         {isLoading ? (
-          <Text className="py-[32px] text-[13px] font-semibold text-ink-3">
+          <Text className="py-[32px] text-[15px] font-semibold text-ink-3">
             프로필을 불러오고 있어요.
           </Text>
         ) : (
@@ -279,7 +296,7 @@ export default function MemberProfileScreen() {
 
             {!hasDetail ? (
               <Card className="w-full bg-bg-2 px-[16px] py-[14px]">
-                <Text className="text-center text-[13px] font-semibold text-ink-3">
+                <Text className="text-center text-[15px] font-semibold text-ink-3">
                   아직 공개한 상세 정보가 없어요.
                 </Text>
               </Card>

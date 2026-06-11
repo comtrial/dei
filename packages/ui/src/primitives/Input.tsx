@@ -68,7 +68,7 @@ export interface InputProps extends Omit<TextInputProps, 'editable' | 'style'> {
 
 /** HTML `.field input` base — bg-2 / ink / r-md, 14px padding / 15px / weight 600. */
 const inputBaseClassName =
-  'w-full rounded-md bg-bg-2 px-[14px] py-[14px] text-[15px] font-semibold text-ink';
+  'w-full rounded-md bg-bg-2 px-[14px] py-[14px] text-[17px] font-semibold text-ink';
 
 /** state → 표면/보더 토큰 className (base 위에 머지, tailwind-merge last-wins). */
 const STATE_CLASS: Record<InputState, string> = {
@@ -89,10 +89,10 @@ const STATE_CLASS: Record<InputState, string> = {
 const labelRowClassName = 'mb-[6px] flex-row items-center gap-[6px]';
 
 /** HTML `.lbl .lock` — 11px / ink-4. */
-const labelAccessoryClassName = 'text-[11px] text-ink-4';
+const labelAccessoryClassName = 'text-[13px] text-ink-4';
 
 /** HTML `.field .helper` — 11.5px / 600 / ink-3 / margin-top 6px. */
-const helperClassName = 'mt-[6px] text-[11.5px] font-semibold text-ink-3';
+const helperClassName = 'mt-[6px] text-[13.5px] font-semibold text-ink-3';
 
 /** HTML `.s06 .search`: prefixIcon 시 좌측 패딩 40px 확보 (아이콘 자리). */
 const prefixPaddingClassName = 'pl-[40px]';
@@ -124,7 +124,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input(
     <View className={cn(className)}>
       {label != null ? (
         <View className={labelRowClassName}>
-          <Text className="text-[12px] font-bold text-ink-2">{label}</Text>
+          <Text className="text-[14px] font-bold text-ink-2">{label}</Text>
           {labelAccessory != null ? (
             <Text className={labelAccessoryClassName}>{labelAccessory}</Text>
           ) : null}

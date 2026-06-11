@@ -561,7 +561,7 @@ export default function MyProfileScreen() {
             {isPhotoUploading ? (
               <View className="mt-[12px] flex-row items-center justify-center gap-[8px]">
                 <Spinner size={36} className="scale-50" />
-                <Text className="text-[12px] font-semibold text-ink-3">사진 업로드 중</Text>
+                <Text className="text-[14px] font-semibold text-ink-3">사진 업로드 중</Text>
               </View>
             ) : null}
 
@@ -616,10 +616,10 @@ export default function MyProfileScreen() {
                   <Text className="text-[18px] font-black text-accent">⚡</Text>
                 </View>
                 <View className="flex-1">
-                  <Text className="text-[14px] font-extrabold text-ink">
+                  <Text className="text-[16px] font-extrabold text-ink">
                     잔여 {profile.passCount}회
                   </Text>
-                  <Text className="mt-[3px] text-[11.5px] text-ink-3">
+                  <Text className="mt-[3px] text-[13.5px] text-ink-3">
                     12시간 제한 면제권
                   </Text>
                 </View>

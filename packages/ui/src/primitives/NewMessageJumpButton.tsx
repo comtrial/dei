@@ -37,7 +37,7 @@ export function NewMessageJumpButton({
       style={shadow.pop.rn}
     >
       <ArrowDown size={14} color="#FFFFFF" />
-      <Text className="text-[12px] font-semibold text-white">{`↓ ${count}개 새 메시지`}</Text>
+      <Text className="text-[14px] font-semibold text-white">{`↓ ${count}개 새 메시지`}</Text>
     </Pressable>
   );
 }

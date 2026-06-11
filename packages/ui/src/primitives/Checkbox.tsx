@@ -64,8 +64,8 @@ export const Checkbox = forwardRef<View, CheckboxProps>(function Checkbox(
   // ✓ 색: master = white(=bg), round/square = ink (off+optional → ink-4).
   const glyphClassName = cn(
     'leading-none',
-    isMaster && 'text-[13px] text-bg',
-    !isMaster && 'text-[12px]',
+    isMaster && 'text-[15px] text-bg',
+    !isMaster && 'text-[14px]',
     !isMaster && (dimInk ? 'text-ink-4' : 'text-ink'),
   );
 

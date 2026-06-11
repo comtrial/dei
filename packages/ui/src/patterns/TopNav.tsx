@@ -48,7 +48,7 @@ const LEFT_LABEL: Record<Exclude<TopNavLeft, 'none'>, string> = {
  * 토큰 스케일 밖 14.5px 를 NativeWind 임의값 className 으로 명시(§3 국소값).
  * back 버튼 옆일 때 HTML margin-left 6~8px → ml-[6px].
  */
-const TITLE_CLASS = 'text-[14.5px] font-bold';
+const TITLE_CLASS = 'text-[16.5px] font-bold';
 
 export interface TopNavProps extends ViewProps {
   /** 좌측 컨트롤. 기본 `back`. `none` 이면 좌측 IconButton 미렌더. */
@@ -153,7 +153,7 @@ export const TopNav = forwardRef<View, TopNavProps>(function TopNav(
               <Text
                 tone={onDark ? undefined : 'ink-3'}
                 numberOfLines={1}
-                className={cn('text-[11px] font-semibold', onDark && 'text-[rgba(255,255,255,0.85)]')}
+                className={cn('text-[13px] font-semibold', onDark && 'text-[rgba(255,255,255,0.85)]')}
               >
                 {subtitle}
               </Text>
