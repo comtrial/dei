@@ -114,4 +114,12 @@ describe('MyProfileScreen — 약관 전문 보기', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/(auth)/terms-document');
   });
+
+  it('대학교 입력 시트는 키보드 회피 컨테이너 안에서 렌더된다', () => {
+    render(<MyProfileScreen />);
+
+    fireEvent.press(screen.getByText('대학교'));
+
+    expect(screen.getByTestId('my-profile-editor-keyboard-avoider')).toBeTruthy();
+  });
 });

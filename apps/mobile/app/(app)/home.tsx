@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ChevronRight, GraduationCap, UserRound, Users } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -72,7 +72,7 @@ export default function HomeScreen() {
     universityName: null,
   });
 
-  useEffect(() => {
+  const applyCachedProfileSnapshot = useCallback(() => {
     const cached = getCachedProfileSnapshot(user?.id);
     if (!cached) return;
 
@@ -93,6 +93,16 @@ export default function HomeScreen() {
       setPhotoImageFailed(false);
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    applyCachedProfileSnapshot();
+  }, [applyCachedProfileSnapshot]);
+
+  useFocusEffect(
+    useCallback(() => {
+      applyCachedProfileSnapshot();
+    }, [applyCachedProfileSnapshot]),
+  );
 
   useEffect(() => {
     analytics.capture(ANALYTICS_EVENTS.home_entered_waiting);

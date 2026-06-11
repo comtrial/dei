@@ -178,6 +178,7 @@ describe('TeamNewScreen — college gwating mode', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSelfProfile = {
+      gender: 'male',
       is_student: true,
       nickname: '수아',
       university_name: '한국대학교',
@@ -209,6 +210,7 @@ describe('TeamNewScreen — college gwating mode', () => {
   it('does not allow adding a friend without a completed college profile', async () => {
     mockSearchProfiles = [
       {
+        gender: 'male',
         is_in_active_room: false,
         is_student: false,
         nickname: '민준',
@@ -227,9 +229,32 @@ describe('TeamNewScreen — college gwating mode', () => {
     expect(hasDisabledAncestor(screen.getByText('+ 추가'))).toBe(true);
   });
 
+  it('does not allow adding a friend with a different gender', async () => {
+    mockSearchProfiles = [
+      {
+        gender: 'female',
+        is_in_active_room: false,
+        is_student: true,
+        nickname: '지민',
+        university_name: '한국대학교',
+        user_id: FRIEND_ID,
+      },
+    ];
+
+    render(<TeamNewScreen />);
+
+    fireEvent.changeText(screen.getByPlaceholderText('닉네임으로 검색'), '지민');
+
+    await waitFor(() => expect(screen.getByText('같은 성별 친구만 초대할 수 있어요')).toBeTruthy(), {
+      timeout: 1500,
+    });
+    expect(hasDisabledAncestor(screen.getByText('+ 추가'))).toBe(true);
+  });
+
   it('enqueues eligible college teams with college mode', async () => {
     mockSearchProfiles = [
       {
+        gender: 'male',
         is_in_active_room: false,
         is_student: true,
         nickname: '민준',

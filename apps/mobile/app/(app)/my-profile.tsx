@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -378,6 +378,8 @@ export default function MyProfileScreen() {
     draft.isStudent
       ? '과팅 팀에 참여하려면 현재 재학중인 학교명을 입력해주세요.'
       : '재학중을 끄면 과팅 진입점은 보이지 않아요.';
+  const editorAvoidsKeyboard =
+    editor === 'nickname' || editor === 'bio' || editor === 'university';
   const displayedProfile = useMemo(
     () => ({
       ...profile,
@@ -777,127 +779,137 @@ export default function MyProfileScreen() {
               : 62
         }
       >
-        <View className="flex-1 px-[24px] pb-[18px] pt-[10px]">
-          <Text variant="h2">
-            {editor === 'nickname'
-              ? '닉네임 수정'
-                : editor === 'bio'
-                  ? '한 줄 자기소개'
-                  : editor === 'gender'
-                    ? '성별 선택'
-                    : editor === 'student'
-                      ? '재학 상태'
-                      : editor === 'university'
-                        ? '대학교'
-                        : editor === 'mbti'
-                          ? 'MBTI 선택'
-                          : '지역 선택'}
-          </Text>
+        <KeyboardAvoidingView
+          className="flex-1"
+          behavior="padding"
+          enabled={editorAvoidsKeyboard}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+          testID={
+            editorAvoidsKeyboard ? 'my-profile-editor-keyboard-avoider' : undefined
+          }
+        >
+          <View className="flex-1 px-[24px] pb-[18px] pt-[10px]">
+            <Text variant="h2">
+              {editor === 'nickname'
+                ? '닉네임 수정'
+                  : editor === 'bio'
+                    ? '한 줄 자기소개'
+                    : editor === 'gender'
+                      ? '성별 선택'
+                      : editor === 'student'
+                        ? '재학 상태'
+                        : editor === 'university'
+                          ? '대학교'
+                          : editor === 'mbti'
+                            ? 'MBTI 선택'
+                            : '지역 선택'}
+            </Text>
 
-          {editor === 'nickname' ? (
-            <Input
-              value={draft.nickname ?? ''}
-              onChangeText={(value) => setDraft((current) => ({ ...current, nickname: value }))}
-              label="닉네임"
-              labelAccessory={`${normalizeNickname(draft.nickname ?? '').length} / ${NICKNAME_MAX_LENGTH}`}
-              helper={nicknameHelper}
-              helperClassName={nicknameHelperClass}
-              maxLength={NICKNAME_MAX_LENGTH}
-              className="mt-[20px]"
-            />
-          ) : null}
-
-          {editor === 'bio' ? (
-            <Textarea
-              value={draft.bio ?? ''}
-              onChangeText={(value) => setDraft((current) => ({ ...current, bio: value }))}
-              maxLength={PROFILE_BIO_MAX_LENGTH}
-              showCount
-              placeholder="자유롭게 적어주세요"
-              className="mt-[20px]"
-            />
-          ) : null}
-
-          {editor === 'gender' ? (
-            <View className="mt-[18px]">
-              <ChoiceList
-                tone="accent"
-                value={draft.gender ?? ''}
-                onChange={(value) => {
-                  if (value === 'male' || value === 'female') {
-                    setDraft((current) => ({ ...current, gender: value }));
-                  }
-                }}
-                options={GENDER_OPTIONS}
+            {editor === 'nickname' ? (
+              <Input
+                value={draft.nickname ?? ''}
+                onChangeText={(value) => setDraft((current) => ({ ...current, nickname: value }))}
+                label="닉네임"
+                labelAccessory={`${normalizeNickname(draft.nickname ?? '').length} / ${NICKNAME_MAX_LENGTH}`}
+                helper={nicknameHelper}
+                helperClassName={nicknameHelperClass}
+                maxLength={NICKNAME_MAX_LENGTH}
+                className="mt-[20px]"
               />
+            ) : null}
+
+            {editor === 'bio' ? (
+              <Textarea
+                value={draft.bio ?? ''}
+                onChangeText={(value) => setDraft((current) => ({ ...current, bio: value }))}
+                maxLength={PROFILE_BIO_MAX_LENGTH}
+                showCount
+                placeholder="자유롭게 적어주세요"
+                className="mt-[20px]"
+              />
+            ) : null}
+
+            {editor === 'gender' ? (
+              <View className="mt-[18px]">
+                <ChoiceList
+                  tone="accent"
+                  value={draft.gender ?? ''}
+                  onChange={(value) => {
+                    if (value === 'male' || value === 'female') {
+                      setDraft((current) => ({ ...current, gender: value }));
+                    }
+                  }}
+                  options={GENDER_OPTIONS}
+                />
+              </View>
+            ) : null}
+
+            {editor === 'student' ? (
+              <View className="mt-[18px]">
+                <ChoiceList
+                  tone="accent"
+                  value={draft.isStudent ? 'student' : 'not-student'}
+                  onChange={(value) => {
+                    setDraft((current) => ({
+                      ...current,
+                      isStudent: value === 'student',
+                      universityName: value === 'student' ? current.universityName : null,
+                    }));
+                  }}
+                  options={[
+                    { label: '재학중', value: 'student' },
+                    { label: '재학중 아님', value: 'not-student' },
+                  ]}
+                />
+              </View>
+            ) : null}
+
+            {editor === 'university' ? (
+              <Input
+                value={draft.universityName ?? ''}
+                onChangeText={(value) => setDraft((current) => ({ ...current, universityName: value }))}
+                label="대학교"
+                labelAccessory={`${normalizeUniversityName(draft.universityName).length} / ${COLLEGE_UNIVERSITY_MAX_LENGTH}`}
+                helper={universityHelper}
+                maxLength={COLLEGE_UNIVERSITY_MAX_LENGTH}
+                placeholder="학교명을 입력해주세요"
+                className="mt-[20px]"
+              />
+            ) : null}
+
+            {editor === 'mbti' ? (
+              <ScrollView className="mt-[18px]">
+                <ChoiceList
+                  value={draft.mbti ?? ''}
+                  onChange={(value) => setDraft((current) => ({ ...current, mbti: value || null }))}
+                  options={[
+                    { label: '선택 안 함', value: '' },
+                    ...MBTI_OPTIONS.map((value) => ({ label: value, value })),
+                  ]}
+                />
+              </ScrollView>
+            ) : null}
+
+            {editor === 'region' ? (
+              <ScrollView className="mt-[18px]">
+                <ChoiceList
+                  value={draft.region ?? ''}
+                  onChange={(value) => setDraft((current) => ({ ...current, region: value || null }))}
+                  options={[
+                    { label: '선택 안 함', value: '' },
+                    ...REGION_OPTIONS.map((value) => ({ label: value, value })),
+                  ]}
+                />
+              </ScrollView>
+            ) : null}
+
+            <View className="mt-auto">
+              <Button fullWidth onPress={() => setEditor(null)}>
+                완료
+              </Button>
             </View>
-          ) : null}
-
-          {editor === 'student' ? (
-            <View className="mt-[18px]">
-              <ChoiceList
-                tone="accent"
-                value={draft.isStudent ? 'student' : 'not-student'}
-                onChange={(value) => {
-                  setDraft((current) => ({
-                    ...current,
-                    isStudent: value === 'student',
-                    universityName: value === 'student' ? current.universityName : null,
-                  }));
-                }}
-                options={[
-                  { label: '재학중', value: 'student' },
-                  { label: '재학중 아님', value: 'not-student' },
-                ]}
-              />
-            </View>
-          ) : null}
-
-          {editor === 'university' ? (
-            <Input
-              value={draft.universityName ?? ''}
-              onChangeText={(value) => setDraft((current) => ({ ...current, universityName: value }))}
-              label="대학교"
-              labelAccessory={`${normalizeUniversityName(draft.universityName).length} / ${COLLEGE_UNIVERSITY_MAX_LENGTH}`}
-              helper={universityHelper}
-              maxLength={COLLEGE_UNIVERSITY_MAX_LENGTH}
-              placeholder="학교명을 입력해주세요"
-              className="mt-[20px]"
-            />
-          ) : null}
-
-          {editor === 'mbti' ? (
-            <ScrollView className="mt-[18px]">
-              <ChoiceList
-                value={draft.mbti ?? ''}
-                onChange={(value) => setDraft((current) => ({ ...current, mbti: value || null }))}
-                options={[
-                  { label: '선택 안 함', value: '' },
-                  ...MBTI_OPTIONS.map((value) => ({ label: value, value })),
-                ]}
-              />
-            </ScrollView>
-          ) : null}
-
-          {editor === 'region' ? (
-            <ScrollView className="mt-[18px]">
-              <ChoiceList
-                value={draft.region ?? ''}
-                onChange={(value) => setDraft((current) => ({ ...current, region: value || null }))}
-                options={[
-                  { label: '선택 안 함', value: '' },
-                  ...REGION_OPTIONS.map((value) => ({ label: value, value })),
-                ]}
-              />
-            </ScrollView>
-          ) : null}
-
-          <View className="mt-auto">
-            <Button fullWidth onPress={() => setEditor(null)}>
-              완료
-            </Button>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </BottomSheet>
 
       <AlertDialog
