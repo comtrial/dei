@@ -108,7 +108,23 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - name: Start local Supabase
-        run: pnpm dlx supabase start
+        # 런너 cold start 시 docker image pull + postgres health check 가
+        # 기본 2분 timeout 안에 못 끝나면 supabase start 가 exit 1 (PR #90 사례).
+        # warm 캐시 후 재시도면 안정적으로 통과 — 3회 retry 로 flake 흡수.
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::supabase start attempt $attempt"
+            if pnpm dlx supabase start; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "::warning::supabase start attempt $attempt failed, cleaning up and retrying"
+            pnpm dlx supabase stop || true
+            sleep 10
+          done
+          echo "::error::supabase start failed after 3 attempts"
+          exit 1
       - name: Inject keys + run integration
         env:
           RUN_INTEGRATION: '1'
