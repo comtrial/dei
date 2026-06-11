@@ -29,6 +29,9 @@ vi.mock('@/lib/supabase', () => ({
     storage: {
       from: vi.fn(),
     },
+    functions: {
+      invoke: vi.fn(),
+    },
     from: vi.fn(),
   },
 }));
@@ -55,6 +58,7 @@ const mockGetCurrentHourSlotKst = getCurrentHourSlotKst as ReturnType<typeof vi.
 
 const mockSupabase = supabase as {
   auth: { getUser: ReturnType<typeof vi.fn> };
+  functions: { invoke: ReturnType<typeof vi.fn> };
   storage: { from: ReturnType<typeof vi.fn> };
   from: ReturnType<typeof vi.fn>;
 };
@@ -144,6 +148,7 @@ describe('uploadClip', () => {
 
     mockDbInsert.mockResolvedValue({ error: null });
     mockSupabase.from.mockReturnValue({ insert: mockDbInsert });
+    mockSupabase.functions.invoke.mockResolvedValue({ data: { ok: true }, error: null });
   });
 
   afterEach(() => {
@@ -198,6 +203,28 @@ describe('uploadClip', () => {
     expect(onProgress).toHaveBeenCalledWith(0.3);
     expect(onProgress).toHaveBeenCalledWith(0.8);
     expect(onProgress).toHaveBeenCalledWith(1.0);
+  });
+
+  it('업로드 성공 후 같은 방 참가자 영상 업로드 알림 Edge Function 호출', async () => {
+    const result = await uploadClip({ roomId: 'room-1', localUri: 'file:///video.mp4' });
+
+    expect(mockSupabase.functions.invoke).toHaveBeenCalledWith('notify-video-uploaded', {
+      body: { room_id: 'room-1', video_id: result.videoId },
+    });
+  });
+
+  it('영상 업로드 알림 실패는 업로드 성공 결과를 깨지 않음', async () => {
+    mockSupabase.functions.invoke.mockResolvedValue({
+      data: null,
+      error: new Error('NOTIFY_FAILED'),
+    });
+
+    const result = await uploadClip({ roomId: 'room-1', localUri: 'file:///video.mp4' });
+
+    expect(result.thumbnailUrl).toBe('https://example.com/thumb.jpg');
+    expect(mockSupabase.functions.invoke).toHaveBeenCalledWith('notify-video-uploaded', {
+      body: { room_id: 'room-1', video_id: result.videoId },
+    });
   });
 });
 

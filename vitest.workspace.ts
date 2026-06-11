@@ -4,4 +4,5 @@ export default defineWorkspace([
   'packages/shared',
   'packages/api',
   'apps/mobile/vitest.config.ts',
+  'supabase/functions/vitest.config.ts',
 ]);
