@@ -195,6 +195,11 @@ export default function VideoCaptureScreen() {
           mode="video"
           facing={facing}
           videoQuality="720p"
+          // 화면 lock 은 portrait 이지만 디자인상 phone 을 landscape 로 들도록 강제
+          // (시간 rotate-90). 이 prop 없으면 첫 녹화가 interface(portrait) 기준
+          // 9:16 영상으로 저장돼 검수에서 일관성 깨짐 — CMMotionManager 로 physical
+          // orientation 감지해 16:9 landscape 영상 보장. (cdadcdd→f03ae60 cycle 반복 방지)
+          responsiveOrientationWhenOrientationLocked
           onCameraReady={() => setCameraReady(true)}
         />
       )}

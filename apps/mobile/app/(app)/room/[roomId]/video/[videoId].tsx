@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer } from 'expo-video';
 import { useEvent } from 'expo';
 import { Image } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -21,6 +21,7 @@ import {
   getRoomMembersWithProfile,
 } from '@/lib/room-rpc';
 import { ROUTES } from '@/lib/routes';
+import { LandscapeFitVideo } from '@/components/landscape-fit-video';
 
 type FetchState = 'loading' | 'error' | 'ready';
 
@@ -253,6 +254,7 @@ export default function VideoFullscreenScreen() {
       if (!next) return;
       setCurrentIndex(nextIndex);
       setFirstFrameRendered(false);
+      setVideoUrl(next.url);
       try {
         await player.replaceAsync({ uri: next.url });
         player.play();
@@ -365,26 +367,29 @@ export default function VideoFullscreenScreen() {
           style={StyleSheet.absoluteFillObject}
           onPress={handleVideoPress}
         >
-          <VideoView
-            testID="fullscreen-video"
-            player={player}
-            contentFit="contain"
-            nativeControls={false}
-            style={StyleSheet.absoluteFillObject}
-            onFirstFrameRender={() => {
-              if (!firstFrameRendered) {
-                setFirstFrameRendered(true);
+          <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}>
+            <LandscapeFitVideo
+              testID="fullscreen-video"
+              player={player}
+              uri={videoUrl}
+              nativeControls={false}
+              onFirstFrameRender={() => {
+                if (!firstFrameRendered) {
+                  setFirstFrameRendered(true);
+                }
+              }}
+              overlay={
+                !firstFrameRendered && thumbnailUrl ? (
+                  <Image
+                    source={{ uri: thumbnailUrl }}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                ) : null
               }
-            }}
-          />
-          {!firstFrameRendered && thumbnailUrl ? (
-            <Image
-              source={{ uri: thumbnailUrl }}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              style={StyleSheet.absoluteFillObject}
             />
-          ) : null}
+          </View>
         </Pressable>
       </GestureDetector>
 

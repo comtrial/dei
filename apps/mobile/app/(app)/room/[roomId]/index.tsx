@@ -17,6 +17,7 @@ import { Image } from 'expo-image';
 import { LinearGradient, type LinearGradientProps } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { useEvent } from 'expo';
 import { Calendar as CalendarIcon, MessageCircle, MoreHorizontal } from 'lucide-react-native';
 
 import { avatarColorFor, Banner, GridRoom, IconButton, Badge, Text, TopNav } from '@dei/ui';
@@ -99,6 +100,21 @@ function CellVideoMedia({
       p.play();
     },
   );
+
+  const { status } = useEvent(player, 'statusChange', { status: player.status });
+  const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
+
+  useEffect(() => {
+    if (status === 'readyToPlay') {
+      try { player.play(); } catch {}
+    }
+  }, [status, player]);
+
+  useEffect(() => {
+    if (!isPlaying && status === 'readyToPlay') {
+      try { player.play(); } catch {}
+    }
+  }, [isPlaying, status, player]);
 
   useFocusEffect(
     useCallback(() => {
