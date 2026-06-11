@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { logger, toMatchQueueMode } from '@dei/shared';
+import { analytics, logger, toMatchQueueMode } from '@dei/shared';
 import { AlertDialog, PermissionGate } from '@dei/ui';
 
+import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { enqueueMatchQueue, isMatchQueueErrorCode } from '@/lib/matching';
 import {
   getAppNotificationEnabled,
@@ -21,9 +22,25 @@ function getErrorMessage(error: unknown) {
 
 export default function NotificationPermissionScreen() {
   const router = useRouter();
-  const { memberIds, mode: rawMode } = useLocalSearchParams<{ memberIds?: string; mode?: string }>();
+  const {
+    entrypoint: rawEntrypoint,
+    memberIds,
+    mode: rawMode,
+  } = useLocalSearchParams<{ entrypoint?: string; memberIds?: string; mode?: string }>();
   const { user } = useAuth();
   const mode = toMatchQueueMode(rawMode);
+  const memberIdList = useMemo(
+    () => memberIds ? memberIds.split(',').map((id) => id.trim()).filter(Boolean) : [],
+    [memberIds],
+  );
+  const entrypoint =
+    rawEntrypoint === 'college' || rawEntrypoint === 'friend' || rawEntrypoint === 'solo'
+      ? rawEntrypoint
+      : mode === 'college'
+        ? 'college'
+        : memberIdList.length === 1
+          ? 'solo'
+          : 'friend';
   const [isRequesting, setIsRequesting] = useState(false);
   const [queueFailed, setQueueFailed] = useState(false);
 
@@ -32,21 +49,17 @@ export default function NotificationPermissionScreen() {
     if (notice) {
       router.replace({
         pathname: '/(app)/queue',
-        params: { mode, notice },
+        params: { entrypoint, mode, notice },
       });
       return;
     }
 
     router.replace({
       pathname: '/(app)/queue',
-      params: { mode },
+      params: { entrypoint, mode },
     });
-  }, [mode, router]);
+  }, [entrypoint, mode, router]);
   const completeRegistration = useCallback(async () => {
-    const ids = memberIds
-      ? memberIds.split(',').map((id) => id.trim()).filter(Boolean)
-      : [];
-
     if (user?.id) {
       await setAppNotificationEnabled(user.id, true);
       await registerPushToken(user.id).catch((error) => {
@@ -57,9 +70,15 @@ export default function NotificationPermissionScreen() {
       });
     }
 
-    const registration = await enqueueMatchQueue(ids, { mode });
+    const registration = await enqueueMatchQueue(memberIdList, { mode });
+    analytics.capture(ANALYTICS_EVENTS.team_queue_registered, {
+      entry_point: entrypoint,
+      member_count: memberIdList.length,
+      mode: entrypoint === 'solo' ? 'solo' : mode === 'college' ? 'college' : 'team',
+      source: 'permission-notification',
+    });
     continueToQueue(registration.freeRematchWaived ? 'free-rematch' : undefined);
-  }, [continueToQueue, memberIds, mode, user?.id]);
+  }, [continueToQueue, entrypoint, memberIdList, mode, user?.id]);
 
   useEffect(() => {
     let mounted = true;

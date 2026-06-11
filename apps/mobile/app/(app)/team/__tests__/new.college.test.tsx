@@ -7,6 +7,7 @@ const mockBack = jest.fn();
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockEnqueueMatchQueue = jest.fn();
+const mockAnalyticsCapture = jest.fn();
 const mockSupabaseFrom = jest.fn();
 const mockSupabaseRpc = jest.fn();
 const mockSearchParams = { mode: 'college' };
@@ -35,7 +36,7 @@ jest.mock('@/lib/matching', () => ({
 }));
 
 jest.mock('@dei/shared', () => ({
-  analytics: { capture: jest.fn() },
+  analytics: { capture: (...args: unknown[]) => mockAnalyticsCapture(...args) },
   collegeProfileCompleted: ({
     isStudent,
     universityName,
@@ -238,7 +239,13 @@ describe('TeamNewScreen — college gwating mode', () => {
       });
       expect(mockReplace).toHaveBeenCalledWith({
         pathname: '/(app)/queue',
-        params: { mode: 'college' },
+        params: { entrypoint: 'college', mode: 'college' },
+      });
+      expect(mockAnalyticsCapture).toHaveBeenCalledWith('S3:team_queue_registered', {
+        entry_point: 'college',
+        member_count: 2,
+        mode: 'college',
+        source: 'team-new',
       });
     });
   });

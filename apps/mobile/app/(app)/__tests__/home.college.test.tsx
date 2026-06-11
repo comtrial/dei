@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockAnalyticsCapture = jest.fn();
+const mockAnalyticsRegister = jest.fn();
 const mockSupabaseFrom = jest.fn();
 
 let mockProfile: Record<string, unknown> | null;
@@ -49,7 +51,10 @@ jest.mock('@/lib/matching', () => ({
 }));
 
 jest.mock('@dei/shared', () => ({
-  analytics: { capture: jest.fn() },
+  analytics: {
+    capture: (...args: unknown[]) => mockAnalyticsCapture(...args),
+    register: (...args: unknown[]) => mockAnalyticsRegister(...args),
+  },
   collegeProfileCompleted: ({
     isStudent,
     universityName,
@@ -203,9 +208,52 @@ describe('HomeScreen — college gwating entry', () => {
 
     fireEvent.press(screen.getByLabelText('대학생 과팅'));
 
+    expect(mockAnalyticsCapture).toHaveBeenCalledWith(
+      'S3:home_entrypoint_selected',
+      expect.objectContaining({
+        entry_point: 'college',
+        has_college_profile: true,
+        source: 'home',
+      }),
+    );
+    expect(mockAnalyticsRegister).toHaveBeenCalledWith({
+      active_match_entry_point: 'college',
+    });
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/(app)/team/new',
-      params: { mode: 'college' },
+      params: { entrypoint: 'college', mode: 'college' },
+    });
+  });
+
+  it('captures comparable home entrypoint selection for solo and friend entries', async () => {
+    render(<HomeScreen />);
+
+    await waitFor(() => expect(screen.getByText('혼자 참여')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('혼자 참여'));
+    expect(mockAnalyticsCapture).toHaveBeenCalledWith(
+      'S3:home_entrypoint_selected',
+      expect.objectContaining({
+        entry_point: 'solo',
+        has_college_profile: true,
+        source: 'home',
+      }),
+    );
+    expect(mockAnalyticsRegister).toHaveBeenCalledWith({
+      active_match_entry_point: 'solo',
+    });
+
+    fireEvent.press(screen.getByText('친구와 함께'));
+    expect(mockAnalyticsCapture).toHaveBeenCalledWith(
+      'S3:home_entrypoint_selected',
+      expect.objectContaining({
+        entry_point: 'friend',
+        has_college_profile: true,
+        source: 'home',
+      }),
+    );
+    expect(mockAnalyticsRegister).toHaveBeenCalledWith({
+      active_match_entry_point: 'friend',
     });
   });
 });
