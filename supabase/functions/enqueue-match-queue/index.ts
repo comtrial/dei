@@ -24,6 +24,17 @@ type PassRow = {
   remaining: number;
 };
 
+type MatchPushSettingRow = {
+  match_alert: boolean | null;
+  push_enabled: boolean | null;
+  user_id: string;
+};
+
+type MatchPushTokenRow = {
+  token: string;
+  user_id: string;
+};
+
 // 표준 UUID(8-4-4-4-12). 직전 패턴은 variant 그룹의 dash·길이가 빠져
 // ([89ab][0-9a-f]{12}$ — 4번째 그룹 4자 + dash + 5번째 12자 누락) 어떤 실제 UUID 도
 // 매칭 못 해 enqueue 가 전 사용자를 INVALID_MEMBERS 로 거부하던 버그(B 원본, main 동일). 수정.
@@ -62,6 +73,62 @@ function getRematchRestriction(lastRoomLeaveAt?: string | null) {
     remainingMs,
     restricted: remainingMs > 0,
   };
+}
+
+async function dispatchMatchPush(admin: any, roomId: string) {
+  const { data: members, error: membersError } = await admin
+    .from('room_member')
+    .select('user_id')
+    .eq('room_id', roomId)
+    .eq('status', 'active');
+  if (membersError) throw membersError;
+
+  const userIds = [
+    ...new Set(
+      (members ?? [])
+        .map((member: { user_id?: string | null }) => member.user_id)
+        .filter((id: string | null | undefined): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  ];
+  if (userIds.length === 0) return;
+
+  const { data: settings, error: settingsError } = await admin
+    .from('notification_setting')
+    .select('user_id, push_enabled, match_alert')
+    .in('user_id', userIds);
+  if (settingsError) throw settingsError;
+
+  const pushEnabledUserIds = new Set(userIds);
+  for (const setting of (settings ?? []) as MatchPushSettingRow[]) {
+    if (setting.push_enabled === false || setting.match_alert === false) {
+      pushEnabledUserIds.delete(setting.user_id);
+    }
+  }
+  if (pushEnabledUserIds.size === 0) return;
+
+  const { data: tokens, error: tokensError } = await admin
+    .from('push_token')
+    .select('user_id, token')
+    .in('user_id', [...pushEnabledUserIds]);
+  if (tokensError) throw tokensError;
+
+  const messages = ((tokens ?? []) as MatchPushTokenRow[])
+    .filter((token) => pushEnabledUserIds.has(token.user_id))
+    .map((token) => ({
+      to: token.token,
+      title: '매칭이 성사됐어요',
+      body: '새 룸에서 오늘의 일상을 시작해보세요',
+      sound: 'default',
+      channelId: 'default',
+      data: { roomId, type: 'match_created' },
+    }));
+  if (messages.length === 0) return;
+
+  await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(messages),
+  });
 }
 
 Deno.serve(async (req) => {
@@ -377,6 +444,19 @@ Deno.serve(async (req) => {
         .select('room_id')
         .eq('id', matchId)
         .maybeSingle();
+      const roomId = gm?.room_id ?? null;
+      if (roomId) {
+        await dispatchMatchPush(supabase, roomId).catch((error) => {
+          captureEdgeError('enqueue-match-queue', error, {
+            stage: 'match_push',
+            status: 200,
+            userId: user.id,
+            level: 'warning',
+            tags: { feature: 'matching-push', code: 'match_push_failed' },
+            extra: { matchId, roomId },
+          });
+        });
+      }
       return jsonResponse({
         enqueuedAt: queue.enqueued_at,
         expiresAt: queue.expires_at,
@@ -390,7 +470,7 @@ Deno.serve(async (req) => {
         passConsumed: Boolean(passToConsume),
         queueId: queue.id,
         reused: false,
-        roomId: gm?.room_id ?? null,
+        roomId,
         status: 'matched',
         teamId: team.id,
       });

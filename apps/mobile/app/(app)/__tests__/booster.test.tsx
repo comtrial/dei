@@ -44,6 +44,7 @@ jest.mock('@/lib/matching', () => ({
 
 jest.mock('@/lib/notifications.stub', () => ({
   getAppNotificationEnabled: jest.fn().mockResolvedValue(true),
+  needsNotificationConsent: jest.fn().mockResolvedValue(false),
   registerPushToken: jest.fn().mockResolvedValue(undefined),
 }));
 

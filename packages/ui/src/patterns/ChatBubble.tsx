@@ -106,6 +106,8 @@ export interface ChatBubbleProps extends ViewProps {
   onDark?: boolean;
   /** 버블 본문. 문자열이면 자동으로 Text 래핑, 노드면 그대로 렌더(인라인 mention 혼용). */
   children?: React.ReactNode;
+  /** 메시지 옆에 표시할 시각 라벨. 예: `오후 5:43`. */
+  timeLabel?: string | null;
   className?: string;
   /** me 변형 한정 송신 상태(클라 낙관). 기본 'sent'. */
   sendState?: 'sending' | 'sent' | 'failed';
@@ -168,6 +170,7 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
     onAvatarPress,
     onDark = false,
     children,
+    timeLabel,
     className,
     sendState = 'sent',
     onRetry,
@@ -279,9 +282,24 @@ export const ChatBubble = React.forwardRef<View, ChatBubbleProps>(function ChatB
           </View>
         ) : null}
 
-        {/* .bub — 내가 보낸 귓속말(mine)은 우측 정렬. */}
-        <View className={cn(BUBBLE_CLASS[variant], variant === 'whisper' && mine && 'self-end')}>
-          {body}
+        {/* .bub + time — 시간은 카톡처럼 말풍선 옆 하단에 붙인다. */}
+        <View
+          className={cn(
+            'flex-row items-end gap-[6px]',
+            isMineSender && 'self-end flex-row-reverse',
+          )}
+        >
+          <View className={cn(BUBBLE_CLASS[variant], variant === 'whisper' && mine && 'self-end')}>
+            {body}
+          </View>
+          {timeLabel ? (
+            <Text
+              testID="chat-bubble-time"
+              className="mb-[1px] text-[10.5px] font-semibold text-ink-3"
+            >
+              {timeLabel}
+            </Text>
+          ) : null}
         </View>
 
         {/* 내가 보낸 메시지(me/내 귓속말) 송신 실패: 버블 아래 우측 탭 재시도(danger). */}

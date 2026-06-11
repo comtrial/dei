@@ -25,6 +25,8 @@ async function dispatchWhisperPush(admin: any, message: { whisper_to_user_id: st
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(tokens.map((t: { token: string }) => ({
       to: t.token, title: sender?.nickname ?? '귓속말', body: '귓속말이 도착했어요',
+      sound: 'default',
+      channelId: 'default',
       data: { roomId: message.room_id, type: 'whisper_mention' },
     }))),
   });

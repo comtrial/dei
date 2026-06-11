@@ -22,8 +22,7 @@ import {
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { isUuidLike, normalizeNickname, toInitial } from '@/lib/b-flow';
 import { enqueueMatchQueue, isMatchQueueErrorCode } from '@/lib/matching';
-import { getAppNotificationEnabled, registerPushToken } from '@/lib/notifications.stub';
-import { requestPermission } from '@/lib/permissions';
+import { needsNotificationConsent, registerPushToken } from '@/lib/notifications.stub';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
@@ -192,9 +191,7 @@ export default function TeamNewScreen() {
       'team.start-queue',
       async () => {
         const memberIds = members.map((member) => member.id).filter(Boolean);
-        const appNotificationEnabled = user ? await getAppNotificationEnabled(user.id) : false;
-
-        if (!appNotificationEnabled) {
+        if (!user?.id || (await needsNotificationConsent(user.id))) {
           router.push({
             pathname: '/(app)/permission/notification',
             params: { memberIds: memberIds.join(',') },
@@ -202,24 +199,12 @@ export default function TeamNewScreen() {
           return;
         }
 
-        const status = await requestPermission('notification');
-
-        if (status !== 'granted') {
-          router.push({
-            pathname: '/(app)/permission/notification',
-            params: { memberIds: memberIds.join(',') },
+        await registerPushToken(user.id).catch((error) => {
+          logger.captureMessage('push token registration skipped', 'warning', {
+            tags: { screen: 'team-new', action: 'register-push-token' },
+            extra: { reason: getErrorMessage(error) },
           });
-          return;
-        }
-
-        if (user?.id) {
-          await registerPushToken(user.id).catch((error) => {
-            logger.captureMessage('push token registration skipped', 'warning', {
-              tags: { screen: 'team-new', action: 'register-push-token' },
-              extra: { reason: getErrorMessage(error) },
-            });
-          });
-        }
+        });
 
         const registration = await enqueueMatchQueue(memberIds);
         analytics.capture(ANALYTICS_EVENTS.team_queue_registered, {

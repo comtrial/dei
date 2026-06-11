@@ -29,6 +29,7 @@ import { getCachedVideoUri, getCachedThumbnailUri } from '@/lib/video';
 import { useAuth } from '@/providers/auth-provider';
 import { useRoomVideos } from '@/hooks/useRoomVideos';
 import { useRoomVideoDates } from '@/hooks/useRoomVideoDates';
+import { useRoomVideoHours } from '@/hooks/useRoomVideoHours';
 import { useRoomMembers } from '@/hooks/useRoomMembers';
 import { useRoomPresence } from '@/hooks/useRoomPresence';
 import { useHourSlot } from '@/hooks/useHourSlot';
@@ -339,6 +340,7 @@ export default function RoomScreen() {
     return { fromMs, toMsExclusive: todayStartMs + 24 * 60 * 60 * 1000 };
   }, [calendarMinDate]);
   const { dateKeys: videoDateKeys } = useRoomVideoDates(roomId, calendarRange, calendarOpen);
+  const videoHourKeys = useRoomVideoHours(roomId, selectedDate);
 
   const { videosByHour, loading: videosLoading, refetch: refetchVideos } = useRoomVideos(
     roomId,
@@ -636,6 +638,15 @@ export default function RoomScreen() {
     [isViewingToday, nowHour],
   );
   const activeTimeSlotIndex = clampTimeSlotIndex(currentHour, slots.length);
+  const markedTimeSlotHours = useMemo(() => {
+    const hours = new Set(videoHourKeys);
+    for (const [hour, rows] of Object.entries(videosByHour)) {
+      if (rows.some((video) => video.status === 'ready')) {
+        hours.add(Number(hour));
+      }
+    }
+    return hours;
+  }, [videoHourKeys, videosByHour]);
   const timeStripScrollRef = useRef<ElementRef<typeof ScrollView>>(null);
   const timeStripCommittedHourRef = useRef(currentHour);
   const timeStripCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -798,7 +809,11 @@ export default function RoomScreen() {
         <SafeAreaView className="flex-1 bg-bg">
           <TopNav
             left="none"
-            title="dei"
+            leftSlot={
+              <Text variant="logo">
+                dei<Text variant="logo" tone="accent">.</Text>
+              </Text>
+            }
             rightActions={
               <>
                 <IconButton
@@ -956,9 +971,15 @@ export default function RoomScreen() {
                           className="mr-[10px] w-[60px]"
                         >
                           <Animated.View
-                            className="h-[48px] items-center justify-center px-[8px]"
+                            className="relative h-[48px] items-center justify-center px-[8px]"
                             style={animatedSlotStyle}
                           >
+                            {markedTimeSlotHours.has(slot.hour) ? (
+                              <View
+                                testID={`room-time-slot-dot-${i}`}
+                                className="absolute top-[5px] h-[5px] w-[5px] rounded-full bg-accent"
+                              />
+                            ) : null}
                             <Text
                               className={
                                 slot.isFuture

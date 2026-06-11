@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
+import { configureForegroundNotifications } from '@/lib/notifications.stub';
 import { initPostHog } from '@/lib/posthog';
 import { initPurchases } from '@/lib/purchases';
 import { initSentry } from '@/lib/sentry';
@@ -35,6 +36,7 @@ export default function RootLayout() {
     initSentry();
     initPostHog();
     initPurchases();
+    configureForegroundNotifications();
     // app_opened — Activation 퍼널 분모. 토큰 보유 여부는 저장된 세션으로 판정.
     void supabase.auth.getSession().then(({ data }) => {
       analytics.capture(ANALYTICS_EVENTS.app_opened, {

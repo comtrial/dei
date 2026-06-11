@@ -7,6 +7,7 @@ const mockGetSession = jest.fn();
 jest.mock('@/lib/posthog', () => ({ initPostHog: jest.fn() }));
 jest.mock('@/lib/purchases', () => ({ initPurchases: jest.fn() }));
 jest.mock('@/lib/sentry', () => ({ initSentry: jest.fn() }));
+jest.mock('@/lib/notifications.stub', () => ({ configureForegroundNotifications: jest.fn() }));
 
 jest.mock('@/lib/supabase', () => ({
   supabase: { auth: { getSession: (...args: unknown[]) => mockGetSession(...args) } },

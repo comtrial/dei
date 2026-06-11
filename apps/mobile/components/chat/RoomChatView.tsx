@@ -83,6 +83,18 @@ export interface RoomChatViewProps {
   overlay?: boolean;
 }
 
+function formatChatTime(createdAt: string): string | null {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toLocaleTimeString('ko-KR', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Seoul',
+  });
+}
+
 export function RoomChatView(props: RoomChatViewProps) {
   const { input, members, selfId, blockedIds, whisperTarget } = props;
   const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -243,6 +255,7 @@ export function RoomChatView(props: RoomChatViewProps) {
                       avatarPhotoUrl={member?.photoUrl}
                       onAvatarPress={() => props.onAvatarPress(item.userId)}
                       sendState={mine ? item.sendState : 'sent'}
+                      timeLabel={formatChatTime(item.createdAt)}
                       onRetry={() => {
                         if (item.clientMsgId) props.onRetry(item.clientMsgId);
                       }}

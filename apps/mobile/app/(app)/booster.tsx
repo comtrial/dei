@@ -19,8 +19,7 @@ import {
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { PAYMENT_PACKS, type PaymentPackId } from '@/lib/b-flow';
 import { enqueueMatchQueue } from '@/lib/matching';
-import { getAppNotificationEnabled, registerPushToken } from '@/lib/notifications.stub';
-import { requestPermission } from '@/lib/permissions';
+import { needsNotificationConsent, registerPushToken } from '@/lib/notifications.stub';
 import {
   confirmInstantRematchPurchase,
   getBoosterPackageOptions,
@@ -171,17 +170,7 @@ export default function BoosterScreen() {
       throw new Error('authentication required');
     }
 
-    const appNotificationEnabled = await getAppNotificationEnabled(user.id);
-    if (!appNotificationEnabled) {
-      router.replace({
-        pathname: '/(app)/permission/notification',
-        params: { memberIds: queueMemberIds.length > 0 ? queueMemberIds.join(',') : user.id },
-      });
-      return;
-    }
-
-    const status = await requestPermission('notification');
-    if (status !== 'granted') {
+    if (await needsNotificationConsent(user.id)) {
       router.replace({
         pathname: '/(app)/permission/notification',
         params: { memberIds: queueMemberIds.length > 0 ? queueMemberIds.join(',') : user.id },

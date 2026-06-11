@@ -31,6 +31,24 @@ describe('RoomChatView', () => {
     expect(screen.getByText('반가워요')).toBeTruthy();
   });
 
+  it('renders message timestamps in KST', () => {
+    setup({
+      messages: [
+        {
+          id: 'time-1',
+          clientMsgId: null,
+          userId: 'u1',
+          body: '도착했어요',
+          whisperToUserId: null,
+          createdAt: '2026-06-10T08:43:00.000Z',
+          sendState: 'sent',
+        },
+      ],
+    });
+
+    expect(screen.getByText('오후 5:43')).toBeTruthy();
+  });
+
   it('renders system leave notices as centered chat events', () => {
     setup({
       messages: [

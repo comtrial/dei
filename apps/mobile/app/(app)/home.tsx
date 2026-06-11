@@ -21,8 +21,7 @@ import {
   VERIFIED_IDENTITY_SELECT,
 } from '@/lib/identity-profile';
 import { enqueueMatchQueue, isMatchQueueError, isMatchQueueErrorCode } from '@/lib/matching';
-import { getAppNotificationEnabled, registerPushToken } from '@/lib/notifications.stub';
-import { requestPermission } from '@/lib/permissions';
+import { needsNotificationConsent, registerPushToken } from '@/lib/notifications.stub';
 import {
   getCachedProfileSnapshot,
   mergeCachedProfileSnapshot,
@@ -225,17 +224,7 @@ export default function HomeScreen() {
           mode: 'solo',
           source: 'home',
         });
-        const appNotificationEnabled = await getAppNotificationEnabled(user.id);
-        if (!appNotificationEnabled) {
-          router.push({
-            pathname: '/(app)/permission/notification',
-            params: { memberIds: user.id },
-          });
-          return;
-        }
-
-        const status = await requestPermission('notification');
-        if (status !== 'granted') {
+        if (await needsNotificationConsent(user.id)) {
           router.push({
             pathname: '/(app)/permission/notification',
             params: { memberIds: user.id },
