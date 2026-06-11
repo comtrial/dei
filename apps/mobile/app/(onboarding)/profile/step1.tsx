@@ -298,7 +298,7 @@ export default function ProfileStep1Screen() {
             <Text variant="h1" className="text-[26px] leading-[34px]">
               닉네임과 성별을{'\n'}알려주세요
             </Text>
-            <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+            <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
               성별은 매칭에 사용돼요
             </Text>
           </View>

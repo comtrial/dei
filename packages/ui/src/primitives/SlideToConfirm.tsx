@@ -181,7 +181,7 @@ export const SlideToConfirm = forwardRef<View, SlideToConfirmProps>(
           <Text
             testID={testID ? `${testID}-label` : undefined}
             className={cn(
-              'text-[12.5px] font-bold tracking-[0.04em]',
+              'text-[14.5px] font-bold tracking-[0.04em]',
               LABEL_FG[tone],
             )}
           >
@@ -213,7 +213,7 @@ export const SlideToConfirm = forwardRef<View, SlideToConfirmProps>(
           <Text
             pointerEvents="none"
             testID={testID ? `${testID}-arrows` : undefined}
-            className="absolute right-[18px] text-[13px] tracking-[-2px] text-ink-4"
+            className="absolute right-[18px] text-[15px] tracking-[-2px] text-ink-4"
           >
             {ARROWS_GLYPH}
           </Text>

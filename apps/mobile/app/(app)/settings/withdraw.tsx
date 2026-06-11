@@ -202,7 +202,7 @@ export default function WithdrawScreen() {
           <Text variant="h1" className="text-[25px] leading-[33px]">
             정말 탈퇴하시겠어요?
           </Text>
-          <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+          <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
             탈퇴 전에 꼭 알아두세요.
           </Text>
 

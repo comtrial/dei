@@ -44,6 +44,7 @@ export default function BlockReportSheetScreen() {
   const paramAvatarUrl = useMemo(() => paramValue(params.targetAvatarUrl), [params.targetAvatarUrl]);
   const activeRoomId = roomIdValue && isUuidLike(roomIdValue) ? roomIdValue : null;
   const validTargetId = targetId && isUuidLike(targetId) ? targetId : null;
+  const isSelfTarget = user?.id != null && validTargetId === user.id;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [askReport, setAskReport] = useState(false);
@@ -60,7 +61,7 @@ export default function BlockReportSheetScreen() {
     };
   });
 
-  const canUseTarget = validTargetId != null;
+  const canUseTarget = validTargetId != null && !isSelfTarget;
   const returnAfterComplete = useCallback(() => {
     if (activeRoomId) {
       router.replace(roomRoutes.index(activeRoomId));
@@ -86,7 +87,18 @@ export default function BlockReportSheetScreen() {
     analytics.capture(ANALYTICS_EVENTS.room_overflow_menu_opened);
   }, []);
 
+  useEffect(() => {
+    if (isSelfTarget) {
+      router.replace(ROUTES.myProfile);
+    }
+  }, [isSelfTarget, router]);
+
   const openReportCategory = () => {
+    if (isSelfTarget) {
+      router.replace(ROUTES.myProfile);
+      return;
+    }
+
     if (!validTargetId) {
       setFailed(true);
       return;
@@ -97,7 +109,7 @@ export default function BlockReportSheetScreen() {
   };
 
   useEffect(() => {
-    if (!validTargetId) {
+    if (!validTargetId || isSelfTarget) {
       return;
     }
 
@@ -157,7 +169,7 @@ export default function BlockReportSheetScreen() {
       },
       { tags: { screen: 'block-report', action: 'load-target' } },
     );
-  }, [activeRoomId, validTargetId]);
+  }, [activeRoomId, isSelfTarget, validTargetId]);
 
   useEffect(() => {
     if (!complete) {
@@ -169,12 +181,17 @@ export default function BlockReportSheetScreen() {
   }, [complete, returnAfterComplete]);
 
   const handleBlock = () => {
+    if (isSelfTarget) {
+      router.replace(ROUTES.myProfile);
+      return;
+    }
+
     void logger.withErrorCapture(
       'safety.block-user',
       async () => {
         setIsSubmitting(true);
 
-        if (user && validTargetId) {
+        if (user && validTargetId && !isSelfTarget) {
           const { error } = await supabase.from('block').upsert(
             {
               blocked_user_id: validTargetId,

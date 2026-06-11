@@ -131,7 +131,7 @@ const CompareColumnCard = React.forwardRef<
         testID={`${testID ?? `compare-${tone}`}-label`}
         variant="eyebrow"
         tone={isNow ? 'accent' : 'ink-3'}
-        className="z-[2] mb-[6px] text-[10px] tracking-[0.06em]"
+        className="z-[2] mb-[6px] text-[12px] tracking-[0.06em]"
       >
         {column.label}
       </Text>
@@ -154,7 +154,7 @@ const CompareColumnCard = React.forwardRef<
         <Text
           testID={`${testID ?? `compare-${tone}`}-sub`}
           className={cn(
-            'z-[2] mt-[3px] text-[10.5px] font-medium',
+            'z-[2] mt-[3px] text-[12.5px] font-medium',
             isNow ? 'text-white/60' : 'text-ink-3',
           )}
         >

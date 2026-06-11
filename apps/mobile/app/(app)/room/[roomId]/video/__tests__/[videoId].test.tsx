@@ -167,6 +167,33 @@ describe('VideoFullscreenScreen (S13b)', () => {
     });
   });
 
+  it('내 영상의 멤버 칩 탭 → 내 프로필로 이동', async () => {
+    mockGetVideoById.mockResolvedValue({
+      ...defaultVideo,
+      user_id: 'self-1',
+    });
+    mockGetRoomMembersWithProfile.mockResolvedValue([
+      {
+        user_id: 'self-1',
+        room_id: 'room-1',
+        status: 'active',
+        profile: { nickname: '나', gender: 'male', photo_url: null },
+      },
+    ]);
+
+    render(<VideoFullscreenScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('member-chip')).toBeTruthy();
+    });
+
+    fireEvent(screen.getByTestId('member-chip'), 'responderRelease');
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/(app)/my-profile');
+    });
+  });
+
   it('비디오 URI 획득 실패 → StateView error 렌더', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getCachedVideoUri } = require('@/lib/video');

@@ -8,6 +8,34 @@ import type { PermissionState } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
 
 const PUSH_DISPATCH_HANDOFF = 'handoff: 서버 푸시 발송(A 인프라) 구현 예정';
+let foregroundNotificationHandlerConfigured = false;
+
+/**
+ * 앱이 foreground 상태일 때도 수신 알림을 시스템 UI 로 보여준다.
+ * expo-notifications 기본값은 foreground 알림을 숨기므로 앱 부팅 시 1회 설정한다.
+ */
+export function configureForegroundNotifications(): void {
+  if (foregroundNotificationHandlerConfigured) return;
+
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+
+  if (Platform.OS === 'android') {
+    void Notifications.setNotificationChannelAsync('default', {
+      name: '기본 알림',
+      importance: Notifications.AndroidImportance.MAX,
+      sound: 'default',
+    });
+  }
+
+  foregroundNotificationHandlerConfigured = true;
+}
 
 function normalizeNotificationStatus(status: Notifications.PermissionStatus): PermissionState {
   if (status === Notifications.PermissionStatus.GRANTED) {
@@ -112,6 +140,18 @@ export async function getAppNotificationEnabled(userId: string): Promise<boolean
   }
 
   return data?.push_enabled ?? true;
+}
+
+/**
+ * 매칭/부스터 큐 진입 전에 안내 화면이 필요한지 판정한다.
+ * 권한이 아직 미정이어도 OS 다이얼로그를 바로 띄우지 않고 앱 설명 화면을 먼저 보여준다.
+ */
+export async function needsNotificationConsent(userId: string): Promise<boolean> {
+  const appNotificationEnabled = await getAppNotificationEnabled(userId);
+  if (!appNotificationEnabled) return true;
+
+  const permission = await getNotificationPermissionState();
+  return permission !== 'granted';
 }
 
 export async function setAppNotificationEnabled(userId: string, enabled: boolean): Promise<void> {

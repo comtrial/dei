@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   getExpoPushTokenAsync: vi.fn(),
   getPermissionsAsync: vi.fn(),
   requestPermissionsAsync: vi.fn(),
+  setNotificationHandler: vi.fn(),
+  notificationMaybeSingle: vi.fn(),
   upsert: vi.fn(),
 }));
 
@@ -30,6 +32,7 @@ vi.mock('expo-notifications', () => ({
   getExpoPushTokenAsync: (...args: unknown[]) => mocks.getExpoPushTokenAsync(...args),
   getPermissionsAsync: (...args: unknown[]) => mocks.getPermissionsAsync(...args),
   requestPermissionsAsync: (...args: unknown[]) => mocks.requestPermissionsAsync(...args),
+  setNotificationHandler: (...args: unknown[]) => mocks.setNotificationHandler(...args),
 }));
 
 vi.mock('react-native', () => ({
@@ -38,13 +41,20 @@ vi.mock('react-native', () => ({
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    from: () => ({ upsert: mocks.upsert }),
+    from: () => ({
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: (...args: unknown[]) => mocks.notificationMaybeSingle(...args),
+      select: vi.fn().mockReturnThis(),
+      upsert: mocks.upsert,
+    }),
   },
 }));
 
 // eslint-disable-next-line import/first
 import {
+  configureForegroundNotifications,
   isPushTokenRegistrationUnavailable,
+  needsNotificationConsent,
   registerPushToken,
 } from '../notifications.stub';
 
@@ -53,6 +63,9 @@ beforeEach(() => {
   mocks.getExpoPushTokenAsync.mockReset();
   mocks.getPermissionsAsync.mockReset();
   mocks.requestPermissionsAsync.mockReset();
+  mocks.setNotificationHandler.mockReset();
+  mocks.notificationMaybeSingle.mockReset();
+  mocks.notificationMaybeSingle.mockResolvedValue({ data: { push_enabled: true }, error: null });
   mocks.upsert.mockReset();
   mocks.upsert.mockResolvedValue({ error: null });
 });
@@ -87,5 +100,41 @@ describe('notifications.stub registerPushToken', () => {
   it('detects aps-environment token registration errors', () => {
     expect(isPushTokenRegistrationUnavailable(new Error('missing aps-environment'))).toBe(true);
     expect(isPushTokenRegistrationUnavailable(new Error('network down'))).toBe(false);
+  });
+
+  it('configures foreground notification presentation once', async () => {
+    configureForegroundNotifications();
+    configureForegroundNotifications();
+
+    expect(mocks.setNotificationHandler).toHaveBeenCalledTimes(1);
+    const handler = mocks.setNotificationHandler.mock.calls[0]?.[0] as {
+      handleNotification: () => Promise<Record<string, unknown>>;
+    };
+    await expect(handler.handleNotification()).resolves.toMatchObject({
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    });
+  });
+
+  it('requires consent when OS notification permission is not granted', async () => {
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'undetermined' });
+
+    await expect(needsNotificationConsent('user-1')).resolves.toBe(true);
+  });
+
+  it('requires consent when the in-app notification setting is off', async () => {
+    mocks.notificationMaybeSingle.mockResolvedValue({ data: { push_enabled: false }, error: null });
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+
+    await expect(needsNotificationConsent('user-1')).resolves.toBe(true);
+    expect(mocks.getPermissionsAsync).not.toHaveBeenCalled();
+  });
+
+  it('does not require consent when app setting and OS permission are enabled', async () => {
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+
+    await expect(needsNotificationConsent('user-1')).resolves.toBe(false);
   });
 });

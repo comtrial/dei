@@ -108,7 +108,7 @@ export const PhotoUpload = forwardRef<View, PhotoUploadProps>(function PhotoUplo
           {/* .plus: 30px ink-3 글리프 */}
           <Text className="text-[30px] leading-none text-ink-3">{glyph}</Text>
           {/* .lbl: 12px ink-3 안내, 가운데 정렬 */}
-          <Text className="px-[8px] text-center text-[12px] leading-[1.4] text-ink-3">
+          <Text className="px-[8px] text-center text-[14px] leading-[1.4] text-ink-3">
             {label}
           </Text>
         </>
@@ -117,7 +117,7 @@ export const PhotoUpload = forwardRef<View, PhotoUploadProps>(function PhotoUplo
       {showPill ? (
         // .change pill: 하단 -8px, paper bg, 1px line 보더, ink-2 10.5px/700, r-full
         <View className="absolute bottom-[-8px] left-1/2 -translate-x-1/2 rounded-full border border-line bg-paper px-[10px] py-[4px]">
-          <Text className="text-[10.5px] font-bold text-ink-2">{changeLabel}</Text>
+          <Text className="text-[12.5px] font-bold text-ink-2">{changeLabel}</Text>
         </View>
       ) : null}
     </Pressable>

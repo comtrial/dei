@@ -316,14 +316,14 @@ export default function VerifyScreen() {
         <Text
           variant="body"
           tone="ink-3"
-          className="mt-[8px] text-center text-[13px] leading-[20px]"
+          className="mt-[8px] text-center text-[15px] leading-[20px]"
         >
           NICE / KCB 본인인증 기관으로{'\n'}잠시 이동합니다
         </Text>
         <Text
           variant="micro"
           tone="ink-4"
-          className="mt-auto text-center text-[11px] leading-[17px]"
+          className="mt-auto text-center text-[13px] leading-[17px]"
         >
           인증이 끝나면 자동으로 진행돼요
         </Text>

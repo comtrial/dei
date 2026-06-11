@@ -50,7 +50,7 @@ describe('InputBar (X9)', () => {
     const cls = (screen.getByTestId('input-bar-input').props.className as string) ?? '';
     // S13a .input-bar input: 한 줄일 땐 pill 모양 + 카톡 수준 15px, bg-2 표면 유지.
     expect(cls).toContain('rounded-full');
-    expect(cls).toContain('text-[15px]');
+    expect(cls).toContain('text-[17px]');
     expect(cls).toContain('bg-bg-2');
     // Input base 의 rounded-md 는 pill 로 덮였다.
     expect(cls).not.toContain('rounded-md');

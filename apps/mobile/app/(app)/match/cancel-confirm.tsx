@@ -94,7 +94,7 @@ export default function MatchCancelConfirmScreen() {
   return (
     <SafeAreaView className="flex-1 bg-bg">
       <View className="flex-1 items-center justify-center px-[24px]">
-        <Text className="text-center text-[14px] font-semibold text-ink-3">
+        <Text className="text-center text-[16px] font-semibold text-ink-3">
           매칭 큐 대기 중…
         </Text>
       </View>
@@ -105,12 +105,12 @@ export default function MatchCancelConfirmScreen() {
           <Text variant="h2" className="mt-[6px] text-center text-[22px] font-extrabold">
             정말 취소하시겠어요?
           </Text>
-          <Text className="mt-[8px] text-center text-[13.5px] leading-[20px] text-ink-3">
+          <Text className="mt-[8px] text-center text-[15.5px] leading-[20px] text-ink-3">
             큐를 떠나면 처음부터{'\n'}다시 기다려야 해요.
           </Text>
 
           <View className="mt-[18px] rounded-md bg-bg-2 px-[14px] py-[12px]">
-            <Text className="text-center text-[12.5px] leading-[19px] text-ink-2">
+            <Text className="text-center text-[14.5px] leading-[19px] text-ink-2">
               대기 시간 <Text className="font-bold text-ink">{formatQueueElapsed(enqueuedAt)}</Text> 진행 중 · 곧 매칭될 수 있어요
             </Text>
           </View>

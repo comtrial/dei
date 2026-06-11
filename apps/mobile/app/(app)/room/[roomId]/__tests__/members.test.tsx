@@ -2,11 +2,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 
 const mockBack = jest.fn();
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 const mockAnalyticsCapture = jest.fn();
 const mockGetMemberProfile = jest.fn();
 const mockGetCachedProfilePhotoUrl = jest.fn();
 const mockResolveProfilePhotoUrl = jest.fn();
-const mockRouter = { back: mockBack, push: mockPush };
+const mockRouter = { back: mockBack, push: mockPush, replace: mockReplace };
 
 let mockParams: { userId?: string; roomId?: string } = {
   userId: 'user-target',
@@ -33,6 +34,10 @@ jest.mock('@/lib/room-rpc', () => ({
 jest.mock('@/lib/profile-photo-cache', () => ({
   getCachedProfilePhotoUrl: (...args: unknown[]) => mockGetCachedProfilePhotoUrl(...args),
   resolveProfilePhotoUrl: (...args: unknown[]) => mockResolveProfilePhotoUrl(...args),
+}));
+
+jest.mock('@/providers/auth-provider', () => ({
+  useAuth: () => ({ user: { id: 'user-self' } }),
 }));
 
 // eslint-disable-next-line import/first -- SUT import must run after jest.mock() calls
@@ -245,5 +250,18 @@ describe('MemberProfileScreen (S14)', () => {
         }),
       );
     });
+  });
+
+  it('본인 프로필 target이면 신고/차단 메뉴 없이 내 프로필로 보낸다', async () => {
+    mockParams = { userId: 'user-self', roomId: 'room-123' };
+
+    render(<MemberProfileScreen />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/(app)/my-profile');
+    });
+
+    expect(mockGetMemberProfile).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('더보기')).toBeNull();
   });
 });

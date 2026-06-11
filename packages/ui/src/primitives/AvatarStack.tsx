@@ -50,7 +50,7 @@ export function AvatarStack({ items, max = 3, size = 26, className, ...rest }: A
             `w-[${size}px] h-[${size}px]`,
           )}
         >
-          <Text className="text-[10px] font-bold text-ink-3">{`+${overflow}`}</Text>
+          <Text className="text-[12px] font-bold text-ink-3">{`+${overflow}`}</Text>
         </View>
       ) : null}
     </View>

@@ -255,7 +255,7 @@ export default function TermsScreen() {
           <Text
             variant="body"
             tone="ink-3"
-            className="mt-[8px] text-[13.5px] leading-[20px]"
+            className="mt-[8px] text-[15.5px] leading-[20px]"
           >
             만 19세 이상 전용 서비스예요. 본인인증으로 확인할게요.
           </Text>
@@ -268,7 +268,7 @@ export default function TermsScreen() {
             onPress={toggleAll}
             testID="terms-check-all"
           />
-          <Text className="text-[14.5px] font-bold text-ink">
+          <Text className="text-[16.5px] font-bold text-ink">
             모두 동의
           </Text>
         </Card>
@@ -282,7 +282,7 @@ export default function TermsScreen() {
                 onPress={() => toggleAgreement(item.id)}
                 testID={`terms-${item.id}`}
               />
-              <Text className="flex-1 text-[13px] font-medium text-ink-2">
+              <Text className="flex-1 text-[15px] font-medium text-ink-2">
                 {item.label}
               </Text>
               <Badge
@@ -301,7 +301,7 @@ export default function TermsScreen() {
                   })
                 }
               >
-                <Text className="ml-[6px] text-[12.5px] font-semibold text-ink-4">보기 ›</Text>
+                <Text className="ml-[6px] text-[14.5px] font-semibold text-ink-4">보기 ›</Text>
               </Pressable>
             </View>
           ))}
@@ -310,7 +310,7 @@ export default function TermsScreen() {
         <Text
           variant="micro"
           tone="ink-3"
-          className="mt-[8px] text-center text-[11.5px] leading-[17px]"
+          className="mt-[8px] text-center text-[13.5px] leading-[17px]"
         >
           {isCheckingUserGate
             ? '이전 가입 상태를 확인하고 있어요.'

@@ -119,7 +119,7 @@ export default function SupportScreen() {
           <Text variant="h1" className="text-[25px] leading-[33px]">
             무엇이 궁금하신가요?
           </Text>
-          <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+          <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
             영업일 기준 2일 내 회신드려요.
           </Text>
 
@@ -199,7 +199,7 @@ export default function SupportScreen() {
       {complete ? (
         <View className="absolute bottom-[34px] left-0 right-0 items-center px-[24px]">
           <View className="rounded-full bg-ink px-[16px] py-[10px]">
-            <Text className="text-center text-[12.5px] font-bold text-white">
+            <Text className="text-center text-[14.5px] font-bold text-white">
               문의를 받았어요
             </Text>
           </View>

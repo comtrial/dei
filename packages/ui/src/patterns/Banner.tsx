@@ -159,14 +159,14 @@ export const Banner = React.forwardRef<View, BannerProps>(function Banner(
       {/* 본문 영역(.txt flex:1): 제목 + 설명 + 카운트다운 */}
       <View className="flex-1">
         {title != null ? (
-          <Text className={cn('text-[12.5px] font-bold leading-[1.3]', TONE_TITLE_TEXT[tone])}>
+          <Text className={cn('text-[14.5px] font-bold leading-[1.3]', TONE_TITLE_TEXT[tone])}>
             {title}
           </Text>
         ) : null}
         {children != null ? (
           <Text
             className={cn(
-              'text-[11.5px] leading-[1.5]',
+              'text-[13.5px] leading-[1.5]',
               bodyTextClass,
               title != null && 'mt-[2px]',
             )}
@@ -178,7 +178,7 @@ export const Banner = React.forwardRef<View, BannerProps>(function Banner(
           // .restrict-banner .d: tabular-nums 카운트다운/시간
           <Text
             tabularNums
-            className={cn('mt-[2px] text-[11px] leading-[1.3]', bodyTextClass)}
+            className={cn('mt-[2px] text-[13px] leading-[1.3]', bodyTextClass)}
           >
             {countdown}
           </Text>

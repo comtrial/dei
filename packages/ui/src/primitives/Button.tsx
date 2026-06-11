@@ -66,7 +66,7 @@ const VARIANT_LABEL: Record<ButtonVariant, string> = {
   accent: 'text-white font-bold',
   secondary: 'text-ink-2 font-semibold',
   tertiary: 'text-ink-3 font-semibold',
-  'mini-pill': 'text-white font-bold text-[11.5px]',
+  'mini-pill': 'text-white font-bold text-[13.5px]',
   glass: 'text-white font-bold',
 };
 
@@ -78,8 +78,8 @@ const SIZE_CONTAINER: Record<ButtonSize, string> = {
 
 // size → 라벨 글자 크기 (md 15px / sm 13.5px). mini-pill·tertiary 는 자체 스케일.
 const SIZE_LABEL: Record<ButtonSize, string> = {
-  md: 'text-[15px]',
-  sm: 'text-[13.5px]',
+  md: 'text-[17px]',
+  sm: 'text-[15.5px]',
 };
 
 // mini-pill 컨테이너 패딩(.cta-mini padding:7px 12px).

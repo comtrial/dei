@@ -169,6 +169,47 @@ export async function getRoomVideoDates(
   }
 }
 
+/**
+ * 날짜 범위 [fromMs, toMsExclusive) 안에서 ready 영상이 1개라도 존재하는
+ * hour_slot 집합을 반환한다. 시간 스트립 위 점 표시용 경량 조회다.
+ */
+export async function getRoomVideoHours(
+  roomId: string,
+  fromMs: number,
+  toMsExclusive: number,
+): Promise<Set<number>> {
+  try {
+    const { data, error } = await supabase
+      .from('video')
+      .select('hour_slot, created_at')
+      .eq('room_id', roomId)
+      .eq('status', 'ready')
+      .gte('created_at', new Date(fromMs).toISOString())
+      .lt('created_at', new Date(toMsExclusive).toISOString());
+
+    if (error) throw error;
+
+    const hours = new Set<number>();
+    for (const row of data ?? []) {
+      if (typeof row.hour_slot === 'number') {
+        hours.add(row.hour_slot);
+        continue;
+      }
+
+      if (row.created_at) {
+        hours.add(new Date(row.created_at).getHours());
+      }
+    }
+    return hours;
+  } catch (err) {
+    logger.captureException(err, {
+      tags: { feature: 'room_rpc', rpc: 'get_room_video_hours', room_id: roomId },
+      extra: { fromMs, toMsExclusive },
+    });
+    return new Set();
+  }
+}
+
 export async function getSelfVideoCount24h(
   roomId: string,
   selfUserId: string,

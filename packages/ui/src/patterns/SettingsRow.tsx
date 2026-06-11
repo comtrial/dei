@@ -108,11 +108,11 @@ export const SettingsRow = forwardRef<View, SettingsRowProps>(function SettingsR
         <View className="flex-1">
           {/* .t: 15px/700 ink */}
           {label ? (
-            <Text className="text-[15px] font-bold text-ink">{label}</Text>
+            <Text className="text-[17px] font-bold text-ink">{label}</Text>
           ) : null}
           {/* .d: 11.5px ink-3, line-height 1.45 */}
           {value ? (
-            <Text className="mt-[3px] text-[11.5px] leading-[17px] text-ink-3">{value}</Text>
+            <Text className="mt-[3px] text-[13.5px] leading-[17px] text-ink-3">{value}</Text>
           ) : null}
         </View>
         {right ?? (
@@ -136,16 +136,16 @@ export const SettingsRow = forwardRef<View, SettingsRowProps>(function SettingsR
           photoUrl={photoUrl}
           size={36}
           bg={avatarBg}
-          textClassName="text-[13px] font-bold"
+          textClassName="text-[15px] font-bold"
         />
         <View className="flex-1">
           {/* .nm: 13.5px/700 ink */}
           {label ? (
-            <Text className="text-[13.5px] font-bold text-ink">{label}</Text>
+            <Text className="text-[15.5px] font-bold text-ink">{label}</Text>
           ) : null}
           {/* .sub: 11px ink-3 */}
           {value ? (
-            <Text className="mt-[1px] text-[11px] text-ink-3">{value}</Text>
+            <Text className="mt-[1px] text-[13px] text-ink-3">{value}</Text>
           ) : null}
         </View>
         {right}
@@ -155,9 +155,9 @@ export const SettingsRow = forwardRef<View, SettingsRowProps>(function SettingsR
 
   // nav / locked / danger: 좌측 라벨(.k) flex + 우측 값(.v) + chevron(.arr).
   // .k: 13.5px ink. danger → danger 색. locked 는 라벨 색 동일(값/lock 만 ink-4).
-  const labelClass = cn('flex-1 text-[13.5px]', variant === 'danger' ? 'text-danger' : 'text-ink');
+  const labelClass = cn('flex-1 text-[15.5px]', variant === 'danger' ? 'text-danger' : 'text-ink');
   // .v: 13px ink-3. locked → ink-4 (HTML .row.locked .v).
-  const valueClass = cn('mr-[8px] text-[13px]', variant === 'locked' ? 'text-ink-4' : 'text-ink-3');
+  const valueClass = cn('mr-[8px] text-[15px]', variant === 'locked' ? 'text-ink-4' : 'text-ink-3');
 
   return (
     <Pressable
@@ -170,7 +170,7 @@ export const SettingsRow = forwardRef<View, SettingsRowProps>(function SettingsR
       {value ? <Text className={valueClass}>{value}</Text> : null}
       {/* locked: .lock 자물쇠 글리프 10px ink-4 (값 옆). 우측 슬롯 override 없을 때만. */}
       {variant === 'locked' && right == null ? (
-        <Text className="mr-[6px] text-[10px] text-ink-4">🔒</Text>
+        <Text className="mr-[6px] text-[12px] text-ink-4">🔒</Text>
       ) : null}
       {/* .arr: ink-4 14px chevron. right slot 지정 시 그것으로 대체. */}
       {right ?? <ChevronRight color={color['ink-4']} size={14} />}

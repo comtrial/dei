@@ -201,7 +201,7 @@ export const FullscreenVideo = forwardRef<View, FullscreenVideoProps>(function F
           <Badge
             variant="count"
             className="rounded-full bg-black/55 px-[12px] py-[6px]"
-            textClassName="text-[11px] font-semibold text-white"
+            textClassName="text-[13px] font-semibold text-white"
           >
             {duration}
           </Badge>
@@ -245,7 +245,7 @@ export const FullscreenVideo = forwardRef<View, FullscreenVideoProps>(function F
             <Text
               variant="caption"
               // .shutter-hint 12px/500 white opacity .85 — on-dark 국소색.
-              className="mt-[14px] text-[12px] font-medium text-white/85"
+              className="mt-[14px] text-[14px] font-medium text-white/85"
             >
               {shutterHint}
             </Text>
@@ -272,7 +272,7 @@ export const FullscreenVideo = forwardRef<View, FullscreenVideoProps>(function F
           <Text
             variant="micro"
             // .swipe-hint 11px/600 rgba(255,255,255,.45) — on-dark 국소색.
-            className="text-[11px] font-semibold text-white/45"
+            className="text-[13px] font-semibold text-white/45"
           >
             {swipeHint}
           </Text>

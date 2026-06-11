@@ -191,7 +191,7 @@ export default function ProfilePreferenceStepScreen() {
             <Text variant="h1" className="text-[25px] leading-[33px]">
               마지막이에요
             </Text>
-            <Text className="mt-[8px] text-[13.5px] leading-[20px] text-ink-3">
+            <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
               비워둬도 괜찮아요. 나중에 채울 수 있어요.
             </Text>
           </View>
@@ -218,7 +218,7 @@ export default function ProfilePreferenceStepScreen() {
               className="mt-[8px]"
               onPress={() => setPicker('region')}
             />
-            <Text className="mt-[6px] text-[11.5px] font-semibold text-ink-3">
+            <Text className="mt-[6px] text-[13.5px] font-semibold text-ink-3">
               {isLocating
                 ? '동의한 위치정보로 지역을 확인하고 있어요.'
                 : '자동으로 채워지지 않으면 직접 선택해주세요.'}

@@ -141,7 +141,7 @@ function LargeBody({
         <Text
           variant="caption"
           tone="ink-3"
-          className="mt-[6px] text-center text-[12.5px] leading-[1.6]"
+          className="mt-[6px] text-center text-[14.5px] leading-[1.6]"
         >
           {description}
         </Text>
@@ -187,14 +187,14 @@ function MiniBody({
         <Text
           variant="eyebrow"
           tone="accent"
-          className="mb-[6px] text-[9px] tracking-[0.1em]"
+          className="mb-[6px] text-[11px] tracking-[0.1em]"
         >
           {eyebrow}
         </Text>
       ) : null}
 
       {/* h3: 14/800 ink */}
-      <Text variant="h2" tone="ink" className="text-[14px] font-extrabold leading-[1.3]">
+      <Text variant="h2" tone="ink" className="text-[16px] font-extrabold leading-[1.3]">
         {title}
       </Text>
 
@@ -203,7 +203,7 @@ function MiniBody({
         <Text
           variant="micro"
           tone="ink-3"
-          className="mt-[4px] text-[11.5px] leading-[1.5]"
+          className="mt-[4px] text-[13.5px] leading-[1.5]"
         >
           {description}
         </Text>

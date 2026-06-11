@@ -37,6 +37,27 @@ describe('ChatBubble (X8)', () => {
     expect(body).toContain('text-white');
   });
 
+  it('shows a message time beside a them bubble', () => {
+    render(
+      <ChatBubble testID="cb" variant="them" name="수아" timeLabel="오후 5:43">
+        도착했어요
+      </ChatBubble>,
+    );
+    expect(screen.getByTestId('chat-bubble-time')).toBeTruthy();
+    expect(screen.getByText('오후 5:43')).toBeTruthy();
+  });
+
+  it('places my message time in the reversed bubble row', () => {
+    render(
+      <ChatBubble testID="cb" variant="me" timeLabel="오후 6:15">
+        내려따!
+      </ChatBubble>,
+    );
+    const time = screen.getByTestId('chat-bubble-time');
+    expect(time.props.className).toContain('text-ink-3');
+    expect(screen.getByText('오후 6:15')).toBeTruthy();
+  });
+
   it('"whisper" (received) shows sender avatar + name + 귓속말 tag, accent-soft italic body, no 방향 접미', () => {
     render(
       <ChatBubble testID="cb" variant="whisper" name="수아" avatarInitial="수" avatarBg="bg-[#7A8DB8]">

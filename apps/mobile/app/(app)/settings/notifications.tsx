@@ -103,7 +103,7 @@ export default function NotificationSettingsScreen() {
             toggleValue={settings.push_enabled}
             onToggleChange={updateMasterSetting}
           />
-          <Text className="px-[24px] pt-[10px] text-[11.5px] leading-[17px] text-ink-3">
+          <Text className="px-[24px] pt-[10px] text-[13.5px] leading-[17px] text-ink-3">
             앱 안 알림 설정이에요. OS 권한이 꺼져 있으면 시스템 설정에서 켜야 해요.
           </Text>
 

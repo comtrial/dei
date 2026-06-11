@@ -53,13 +53,13 @@ const SIZE_CLASS: Record<number, string> = {
 };
 
 const INITIAL_SIZE_CLASS: Record<number, string> = {
-  20: 'text-[7px] leading-[20px]',
-  24: 'text-[9px] leading-[24px]',
-  26: 'text-[10px] leading-[26px]',
-  28: 'text-[10px] leading-[28px]',
-  32: 'text-[12px] leading-[32px]',
-  36: 'text-[13px] leading-[36px]',
-  38: 'text-[14px] leading-[38px]',
+  20: 'text-[10px] leading-[20px]',
+  24: 'text-[11px] leading-[24px]',
+  26: 'text-[12px] leading-[26px]',
+  28: 'text-[12px] leading-[28px]',
+  32: 'text-[14px] leading-[32px]',
+  36: 'text-[15px] leading-[36px]',
+  38: 'text-[16px] leading-[38px]',
   120: 'text-[48px] leading-[120px]',
 };
 

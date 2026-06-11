@@ -68,7 +68,7 @@ describe('Button (P1)', () => {
     // mini-pill 자체 패딩(7/12) — md 기본 패딩(16/18) 미적용
     expect(cls).toContain('py-[7px]');
     expect(cls).not.toContain('py-[16px]');
-    expect((screen.getByText('업그레이드').props.className as string)).toContain('text-[11.5px]');
+    expect((screen.getByText('업그레이드').props.className as string)).toContain('text-[13.5px]');
   });
 
   it('fullWidth → w-full', () => {

@@ -83,6 +83,19 @@ export interface RoomChatViewProps {
   overlay?: boolean;
 }
 
+function formatChatTime(createdAt: string): string | null {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const kstDate = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const hour24 = kstDate.getUTCHours();
+  const hour12 = hour24 % 12 || 12;
+  const minute = String(kstDate.getUTCMinutes()).padStart(2, '0');
+  const period = hour24 < 12 ? '오전' : '오후';
+
+  return `${period} ${hour12}:${minute}`;
+}
+
 export function RoomChatView(props: RoomChatViewProps) {
   const { input, members, selfId, blockedIds, whisperTarget } = props;
   const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -208,7 +221,7 @@ export function RoomChatView(props: RoomChatViewProps) {
                       <Text
                         testID="chat-system-message"
                         className={cn(
-                          'rounded-full bg-bg-2 px-[10px] py-[5px] text-[12px] font-semibold text-ink-3',
+                          'rounded-full bg-bg-2 px-[10px] py-[5px] text-[14px] font-semibold text-ink-3',
                           o && 'bg-[rgba(255,255,255,0.16)] text-white',
                         )}
                       >
@@ -243,6 +256,7 @@ export function RoomChatView(props: RoomChatViewProps) {
                       avatarPhotoUrl={member?.photoUrl}
                       onAvatarPress={() => props.onAvatarPress(item.userId)}
                       sendState={mine ? item.sendState : 'sent'}
+                      timeLabel={formatChatTime(item.createdAt)}
                       onRetry={() => {
                         if (item.clientMsgId) props.onRetry(item.clientMsgId);
                       }}

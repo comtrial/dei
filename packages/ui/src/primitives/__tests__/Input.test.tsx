@@ -74,7 +74,7 @@ describe('Input (P2)', () => {
     const helper = screen.getByText('✓ 사용 가능해요');
     const className = helper.props.className as string;
     expect(className).toContain('text-ink-3');
-    expect(className).toContain('text-[11.5px]');
+    expect(className).toContain('text-[13.5px]');
   });
 
   it('merges caller helperClassName (e.g. success color, last wins)', () => {
@@ -88,10 +88,10 @@ describe('Input (P2)', () => {
 
   it('merges caller inputClassName (last wins via cn)', () => {
     // S23 input is 13px/14px padding — caller can override base size.
-    render(<Input testID="in" inputClassName="text-[14px]" />);
+    render(<Input testID="in" inputClassName="text-[16px]" />);
     const className = screen.getByTestId('in').props.className as string;
-    expect(className).toContain('text-[14px]');
-    expect(className).not.toContain('text-[15px]');
+    expect(className).toContain('text-[16px]');
+    expect(className).not.toContain('text-[17px]');
   });
 
   it('forwards ref to the underlying TextInput', () => {

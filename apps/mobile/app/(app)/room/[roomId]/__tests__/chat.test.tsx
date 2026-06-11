@@ -15,6 +15,7 @@ let mockLatestChatProps: {
   isInitialLoading?: boolean;
   memberCount?: number;
   members?: { name: string; status: string; userId: string }[];
+  onAvatarPress?: (userId: string) => void;
   onSelfProfilePress?: () => void;
 } | null = null;
 let mockChatMessages: Record<string, unknown>[] = [];
@@ -61,6 +62,8 @@ jest.mock('@/components/chat/RoomChatView', () => ({
   RoomChatView: (props: {
     memberCount?: number;
     members?: { name: string; status: string; userId: string }[];
+    onAvatarPress?: (userId: string) => void;
+    onSelfProfilePress?: () => void;
   }) => {
     mockLatestChatProps = props;
     return null;
@@ -206,6 +209,20 @@ describe('RoomChatScreen member leave realtime', () => {
 
     act(() => {
       mockLatestChatProps?.onSelfProfilePress?.();
+    });
+
+    expect(mockPush).toHaveBeenCalledWith('/(app)/my-profile');
+  });
+
+  it('opens my profile when tapping my own chat avatar', async () => {
+    render(<RoomChatScreen />);
+
+    await waitFor(() => {
+      expect(mockLatestChatProps?.onAvatarPress).toEqual(expect.any(Function));
+    });
+
+    act(() => {
+      mockLatestChatProps?.onAvatarPress?.('me');
     });
 
     expect(mockPush).toHaveBeenCalledWith('/(app)/my-profile');

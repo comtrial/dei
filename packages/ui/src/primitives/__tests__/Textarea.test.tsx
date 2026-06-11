@@ -33,7 +33,7 @@ describe('Textarea (P3)', () => {
     const className = count.props.className as string;
     expect(className).toContain('text-ink-4');
     expect(className).toContain('text-right');
-    expect(className).toContain('text-[10.5px]');
+    expect(className).toContain('text-[12.5px]');
   });
 
   it('updates the count as the user types (uncontrolled)', () => {

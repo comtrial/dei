@@ -34,7 +34,7 @@ export default function TermsDocumentScreen() {
           <Text variant="h1" className="text-[24px] leading-[32px]">
             dei 약관
           </Text>
-          <Text className="mt-[8px] text-[13px] leading-[20px] text-ink-3">
+          <Text className="mt-[8px] text-[15px] leading-[20px] text-ink-3">
             서비스 이용 전 확인해야 할 약관 전문입니다.
           </Text>
 
@@ -57,7 +57,7 @@ export default function TermsDocumentScreen() {
                     selected ? 'border-ink bg-ink' : 'border-line bg-paper',
                   ].join(' ')}
                 >
-                  <Text className={selected ? 'text-[12px] font-bold text-white' : 'text-[12px] font-bold text-ink-2'}>
+                  <Text className={selected ? 'text-[14px] font-bold text-white' : 'text-[14px] font-bold text-ink-2'}>
                     {item.label}
                   </Text>
                 </Pressable>
@@ -73,7 +73,7 @@ export default function TermsDocumentScreen() {
                 <Badge variant="required" tone={document.required ? 'accent' : 'info'}>
                   {document.required ? '필수' : '선택'}
                 </Badge>
-                <Text className="text-[11.5px] font-semibold text-ink-3">
+                <Text className="text-[13.5px] font-semibold text-ink-3">
                   시행일 {document.updatedAt}
                 </Text>
               </View>
@@ -81,20 +81,20 @@ export default function TermsDocumentScreen() {
               <Text variant="h2" className="mt-[10px] text-[20px] leading-[28px]">
                 {document.title}
               </Text>
-              <Text className="mt-[8px] text-[13px] leading-[20px] text-ink-3">
+              <Text className="mt-[8px] text-[15px] leading-[20px] text-ink-3">
                 {document.summary}
               </Text>
 
               <View className="mt-[18px] gap-[18px]">
                 {document.blocks.map((block) => (
                   <View key={block.heading}>
-                    <Text className="text-[15px] font-extrabold leading-[22px] text-ink">
+                    <Text className="text-[17px] font-extrabold leading-[22px] text-ink">
                       {block.heading}
                     </Text>
                     {block.paragraphs.map((paragraph) => (
                       <Text
                         key={paragraph}
-                        className="mt-[7px] text-[13px] leading-[21px] text-ink-2"
+                        className="mt-[7px] text-[15px] leading-[21px] text-ink-2"
                       >
                         {paragraph}
                       </Text>
