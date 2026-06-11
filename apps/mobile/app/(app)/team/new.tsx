@@ -62,10 +62,11 @@ type SearchProfile = Pick<
 
 export default function TeamNewScreen() {
   const router = useRouter();
-  const { mode: rawMode } = useLocalSearchParams<{ mode?: string }>();
+  const { mode: rawMode } = useLocalSearchParams<{ entrypoint?: string; mode?: string }>();
   const { user } = useAuth();
   const mode = toMatchQueueMode(rawMode);
   const isCollegeMode = mode === 'college';
+  const entrypoint = isCollegeMode ? 'college' : 'friend';
   const [query, setQuery] = useState('');
   const [members, setMembers] = useState<SearchMember[]>([SELF_MEMBER]);
   const [results, setResults] = useState<SearchMember[]>([]);
@@ -231,7 +232,7 @@ export default function TeamNewScreen() {
         if (!user?.id || (await needsNotificationConsent(user.id))) {
           router.push({
             pathname: '/(app)/permission/notification',
-            params: { memberIds: memberIds.join(','), mode },
+            params: { entrypoint, memberIds: memberIds.join(','), mode },
           });
           return;
         }
@@ -245,22 +246,24 @@ export default function TeamNewScreen() {
 
         const registration = await enqueueMatchQueue(memberIds, { mode });
         analytics.capture(ANALYTICS_EVENTS.team_queue_registered, {
+          entry_point: entrypoint,
           member_count: members.length,
           mode: isCollegeMode ? 'college' : 'team',
+          source: 'team-new',
         });
         // 큐 등록 = 커밋 상태. 홈/팀구성 화면을 스택에서 제거(replace)해
         // 뒤로가기로 취소 없이 빠져나가는 상태 불일치를 막는다.
         if (registration.freeRematchWaived) {
           router.replace({
             pathname: '/(app)/queue',
-            params: { mode, notice: 'free-rematch' },
+            params: { entrypoint, mode, notice: 'free-rematch' },
           });
           return;
         }
 
         router.replace({
           pathname: '/(app)/queue',
-          params: { mode },
+          params: { entrypoint, mode },
         });
       },
       { tags: { screen: 'team-new', action: 'start-queue' } },

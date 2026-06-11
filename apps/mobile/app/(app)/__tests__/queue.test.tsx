@@ -6,11 +6,12 @@ const mockAnalyticsCapture = jest.fn();
 const mockSupabaseFrom = jest.fn();
 const mockChannel = jest.fn();
 const mockRemoveChannel = jest.fn();
+let mockSearchParams: Record<string, string | undefined> = {};
 
 // expo-router: useFocusEffect 는 콜백을 실행하지 않는 noop(=BackHandler 미호출).
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace, push: mockPush }),
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => mockSearchParams,
   useFocusEffect: jest.fn(),
 }));
 
@@ -74,6 +75,7 @@ function makeListChain(rows: { data: unknown; error?: unknown }) {
 describe('QueueScreen — room_matched 계측', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSearchParams = {};
 
     // realtime 구독 빌더: .on().subscribe() 체인이 깨지지 않게.
     mockChannel.mockReturnValue({
@@ -115,6 +117,20 @@ describe('QueueScreen — room_matched 계측', () => {
         room_id: 'room-xyz',
       });
       expect(mockReplace).toHaveBeenCalledWith('/(app)/room/room-xyz');
+    });
+  });
+
+  it('entrypoint 파라미터가 있으면 room_matched 에 함께 붙인다', async () => {
+    mockSearchParams = { entrypoint: 'college', mode: 'college' };
+
+    render(<QueueScreen />);
+
+    await waitFor(() => {
+      expect(mockAnalyticsCapture).toHaveBeenCalledWith('F1:room_matched', {
+        entry_point: 'college',
+        mode: 'college',
+        room_id: 'room-xyz',
+      });
     });
   });
 });

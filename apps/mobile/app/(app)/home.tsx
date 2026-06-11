@@ -44,6 +44,8 @@ type HomeProfile = {
   universityName: string | null;
 };
 
+type HomeEntrypoint = 'college' | 'friend' | 'solo';
+
 function signedPhotoUrl(path: string) {
   return supabase.storage.from('profile-photos').createSignedUrl(path, 60 * 60);
 }
@@ -215,7 +217,23 @@ export default function HomeScreen() {
     universityName: profile.universityName,
   });
 
+  const captureHomeEntrypointSelected = (entrypoint: HomeEntrypoint) => {
+    analytics.register({ active_match_entry_point: entrypoint });
+    analytics.capture(ANALYTICS_EVENTS.home_entrypoint_selected, {
+      entry_point: entrypoint,
+      gender: profile.gender ?? 'unknown',
+      has_college_profile: hasCollegeProfile,
+      is_student: Boolean(profile.isStudent),
+      needs_paid_rematch: needsPaidRematch,
+      pass_count: profile.passCount,
+      rematch_restricted: rematchRestriction.restricted,
+      source: 'home',
+    });
+  };
+
   const startSolo = () => {
+    captureHomeEntrypointSelected('solo');
+
     if (!user?.id) {
       setQueueFailed(true);
       return;
@@ -233,14 +251,10 @@ export default function HomeScreen() {
 
     void (async () => {
       try {
-        analytics.capture(ANALYTICS_EVENTS.team_queue_registered, {
-          mode: 'solo',
-          source: 'home',
-        });
         if (await needsNotificationConsent(user.id)) {
           router.push({
             pathname: '/(app)/permission/notification',
-            params: { memberIds: user.id },
+            params: { entrypoint: 'solo', memberIds: user.id, mode: 'normal' },
           });
           return;
         }
@@ -253,17 +267,26 @@ export default function HomeScreen() {
         });
 
         const registration = await enqueueMatchQueue([user.id]);
+        analytics.capture(ANALYTICS_EVENTS.team_queue_registered, {
+          entry_point: 'solo',
+          member_count: 1,
+          mode: 'solo',
+          source: 'home',
+        });
         // 큐 등록 = 커밋 상태(한 사람당 1개 큐). 홈을 스택에서 제거(replace)해야
         // 뒤로가기 스와이프로 취소 없이 홈으로 빠져나가는 상태 불일치를 막는다.
         if (registration.freeRematchWaived) {
           router.replace({
             pathname: '/(app)/queue',
-            params: { notice: 'free-rematch' },
+            params: { entrypoint: 'solo', mode: 'normal', notice: 'free-rematch' },
           });
           return;
         }
 
-        router.replace(ROUTES.queue);
+        router.replace({
+          pathname: '/(app)/queue',
+          params: { entrypoint: 'solo', mode: 'normal' },
+        });
       } catch (error) {
         if (isMatchQueueErrorCode(error, 'REMATCH_RESTRICTED')) {
           router.push(ROUTES.booster);
@@ -291,6 +314,8 @@ export default function HomeScreen() {
   };
 
   const startTeam = () => {
+    captureHomeEntrypointSelected('friend');
+
     if (needsPaidRematch) {
       analytics.capture(ANALYTICS_EVENTS.rematch_restriction_evaluated, {
         gender: profile.gender,
@@ -302,19 +327,27 @@ export default function HomeScreen() {
     }
 
     analytics.capture(ANALYTICS_EVENTS.join_team_selected, {
+      entry_point: 'friend',
+      mode: 'team',
       source: 'home',
     });
-    router.push(ROUTES.teamNew);
+    router.push({
+      pathname: '/(app)/team/new',
+      params: { entrypoint: 'friend', mode: 'normal' },
+    });
   };
 
   const startCollegeTeam = () => {
+    captureHomeEntrypointSelected('college');
+
     analytics.capture(ANALYTICS_EVENTS.join_team_selected, {
+      entry_point: 'college',
       mode: 'college',
       source: 'home',
     });
     router.push({
       pathname: '/(app)/team/new',
-      params: { mode: 'college' },
+      params: { entrypoint: 'college', mode: 'college' },
     });
   };
 

@@ -20,9 +20,17 @@ type QueueState = {
 
 export default function QueueScreen() {
   const router = useRouter();
-  const { mode: rawMode, notice } = useLocalSearchParams<{ mode?: string; notice?: string }>();
+  const {
+    entrypoint: rawEntrypoint,
+    mode: rawMode,
+    notice,
+  } = useLocalSearchParams<{ entrypoint?: string; mode?: string; notice?: string }>();
   const mode = toMatchQueueMode(rawMode);
   const isCollegeMode = mode === 'college';
+  const entrypoint =
+    rawEntrypoint === 'college' || rawEntrypoint === 'friend' || rawEntrypoint === 'solo'
+      ? rawEntrypoint
+      : undefined;
   const { user } = useAuth();
   const [queue, setQueue] = useState<QueueState>(null);
   const [showFreeRematchNotice, setShowFreeRematchNotice] = useState(
@@ -126,7 +134,10 @@ export default function QueueScreen() {
       if (cancelled) {
         return;
       }
-      analytics.capture(ANALYTICS_EVENTS.room_matched, { room_id: roomId });
+      analytics.capture(ANALYTICS_EVENTS.room_matched, {
+        ...(entrypoint ? { entry_point: entrypoint, mode } : {}),
+        room_id: roomId,
+      });
       router.replace(roomRoutes.index(roomId));
     };
 
@@ -203,7 +214,7 @@ export default function QueueScreen() {
       cancelled = true;
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [router, user]);
+  }, [entrypoint, mode, router, user]);
 
   return (
     <MatchingWaitingView

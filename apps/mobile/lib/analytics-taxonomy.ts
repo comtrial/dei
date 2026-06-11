@@ -25,6 +25,7 @@ export const ANALYTICS_EVENTS = {
 
   // 홈·매칭 (happy-path)
   home_entered_waiting: 'S3:home_entered_waiting',
+  home_entrypoint_selected: 'S3:home_entrypoint_selected',
   join_team_selected: 'S3:join_team_selected',
   team_queue_registered: 'S3:team_queue_registered',
   match_cancel_confirm_shown: 'S3:match_cancel_confirm_shown',

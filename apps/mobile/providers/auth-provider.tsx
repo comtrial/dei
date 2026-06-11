@@ -102,7 +102,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const userId = session?.user.id;
     logger.setUser(userId ? { id: userId } : null);
-  }, [session?.user.id]);
+    if (userId) {
+      analytics.identify(userId, {
+        auth_state: session?.user.is_anonymous === true ? 'anonymous' : 'authenticated',
+      });
+    }
+  }, [session?.user.id, session?.user.is_anonymous]);
 
   useEffect(() => {
     const userId = session?.user.id;
