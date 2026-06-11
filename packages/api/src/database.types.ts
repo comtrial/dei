@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -292,6 +287,7 @@ export type Database = {
           gender: string | null
           id: string
           matched_at: string | null
+          mode: string
           region: string | null
           required_gender: string | null
           status: string
@@ -304,6 +300,7 @@ export type Database = {
           gender?: string | null
           id?: string
           matched_at?: string | null
+          mode?: string
           region?: string | null
           required_gender?: string | null
           status?: string
@@ -316,6 +313,7 @@ export type Database = {
           gender?: string | null
           id?: string
           matched_at?: string | null
+          mode?: string
           region?: string | null
           required_gender?: string | null
           status?: string
@@ -500,6 +498,7 @@ export type Database = {
           gender: string | null
           is_adult: boolean
           is_in_active_room: boolean
+          is_student: boolean
           last_room_leave_at: string | null
           mbti: string | null
           nickname: string | null
@@ -510,6 +509,7 @@ export type Database = {
           quiet_hours_end: number
           quiet_hours_start: number
           region: string | null
+          university_name: string | null
           updated_at: string
           user_id: string
         }
@@ -521,6 +521,7 @@ export type Database = {
           gender?: string | null
           is_adult?: boolean
           is_in_active_room?: boolean
+          is_student?: boolean
           last_room_leave_at?: string | null
           mbti?: string | null
           nickname?: string | null
@@ -531,6 +532,7 @@ export type Database = {
           quiet_hours_end?: number
           quiet_hours_start?: number
           region?: string | null
+          university_name?: string | null
           updated_at?: string
           user_id: string
         }
@@ -542,6 +544,7 @@ export type Database = {
           gender?: string | null
           is_adult?: boolean
           is_in_active_room?: boolean
+          is_student?: boolean
           last_room_leave_at?: string | null
           mbti?: string | null
           nickname?: string | null
@@ -552,6 +555,7 @@ export type Database = {
           quiet_hours_end?: number
           quiet_hours_start?: number
           region?: string | null
+          university_name?: string | null
           updated_at?: string
           user_id?: string
         }

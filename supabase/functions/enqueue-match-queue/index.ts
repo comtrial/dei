@@ -1,21 +1,26 @@
 import { POLICY } from '../../../packages/shared/src/policy.ts';
+import { toMatchQueueMode } from '../../../packages/shared/src/college.ts';
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
 import { captureEdgeError, captureEdgeMessage } from '../_shared/log.ts';
+import { getCollegeEligibilityFailure } from '../_shared/college-eligibility.ts';
 
 type EnqueueBody = {
   memberIds?: unknown;
+  mode?: unknown;
 };
 
 type ProfileRow = {
   gender: string | null;
   is_adult: boolean;
   is_in_active_room: boolean;
+  is_student: boolean | null;
   last_room_leave_at: string | null;
   nickname: string | null;
   onboarding_completed_at: string | null;
   photo_url: string | null;
   region: string | null;
+  university_name: string | null;
   user_id: string;
 };
 
@@ -148,6 +153,7 @@ Deno.serve(async (req) => {
     const { supabase, supabaseAsUser, user } = await getAuthenticatedUser(req);
     userId = user.id;
     const body = await req.json().catch(() => ({})) as EnqueueBody;
+    const mode = toMatchQueueMode(body.mode);
     const memberIds = toMemberIds(body, user.id);
     memberCount = memberIds.length;
 
@@ -260,7 +266,7 @@ Deno.serve(async (req) => {
 
     const { data: profiles, error: profilesError } = await supabase
       .from('profile')
-      .select('gender, is_adult, is_in_active_room, last_room_leave_at, nickname, onboarding_completed_at, photo_url, region, user_id')
+      .select('gender, is_adult, is_in_active_room, is_student, last_room_leave_at, nickname, onboarding_completed_at, photo_url, region, university_name, user_id')
       .in('user_id', memberIds);
 
     if (profilesError) {
@@ -287,6 +293,17 @@ Deno.serve(async (req) => {
 
     if (profileRows.some((profile) => profile.gender !== ownerProfile.gender)) {
       return errorResponse('같은 성별 친구만 묶음에 포함할 수 있어요.', 400, { code: 'GENDER_MISMATCH' });
+    }
+
+    const collegeEligibilityFailure = getCollegeEligibilityFailure(mode, profileRows, memberIds.length);
+    if (collegeEligibilityFailure) {
+      return errorResponse(
+        collegeEligibilityFailure === 'COLLEGE_TEAM_REQUIRED'
+          ? '과팅은 친구를 1명 이상 추가해야 시작할 수 있어요.'
+          : '과팅은 대학생 프로필을 완료한 친구만 참여할 수 있어요.',
+        403,
+        { code: collegeEligibilityFailure },
+      );
     }
 
     const rematchRestriction = getRematchRestriction(ownerProfile.last_room_leave_at);
@@ -377,6 +394,7 @@ Deno.serve(async (req) => {
         desired_size: memberIds.length,
         expires_at: expiresAt,
         gender: ownerProfile.gender,
+        mode,
         region: ownerProfile.region,
         required_gender: requiredGender,
         status: 'waiting',

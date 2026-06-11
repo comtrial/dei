@@ -36,6 +36,7 @@ jest.mock('@dei/shared', () => ({
     captureException: jest.fn(),
     captureMessage: jest.fn(),
   },
+  toMatchQueueMode: (value: unknown) => (value === 'college' ? 'college' : 'normal'),
 }));
 
 jest.mock('@/lib/supabase', () => ({

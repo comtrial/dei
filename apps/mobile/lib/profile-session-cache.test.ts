@@ -17,8 +17,10 @@ describe('profile-session-cache', () => {
       nickname: '수아',
     });
     const second = mergeCachedProfileSnapshot('user-1', {
+      isStudent: true,
       photoDisplayUrl: 'file:///profile.jpg',
       photoUrl: 'user-1/profile.jpg',
+      universityName: '한국대학교',
     });
 
     expect(first).toEqual({
@@ -28,9 +30,11 @@ describe('profile-session-cache', () => {
     });
     expect(second).toEqual({
       gender: 'female',
+      isStudent: true,
       nickname: '수아',
       photoDisplayUrl: 'file:///profile.jpg',
       photoUrl: 'user-1/profile.jpg',
+      universityName: '한국대학교',
       userId: 'user-1',
     });
 

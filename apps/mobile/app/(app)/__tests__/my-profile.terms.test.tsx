@@ -27,11 +27,21 @@ jest.mock('@/lib/permissions', () => ({
 
 jest.mock('@dei/shared', () => ({
   analytics: { capture: (...args: unknown[]) => mockAnalyticsCapture(...args) },
+  COLLEGE_UNIVERSITY_MAX_LENGTH: 80,
+  collegeProfileCompleted: ({
+    isStudent,
+    universityName,
+  }: {
+    isStudent?: boolean | null;
+    universityName?: string | null;
+  }) => Boolean(isStudent && universityName?.trim()),
   logger: {
     captureException: jest.fn(),
     captureMessage: jest.fn(),
     withErrorCapture: (_name: string, fn: () => Promise<unknown>) => fn(),
   },
+  normalizeUniversityName: (value?: string | null) =>
+    (value ?? '').trim().replace(/\s+/g, ' '),
   POLICY: {
     identity: { nicknameChangeThrottleDays: 30 },
     payment: { instantRematchProductId: 'booster_instant_rematch_v1' },

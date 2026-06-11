@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { logger } from '@dei/shared';
+import { logger, toMatchQueueMode } from '@dei/shared';
 import { AlertDialog, PermissionGate } from '@dei/ui';
 
 import { enqueueMatchQueue, isMatchQueueErrorCode } from '@/lib/matching';
@@ -21,8 +21,9 @@ function getErrorMessage(error: unknown) {
 
 export default function NotificationPermissionScreen() {
   const router = useRouter();
-  const { memberIds } = useLocalSearchParams<{ memberIds?: string }>();
+  const { memberIds, mode: rawMode } = useLocalSearchParams<{ memberIds?: string; mode?: string }>();
   const { user } = useAuth();
+  const mode = toMatchQueueMode(rawMode);
   const [isRequesting, setIsRequesting] = useState(false);
   const [queueFailed, setQueueFailed] = useState(false);
 
@@ -31,13 +32,16 @@ export default function NotificationPermissionScreen() {
     if (notice) {
       router.replace({
         pathname: '/(app)/queue',
-        params: { notice },
+        params: { mode, notice },
       });
       return;
     }
 
-    router.replace(ROUTES.queue);
-  }, [router]);
+    router.replace({
+      pathname: '/(app)/queue',
+      params: { mode },
+    });
+  }, [mode, router]);
   const completeRegistration = useCallback(async () => {
     const ids = memberIds
       ? memberIds.split(',').map((id) => id.trim()).filter(Boolean)
@@ -53,9 +57,9 @@ export default function NotificationPermissionScreen() {
       });
     }
 
-    const registration = await enqueueMatchQueue(ids);
+    const registration = await enqueueMatchQueue(ids, { mode });
     continueToQueue(registration.freeRematchWaived ? 'free-rematch' : undefined);
-  }, [continueToQueue, memberIds, user?.id]);
+  }, [continueToQueue, memberIds, mode, user?.id]);
 
   useEffect(() => {
     let mounted = true;

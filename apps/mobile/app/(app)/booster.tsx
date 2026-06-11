@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { analytics, getRematchRestriction, logger, POLICY } from '@dei/shared';
+import { analytics, getRematchRestriction, logger, POLICY, toMatchQueueMode } from '@dei/shared';
 import {
   AlertDialog,
   Badge,
@@ -28,7 +28,6 @@ import {
   type BoosterPackageOption,
   purchaseInstantRematchPackage,
 } from '@/lib/purchases';
-import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -59,8 +58,9 @@ function getErrorMessage(error: unknown) {
 
 export default function BoosterScreen() {
   const router = useRouter();
-  const { memberIds } = useLocalSearchParams<{ memberIds?: string }>();
+  const { memberIds, mode: rawMode } = useLocalSearchParams<{ memberIds?: string; mode?: string }>();
   const { user } = useAuth();
+  const mode = toMatchQueueMode(rawMode);
   const [selectedProductId, setSelectedProductId] = useState<PaymentPackId>(
     PAYMENT_PACKS[1]?.id ?? PAYMENT_PACKS[0].id,
   );
@@ -173,7 +173,10 @@ export default function BoosterScreen() {
     if (await needsNotificationConsent(user.id)) {
       router.replace({
         pathname: '/(app)/permission/notification',
-        params: { memberIds: queueMemberIds.length > 0 ? queueMemberIds.join(',') : user.id },
+        params: {
+          memberIds: queueMemberIds.length > 0 ? queueMemberIds.join(',') : user.id,
+          mode,
+        },
       });
       return;
     }
@@ -184,8 +187,11 @@ export default function BoosterScreen() {
         extra: { reason: getErrorMessage(error) },
       });
     });
-    await enqueueMatchQueue(queueMemberIds);
-    router.replace(ROUTES.queue);
+    await enqueueMatchQueue(queueMemberIds, { mode });
+    router.replace({
+      pathname: '/(app)/queue',
+      params: { mode },
+    });
   };
 
   const handlePay = () => {

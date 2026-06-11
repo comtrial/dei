@@ -19,11 +19,14 @@ jest.mock('expo-location', () => ({
 
 jest.mock('@dei/shared', () => ({
   analytics: { capture: (...args: unknown[]) => mockAnalyticsCapture(...args) },
+  COLLEGE_UNIVERSITY_MAX_LENGTH: 80,
   logger: {
     captureException: jest.fn(),
     withErrorCapture: jest.fn((_name: string, fn: () => unknown) => Promise.resolve(fn())),
     addBreadcrumb: jest.fn(),
   },
+  normalizeUniversityName: (value?: string | null) =>
+    (value ?? '').trim().replace(/\s+/g, ' '),
   POLICY: {
     payment: { instantRematchProductId: 'instant-rematch' },
   },
@@ -79,8 +82,38 @@ jest.mock('@dei/ui', () => {
         mockReactModule.createElement(mockRN.Text, null, children),
       ),
     ChoiceList: () => null,
+    Input: ({
+      onChangeText,
+      testID,
+      value,
+    }: {
+      onChangeText?: (value: string) => void;
+      testID?: string;
+      value?: string;
+    }) =>
+      mockReactModule.createElement(mockRN.TextInput, {
+        onChangeText,
+        testID,
+        value,
+      }),
     ProgressBar: () => null,
     Select: () => null,
+    SettingsRow: ({
+      label,
+      onPress,
+      onToggleChange,
+      toggleValue,
+    }: {
+      label?: string;
+      onPress?: () => void;
+      onToggleChange?: (value: boolean) => void;
+      toggleValue?: boolean;
+    }) =>
+      mockReactModule.createElement(
+        mockRN.TouchableOpacity,
+        { onPress: onPress ?? (() => onToggleChange?.(!toggleValue)) },
+        mockReactModule.createElement(mockRN.Text, null, label),
+      ),
     Text: ({ children }: { children?: unknown }) => children ?? null,
     TopNav: () => null,
   };
@@ -116,6 +149,42 @@ describe('ProfileStep3Screen — onboarding_completed 계측', () => {
 
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalled();
+    });
+  });
+
+  it('기본 완료 시 미재학 상태와 null 대학명을 저장한다', async () => {
+    const { supabase } = jest.requireMock('@/lib/supabase');
+
+    render(<ProfileStep3Screen />);
+
+    fireEvent.press(screen.getByTestId('onboarding-step3-finish'));
+
+    await waitFor(() => {
+      expect(supabase._updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          is_student: false,
+          university_name: null,
+        }),
+      );
+    });
+  });
+
+  it('재학중으로 켜고 대학명을 입력하면 공백을 정리해서 저장한다', async () => {
+    const { supabase } = jest.requireMock('@/lib/supabase');
+
+    render(<ProfileStep3Screen />);
+
+    fireEvent.press(screen.getByText('재학중'));
+    fireEvent.changeText(screen.getByTestId('onboarding-step3-university'), '  한국   대학교  ');
+    fireEvent.press(screen.getByTestId('onboarding-step3-finish'));
+
+    await waitFor(() => {
+      expect(supabase._updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          is_student: true,
+          university_name: '한국 대학교',
+        }),
+      );
     });
   });
 });
