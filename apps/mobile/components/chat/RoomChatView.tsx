@@ -87,12 +87,13 @@ function formatChatTime(createdAt: string): string | null {
   const date = new Date(createdAt);
   if (Number.isNaN(date.getTime())) return null;
 
-  return date.toLocaleTimeString('ko-KR', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZone: 'Asia/Seoul',
-  });
+  const kstDate = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const hour24 = kstDate.getUTCHours();
+  const hour12 = hour24 % 12 || 12;
+  const minute = String(kstDate.getUTCMinutes()).padStart(2, '0');
+  const period = hour24 < 12 ? '오전' : '오후';
+
+  return `${period} ${hour12}:${minute}`;
 }
 
 export function RoomChatView(props: RoomChatViewProps) {
