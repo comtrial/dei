@@ -56,15 +56,15 @@ jest.mock('@dei/ui', () => {
         ))}
       </View>
     ),
-    SlideToConfirm: ({
+    Button: ({
+      children,
       disabled,
-      label,
-      onConfirm,
+      onPress,
       testID,
     }: {
+      children?: React.ReactNode;
       disabled?: boolean;
-      label?: string;
-      onConfirm?: () => void;
+      onPress?: () => void;
       testID?: string;
     }) => (
       <Pressable
@@ -72,9 +72,9 @@ jest.mock('@dei/ui', () => {
         accessibilityState={{ disabled }}
         disabled={disabled}
         testID={testID}
-        onPress={onConfirm}
+        onPress={onPress}
       >
-        <Text>{label ?? '밀어서 방 나가기'}</Text>
+        <Text>{children}</Text>
       </Pressable>
     ),
     Text: ({ children }: { children?: React.ReactNode }) => <Text>{children}</Text>,
@@ -99,15 +99,15 @@ describe('RoomLeaveConfirmScreen', () => {
     mockInvoke.mockResolvedValue({ error: null });
   });
 
-  it('uses slide confirm for leaving and calls the existing leave-room function', async () => {
+  it('uses a button for leaving and calls the existing leave-room function', async () => {
     render(<RoomLeaveConfirmScreen />);
 
-    const slide = screen.getByTestId('room-leave-slide-confirm');
-    expect(slide.props.accessibilityState?.disabled).toBe(true);
-    expect(screen.getByText('밀어서 방 나가기')).toBeTruthy();
+    const leaveButton = screen.getByTestId('room-leave-submit');
+    expect(leaveButton.props.accessibilityState?.disabled).toBe(true);
+    expect(screen.getByText('방 나가기')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('leave-reason-mood'));
-    fireEvent.press(slide);
+    fireEvent.press(leaveButton);
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('leave-room', {

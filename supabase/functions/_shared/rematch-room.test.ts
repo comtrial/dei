@@ -2,13 +2,13 @@ import { assertEquals } from 'jsr:@std/assert';
 
 import { getRoomRematchCooldownAnchor } from './rematch-room.ts';
 
-Deno.test('room rematch cooldown starts from room creation, not leave time', () => {
+Deno.test('room rematch cooldown starts from leave time, not room creation', () => {
   assertEquals(
     getRoomRematchCooldownAnchor(
       '2026-06-01T00:00:00.000Z',
       '2026-06-02T01:00:00.000Z',
     ),
-    '2026-06-01T00:00:00.000Z',
+    '2026-06-02T01:00:00.000Z',
   );
 });
 
