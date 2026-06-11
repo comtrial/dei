@@ -4,15 +4,22 @@ import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { analytics, logger } from '@dei/shared';
+import {
+  analytics,
+  COLLEGE_UNIVERSITY_MAX_LENGTH,
+  logger,
+  normalizeUniversityName,
+} from '@dei/shared';
 import {
   AlertDialog,
   BottomSheet,
   BottomActionBar,
   Button,
   ChoiceList,
+  Input,
   ProgressBar,
   Select,
+  SettingsRow,
   Text,
   TopNav,
 } from '@dei/ui';
@@ -67,6 +74,8 @@ function inferRegionFromAddress(address?: Location.LocationGeocodedAddress) {
 export default function ProfilePreferenceStepScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const [isStudent, setIsStudent] = useState(false);
+  const [universityName, setUniversityName] = useState('');
   const [mbti, setMbti] = useState('');
   const [region, setRegion] = useState('');
   const [picker, setPicker] = useState<Picker>(null);
@@ -132,15 +141,18 @@ export default function ProfilePreferenceStepScreen() {
       'onboarding.step3.save',
       async () => {
         setIsSaving(true);
+        const normalizedUniversityName = normalizeUniversityName(universityName);
 
         if (user) {
           const completedAt = new Date().toISOString();
           const { error } = await supabase
             .from('profile')
             .update({
+              is_student: isStudent,
               mbti: mbti || null,
               onboarding_completed_at: completedAt,
               region: region || null,
+              university_name: isStudent ? normalizedUniversityName || null : null,
             })
             .eq('user_id', user.id);
 
@@ -149,13 +161,16 @@ export default function ProfilePreferenceStepScreen() {
           }
 
           mergeCachedProfileSnapshot(user.id, {
+            isStudent,
             mbti: mbti || null,
             onboardingCompletedAt: completedAt,
             region: region || null,
+            universityName: isStudent ? normalizedUniversityName || null : null,
           });
         }
 
         analytics.capture(ANALYTICS_EVENTS.profile_step_completed, {
+          college_profile_completed: isStudent && normalizedUniversityName.length > 0,
           mbti: mbti || 'unknown',
           region,
           step: 3,
@@ -194,6 +209,36 @@ export default function ProfilePreferenceStepScreen() {
             <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
               비워둬도 괜찮아요. 나중에 채울 수 있어요.
             </Text>
+          </View>
+
+          <View className="mt-[30px]">
+            <Text variant="eyebrow" tone="ink-3">
+              대학생 프로필 <Text tone="ink-4">선택</Text>
+            </Text>
+            <View className="mt-[8px] overflow-hidden rounded-md bg-paper">
+              <SettingsRow
+                variant="master"
+                label="재학중"
+                value="켜두면 과팅 팀에 참여할 수 있어요"
+                toggleValue={isStudent}
+                onPress={() => setIsStudent((current) => !current)}
+                onToggleChange={setIsStudent}
+                className="px-[14px]"
+              />
+            </View>
+            {isStudent ? (
+              <Input
+                value={universityName}
+                onChangeText={setUniversityName}
+                label="대학교"
+                labelAccessory={`${normalizeUniversityName(universityName).length} / ${COLLEGE_UNIVERSITY_MAX_LENGTH}`}
+                placeholder="학교명을 입력해주세요"
+                helper="자가 입력만으로 충분해요. 학교 이메일 인증은 하지 않아요."
+                maxLength={COLLEGE_UNIVERSITY_MAX_LENGTH}
+                className="mt-[12px]"
+                testID="onboarding-step3-university"
+              />
+            ) : null}
           </View>
 
           <View className="mt-[30px]">

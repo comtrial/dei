@@ -2,7 +2,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { BackHandler } from 'react-native';
 
-import { analytics, logger } from '@dei/shared';
+import { analytics, logger, toMatchQueueMode } from '@dei/shared';
 
 import { MatchingWaitingView } from '@/components/matching/MatchingWaitingView';
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
@@ -20,7 +20,9 @@ type QueueState = {
 
 export default function QueueScreen() {
   const router = useRouter();
-  const { notice } = useLocalSearchParams<{ notice?: string }>();
+  const { mode: rawMode, notice } = useLocalSearchParams<{ mode?: string; notice?: string }>();
+  const mode = toMatchQueueMode(rawMode);
+  const isCollegeMode = mode === 'college';
   const { user } = useAuth();
   const [queue, setQueue] = useState<QueueState>(null);
   const [showFreeRematchNotice, setShowFreeRematchNotice] = useState(
@@ -212,7 +214,7 @@ export default function QueueScreen() {
       cardLabel="평균 대기 시간"
       cardValue={queue ? '2 ~ 6 시간' : '확인 중'}
       description={`앱을 닫아도 매칭되면\n알림으로 알려드려요.`}
-      title={`곧 만날 사람들을\n찾고 있어요`}
+      title={isCollegeMode ? `같이 만날 팀을\n찾고 있어요` : `곧 만날 사람들을\n찾고 있어요`}
       toast={showFreeRematchNotice ? '바로 매칭 시작할게요' : null}
     />
   );

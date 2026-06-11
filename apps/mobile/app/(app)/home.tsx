@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
-import { ChevronRight, UserRound, Users } from 'lucide-react-native';
+import { ChevronRight, GraduationCap, UserRound, Users } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   analytics,
+  collegeProfileCompleted,
   formatRematchCountdown,
   getRematchRestriction,
   logger,
@@ -33,12 +34,14 @@ import { useAuth } from '@/providers/auth-provider';
 type HomeProfile = {
   birthYear: number | null;
   gender: string | null;
+  isStudent: boolean | null;
   lastRoomLeaveAt: string | null;
   nickname: string | null;
   passCount: number;
   photoDisplayUrl: string | null;
   photoUrl: string | null;
   region: string | null;
+  universityName: string | null;
 };
 
 function signedPhotoUrl(path: string) {
@@ -57,12 +60,14 @@ export default function HomeScreen() {
   const [profile, setProfile] = useState<HomeProfile>({
     birthYear: null,
     gender: null,
+    isStudent: null,
     lastRoomLeaveAt: null,
     nickname: null,
     passCount: 0,
     photoDisplayUrl: null,
     photoUrl: null,
     region: null,
+    universityName: null,
   });
 
   useEffect(() => {
@@ -73,12 +78,14 @@ export default function HomeScreen() {
       ...current,
       birthYear: cached.birthYear ?? current.birthYear,
       gender: cached.gender ?? current.gender,
+      isStudent: cached.isStudent ?? current.isStudent,
       lastRoomLeaveAt: cached.lastRoomLeaveAt ?? current.lastRoomLeaveAt,
       nickname: cached.nickname ?? current.nickname,
       passCount: cached.passCount ?? current.passCount,
       photoDisplayUrl: cached.photoDisplayUrl ?? current.photoDisplayUrl,
       photoUrl: cached.photoUrl ?? current.photoUrl,
       region: cached.region ?? current.region,
+      universityName: cached.universityName ?? current.universityName,
     }));
     if (cached.photoDisplayUrl) {
       setPhotoImageFailed(false);
@@ -103,7 +110,7 @@ export default function HomeScreen() {
           await Promise.all([
             supabase
               .from('profile')
-              .select('birth_year, gender, is_adult, last_room_leave_at, nickname, onboarding_completed_at, photo_url, region')
+              .select('birth_year, gender, is_adult, is_student, last_room_leave_at, nickname, onboarding_completed_at, photo_url, region, university_name')
               .eq('user_id', user.id)
               .maybeSingle(),
             supabase
@@ -175,12 +182,14 @@ export default function HomeScreen() {
         const nextProfile = {
           birthYear: routedProfile.birth_year,
           gender: routedProfile.gender ?? null,
+          isStudent: routedProfile.is_student ?? null,
           lastRoomLeaveAt: routedProfile.last_room_leave_at,
           nickname: routedProfile.nickname ?? null,
           passCount: passes?.reduce((sum, pass) => sum + pass.remaining, 0) ?? 0,
           photoDisplayUrl,
           photoUrl: routedProfile.photo_url ?? null,
           region: routedProfile.region ?? null,
+          universityName: routedProfile.university_name ?? null,
         };
 
         setProfile(nextProfile);
@@ -201,6 +210,10 @@ export default function HomeScreen() {
         ? `잔여 바로 매치 ${profile.passCount}회를 사용할 수 있어요`
         : '바로 매칭하려면 "바로 매치" 사용';
   const photoDisplayUrl = photoImageFailed ? null : profile.photoDisplayUrl;
+  const hasCollegeProfile = collegeProfileCompleted({
+    isStudent: profile.isStudent,
+    universityName: profile.universityName,
+  });
 
   const startSolo = () => {
     if (!user?.id) {
@@ -294,6 +307,17 @@ export default function HomeScreen() {
     router.push(ROUTES.teamNew);
   };
 
+  const startCollegeTeam = () => {
+    analytics.capture(ANALYTICS_EVENTS.join_team_selected, {
+      mode: 'college',
+      source: 'home',
+    });
+    router.push({
+      pathname: '/(app)/team/new',
+      params: { mode: 'college' },
+    });
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
       <View className="flex-1 px-[24px] pb-[32px] pt-[18px]">
@@ -358,6 +382,37 @@ export default function HomeScreen() {
         ) : null}
 
         <View className={`${rematchRestriction.restricted ? 'mt-[24px]' : 'mt-[34px]'} gap-[12px]`}>
+          {hasCollegeProfile ? (
+            <>
+              <Banner
+                tone="info"
+                icon="✓"
+                title="대학생 프로필 완료"
+              >
+                과팅 팀에 참여할 수 있어요
+              </Banner>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="대학생 과팅"
+                onPress={startCollegeTeam}
+              >
+                <Card variant="cta-entry">
+                  <View className="h-[42px] w-[42px] items-center justify-center rounded-full bg-info-soft">
+                    <GraduationCap color={color.info} size={18} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-[16px] font-extrabold text-ink">대학생 과팅</Text>
+                    <Text className="mt-[3px] text-[14.5px] leading-[18px] text-ink-3">
+                      대학생 프로필을 가진 친구들과 팀으로 참여해요
+                    </Text>
+                  </View>
+                  <ChevronRight color={color['ink-4']} size={18} />
+                </Card>
+              </Pressable>
+            </>
+          ) : null}
+
           <Pressable accessibilityRole="button" onPress={startSolo}>
             <Card variant="cta-entry">
               <View className="h-[42px] w-[42px] items-center justify-center rounded-full bg-accent-soft">

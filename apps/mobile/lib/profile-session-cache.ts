@@ -3,6 +3,7 @@ export type ProfileSessionSnapshot = {
   birthDate?: string | null;
   birthYear?: number | null;
   gender?: string | null;
+  isStudent?: boolean | null;
   lastRoomLeaveAt?: string | null;
   mbti?: string | null;
   nickname?: string | null;
@@ -13,6 +14,7 @@ export type ProfileSessionSnapshot = {
   photoDisplayUrl?: string | null;
   photoUrl?: string | null;
   region?: string | null;
+  universityName?: string | null;
   userId: string;
 };
 

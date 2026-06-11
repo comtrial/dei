@@ -1,4 +1,4 @@
-import { logger } from '@dei/shared';
+import { logger, type MatchQueueMode } from '@dei/shared';
 
 import { supabase } from '@/lib/supabase';
 
@@ -11,6 +11,10 @@ type FunctionErrorPayload = {
   code?: string;
   error?: string;
   message?: string;
+};
+
+type EnqueueMatchQueueOptions = {
+  mode?: MatchQueueMode;
 };
 
 export type MatchQueueRegistration = {
@@ -60,11 +64,14 @@ async function toFunctionError(fallback: string, error?: FunctionInvokeError | n
   return new MatchQueueError(error?.message || fallback);
 }
 
-export async function enqueueMatchQueue(memberIds: string[] = []) {
+export async function enqueueMatchQueue(
+  memberIds: string[] = [],
+  options: EnqueueMatchQueueOptions = {},
+) {
   const { data, error } = await supabase.functions.invoke<MatchQueueRegistration>(
     'enqueue-match-queue',
     {
-      body: { memberIds },
+      body: { memberIds, mode: options.mode ?? 'normal' },
     },
   );
 

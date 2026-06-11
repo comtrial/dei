@@ -64,6 +64,7 @@ jest.mock('@dei/shared', () => ({
     captureMessage: jest.fn(),
   },
   getRematchRestriction: () => ({ restricted: true, remainingMs: 1000 }),
+  toMatchQueueMode: (value: unknown) => (value === 'college' ? 'college' : 'normal'),
   POLICY: {
     matching: { rematchCooldownHours: 12 },
     // b-flow(requireActual) 가 PAYMENT_PACKS id 를 만들 때 사용.

@@ -4,7 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { analytics, logger, POLICY } from '@dei/shared';
+import {
+  analytics,
+  COLLEGE_UNIVERSITY_MAX_LENGTH,
+  collegeProfileCompleted,
+  logger,
+  normalizeUniversityName,
+  POLICY,
+} from '@dei/shared';
 import {
   AlertDialog,
   Banner,
@@ -54,6 +61,7 @@ type ProfileState = {
   birthDate: string | null;
   birthYear: number | null;
   gender: string | null;
+  isStudent: boolean | null;
   mbti: string | null;
   nickname: string | null;
   nicknameChangedAt: string | null;
@@ -62,17 +70,31 @@ type ProfileState = {
   photoDisplayUrl: string | null;
   photoUrl: string | null;
   region: string | null;
+  universityName: string | null;
 };
 
-type ProfileDraft = Pick<ProfileState, 'bio' | 'gender' | 'mbti' | 'nickname' | 'region'>;
-type ProfileEditor = 'bio' | 'gender' | 'mbti' | 'nickname' | 'region' | null;
+type ProfileDraft = Pick<
+  ProfileState,
+  'bio' | 'gender' | 'isStudent' | 'mbti' | 'nickname' | 'region' | 'universityName'
+>;
+type ProfileEditor =
+  | 'bio'
+  | 'gender'
+  | 'mbti'
+  | 'nickname'
+  | 'region'
+  | 'student'
+  | 'university'
+  | null;
 
 const EMPTY_DRAFT: ProfileDraft = {
   bio: null,
   gender: null,
+  isStudent: false,
   mbti: null,
   nickname: null,
   region: null,
+  universityName: null,
 };
 
 function extensionForMimeType(mimeType: string) {
@@ -154,6 +176,7 @@ export default function MyProfileScreen() {
     birthDate: null,
     birthYear: null,
     gender: null,
+    isStudent: null,
     mbti: null,
     nickname: null,
     nicknameChangedAt: null,
@@ -162,6 +185,7 @@ export default function MyProfileScreen() {
     photoDisplayUrl: null,
     photoUrl: null,
     region: null,
+    universityName: null,
   });
 
   useEffect(() => {
@@ -174,6 +198,7 @@ export default function MyProfileScreen() {
       birthDate: cached.birthDate ?? current.birthDate,
       birthYear: cached.birthYear ?? current.birthYear,
       gender: cached.gender ?? current.gender,
+      isStudent: cached.isStudent ?? current.isStudent,
       mbti: cached.mbti ?? current.mbti,
       nickname: cached.nickname ?? current.nickname,
       nicknameChangedAt: cached.nicknameChangedAt ?? current.nicknameChangedAt,
@@ -182,14 +207,17 @@ export default function MyProfileScreen() {
       photoDisplayUrl: cached.photoDisplayUrl ?? current.photoDisplayUrl,
       photoUrl: cached.photoUrl ?? current.photoUrl,
       region: cached.region ?? current.region,
+      universityName: cached.universityName ?? current.universityName,
     }));
     setDraft((current) => ({
       ...current,
       bio: cached.bio ?? current.bio,
       gender: cached.gender ?? current.gender,
+      isStudent: cached.isStudent ?? current.isStudent,
       mbti: cached.mbti ?? current.mbti,
       nickname: cached.nickname ?? current.nickname,
       region: cached.region ?? current.region,
+      universityName: cached.universityName ?? current.universityName,
     }));
     if (cached.photoDisplayUrl) {
       setPhotoImageFailed(false);
@@ -215,7 +243,7 @@ export default function MyProfileScreen() {
             supabase
               .from('profile')
               .select(
-                'bio, birth_date, birth_year, gender, is_adult, mbti, nickname, nickname_changed_at, photo_url, region',
+                'bio, birth_date, birth_year, gender, is_adult, is_student, mbti, nickname, nickname_changed_at, photo_url, region, university_name',
               )
               .eq('user_id', user.id)
               .maybeSingle(),
@@ -276,6 +304,7 @@ export default function MyProfileScreen() {
           birthDate: resolvedProfile.birth_date ?? null,
           birthYear: resolvedProfile.birth_year,
           gender: resolvedProfile.gender ?? null,
+          isStudent: resolvedProfile.is_student ?? null,
           mbti: resolvedProfile.mbti ?? null,
           nickname: resolvedProfile.nickname ?? null,
           nicknameChangedAt: resolvedProfile.nickname_changed_at ?? null,
@@ -284,6 +313,7 @@ export default function MyProfileScreen() {
           photoDisplayUrl,
           photoUrl: resolvedProfile.photo_url ?? null,
           region: resolvedProfile.region ?? null,
+          universityName: resolvedProfile.university_name ?? null,
         };
 
         setProfile(nextProfile);
@@ -292,9 +322,11 @@ export default function MyProfileScreen() {
         setDraft({
           bio: nextProfile.bio,
           gender: nextProfile.gender,
+          isStudent: nextProfile.isStudent,
           mbti: nextProfile.mbti,
           nickname: nextProfile.nickname,
           region: nextProfile.region,
+          universityName: nextProfile.universityName,
         });
       },
       { tags: { screen: 'my-profile', action: 'load' } },
@@ -319,18 +351,33 @@ export default function MyProfileScreen() {
       : nicknameValidation.state === 'invalid'
         ? `✗ ${nicknameValidation.message}`
         : nicknameValidation.message;
+  const normalizedDraftUniversityName = normalizeUniversityName(draft.universityName);
+  const normalizedProfileUniversityName = normalizeUniversityName(profile.universityName);
+  const collegeProfileValid =
+    !draft.isStudent
+    || collegeProfileCompleted({
+      isStudent: draft.isStudent,
+      universityName: draft.universityName,
+    });
   const hasProfileChanges =
     normalizedNullable(draft.nickname) !== normalizedNullable(profile.nickname)
     || trimmedNullable(draft.bio) !== trimmedNullable(profile.bio)
     || (draft.gender ?? null) !== (profile.gender ?? null)
+    || Boolean(draft.isStudent) !== Boolean(profile.isStudent)
     || (draft.mbti ?? null) !== (profile.mbti ?? null)
-    || (draft.region ?? null) !== (profile.region ?? null);
+    || (draft.region ?? null) !== (profile.region ?? null)
+    || normalizedDraftUniversityName !== normalizedProfileUniversityName;
   const nicknameChanged =
     normalizedNullable(draft.nickname) !== normalizedNullable(profile.nickname);
   const canSave =
     hasProfileChanges
     && !isSaving
+    && collegeProfileValid
     && (!nicknameChanged || (!nicknameChangeLocked && nicknameValidation.state === 'valid'));
+  const universityHelper =
+    draft.isStudent
+      ? '과팅 팀에 참여하려면 현재 재학중인 학교명을 입력해주세요.'
+      : '재학중을 끄면 과팅 진입점은 보이지 않아요.';
   const displayedProfile = useMemo(
     () => ({
       ...profile,
@@ -338,6 +385,10 @@ export default function MyProfileScreen() {
     }),
     [draft, profile],
   );
+  const collegeProfileReady = collegeProfileCompleted({
+    isStudent: displayedProfile.isStudent,
+    universityName: displayedProfile.universityName,
+  });
 
   const openNicknameEditor = () => {
     if (nicknameChangeLocked) {
@@ -384,15 +435,18 @@ export default function MyProfileScreen() {
         }
 
         const changedAt = nicknameChanged ? new Date().toISOString() : profile.nicknameChangedAt;
+        const nextUniversityName = normalizeUniversityName(draft.universityName);
         const { error } = await supabase
           .from('profile')
           .update({
             bio: trimmedNullable(draft.bio),
             gender: draft.gender || null,
+            is_student: Boolean(draft.isStudent),
             mbti: draft.mbti || null,
             nickname: nextNickname,
             ...(nicknameChanged ? { nickname_changed_at: changedAt } : {}),
             region: draft.region || null,
+            university_name: draft.isStudent ? nextUniversityName || null : null,
           })
           .eq('user_id', user.id);
 
@@ -404,18 +458,22 @@ export default function MyProfileScreen() {
           ...current,
           bio: trimmedNullable(draft.bio),
           gender: draft.gender || null,
+          isStudent: Boolean(draft.isStudent),
           mbti: draft.mbti || null,
           nickname: nextNickname,
           nicknameChangedAt: changedAt,
           region: draft.region || null,
+          universityName: draft.isStudent ? nextUniversityName || null : null,
         }));
         mergeCachedProfileSnapshot(user.id, {
           bio: trimmedNullable(draft.bio),
           gender: draft.gender || null,
+          isStudent: Boolean(draft.isStudent),
           mbti: draft.mbti || null,
           nickname: nextNickname,
           nicknameChangedAt: changedAt,
           region: draft.region || null,
+          universityName: draft.isStudent ? nextUniversityName || null : null,
         });
         setSaveSucceeded(true);
       },
@@ -567,6 +625,38 @@ export default function MyProfileScreen() {
 
             <View className="mt-[26px]">
               <Text variant="eyebrow" tone="ink-3" className="px-[2px] pb-[8px]">
+                대학생 프로필
+              </Text>
+              <SettingsRow
+                label="재학중"
+                value={displayedProfile.isStudent ? '켬' : '끔'}
+                onPress={() => setEditor('student')}
+                className="px-0"
+              />
+              <SettingsRow
+                label="대학교"
+                value={displayedProfile.universityName ?? '미입력'}
+                onPress={() => setEditor('university')}
+                className="px-0"
+              />
+              {collegeProfileReady ? (
+                <Banner
+                  tone="info"
+                  icon="✓"
+                  title="대학생 프로필 완료"
+                  className="mt-[12px]"
+                >
+                  과팅 팀에 참여할 수 있어요
+                </Banner>
+              ) : displayedProfile.isStudent ? (
+                <Banner tone="warn" icon="!" title="학교명을 입력해주세요" className="mt-[12px]">
+                  과팅 팀에 참여하려면 대학교가 필요해요.
+                </Banner>
+              ) : null}
+            </View>
+
+            <View className="mt-[26px]">
+              <Text variant="eyebrow" tone="ink-3" className="px-[2px] pb-[8px]">
                 프로필
               </Text>
               <SettingsRow
@@ -679,7 +769,13 @@ export default function MyProfileScreen() {
       <BottomSheet
         visible={editor !== null}
         onClose={() => setEditor(null)}
-        heightPct={editor === 'bio' ? 48 : editor === 'nickname' || editor === 'gender' ? 42 : 62}
+        heightPct={
+          editor === 'bio' || editor === 'university'
+            ? 48
+            : editor === 'nickname' || editor === 'gender' || editor === 'student'
+              ? 42
+              : 62
+        }
       >
         <View className="flex-1 px-[24px] pb-[18px] pt-[10px]">
           <Text variant="h2">
@@ -689,9 +785,13 @@ export default function MyProfileScreen() {
                   ? '한 줄 자기소개'
                   : editor === 'gender'
                     ? '성별 선택'
-                    : editor === 'mbti'
-                      ? 'MBTI 선택'
-                      : '지역 선택'}
+                    : editor === 'student'
+                      ? '재학 상태'
+                      : editor === 'university'
+                        ? '대학교'
+                        : editor === 'mbti'
+                          ? 'MBTI 선택'
+                          : '지역 선택'}
           </Text>
 
           {editor === 'nickname' ? (
@@ -731,6 +831,39 @@ export default function MyProfileScreen() {
                 options={GENDER_OPTIONS}
               />
             </View>
+          ) : null}
+
+          {editor === 'student' ? (
+            <View className="mt-[18px]">
+              <ChoiceList
+                tone="accent"
+                value={draft.isStudent ? 'student' : 'not-student'}
+                onChange={(value) => {
+                  setDraft((current) => ({
+                    ...current,
+                    isStudent: value === 'student',
+                    universityName: value === 'student' ? current.universityName : null,
+                  }));
+                }}
+                options={[
+                  { label: '재학중', value: 'student' },
+                  { label: '재학중 아님', value: 'not-student' },
+                ]}
+              />
+            </View>
+          ) : null}
+
+          {editor === 'university' ? (
+            <Input
+              value={draft.universityName ?? ''}
+              onChangeText={(value) => setDraft((current) => ({ ...current, universityName: value }))}
+              label="대학교"
+              labelAccessory={`${normalizeUniversityName(draft.universityName).length} / ${COLLEGE_UNIVERSITY_MAX_LENGTH}`}
+              helper={universityHelper}
+              maxLength={COLLEGE_UNIVERSITY_MAX_LENGTH}
+              placeholder="학교명을 입력해주세요"
+              className="mt-[20px]"
+            />
           ) : null}
 
           {editor === 'mbti' ? (
