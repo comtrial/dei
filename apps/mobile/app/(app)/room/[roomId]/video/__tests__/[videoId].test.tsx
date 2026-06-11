@@ -68,6 +68,8 @@ const mockPlayer = {
   play: jest.fn(),
   pause: jest.fn(),
   replaceAsync: jest.fn().mockResolvedValue(undefined),
+  availableVideoTracks: [],
+  addListener: jest.fn(() => ({ remove: jest.fn() })),
 };
 
 jest.mock('expo-video', () => ({

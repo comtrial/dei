@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer } from 'expo-video';
 import { useEvent } from 'expo';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Volume2, VolumeX } from 'lucide-react-native';
@@ -20,6 +20,7 @@ import { analytics, logger } from '@dei/shared';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { uploadClip } from '@/lib/video';
+import { LandscapeFitVideo } from '@/components/landscape-fit-video';
 
 export default function UploadPreviewScreen() {
   const router = useRouter();
@@ -167,13 +168,14 @@ export default function UploadPreviewScreen() {
         onClose={uploading ? undefined : handleClose}
       >
         {localUri ? (
-          <VideoView
-            testID="preview-video"
-            player={player}
-            contentFit="contain"
-            nativeControls={false}
-            style={StyleSheet.absoluteFillObject}
-          />
+          <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}>
+            <LandscapeFitVideo
+              testID="preview-video"
+              player={player}
+              uri={localUri}
+              nativeControls={false}
+            />
+          </View>
         ) : null}
       </FullscreenVideo>
 
