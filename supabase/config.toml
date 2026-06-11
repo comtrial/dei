@@ -16,6 +16,13 @@ extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
 # for accidental or malicious requests.
 max_rows = 1000
+# Supabase CLI v2.106.0 (2026-06-11) breaking change: 이 값을 명시하지 않으면 false 로
+# resolve 돼 `supabase start` 시 public 의 모든 신규 테이블/시퀀스/함수 Data API
+# 권한이 revoke 됨 → integration 테스트의 service_role 도 profile update 불가
+# (permission denied). 2026-10-30 까지 한시적으로 true 명시. 그 전까지 각 객체에
+# 명시 GRANT 추가하는 migration 으로 전환 예정.
+# Ref: https://github.com/supabase/cli/releases/tag/v2.106.0
+auto_expose_new_tables = true
 
 [api.tls]
 # Enable HTTPS endpoints locally using a self-signed certificate.
