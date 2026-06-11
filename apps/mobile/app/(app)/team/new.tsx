@@ -36,6 +36,7 @@ import { useAuth } from '@/providers/auth-provider';
 type SearchMember = {
   blocked: boolean;
   busy: boolean;
+  gender: string | null;
   id: string;
   initial: string;
   collegeEligible: boolean;
@@ -46,6 +47,7 @@ const SELF_MEMBER: SearchMember = {
   blocked: false,
   busy: false,
   collegeEligible: false,
+  gender: null,
   id: 'self',
   initial: '나',
   nickname: '나',
@@ -57,7 +59,7 @@ function getErrorMessage(error: unknown) {
 
 type SearchProfile = Pick<
   Tables<'profile'>,
-  'is_in_active_room' | 'is_student' | 'nickname' | 'university_name' | 'user_id'
+  'gender' | 'is_in_active_room' | 'is_student' | 'nickname' | 'university_name' | 'user_id'
 >;
 
 export default function TeamNewScreen() {
@@ -88,7 +90,7 @@ export default function TeamNewScreen() {
       async () => {
         const { data, error } = await supabase
           .from('profile')
-          .select('is_student, nickname, university_name')
+          .select('gender, is_student, nickname, university_name')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -105,6 +107,7 @@ export default function TeamNewScreen() {
                     isStudent: data?.is_student,
                     universityName: data?.university_name,
                   }),
+                  gender: data?.gender ?? null,
                   id: user.id,
                   initial: toInitial(data?.nickname),
                   nickname: data?.nickname ?? member.nickname,
@@ -131,7 +134,7 @@ export default function TeamNewScreen() {
         async () => {
           const request = supabase
             .from('profile')
-            .select('user_id, nickname, is_in_active_room, is_student, university_name')
+            .select('user_id, nickname, gender, is_in_active_room, is_student, university_name')
             .ilike('nickname', `%${normalized}%`)
             .limit(5);
 
@@ -164,6 +167,7 @@ export default function TeamNewScreen() {
                   isStudent: profile.is_student,
                   universityName: profile.university_name,
                 }),
+                gender: profile.gender,
                 id: profile.user_id,
                 initial: toInitial(profile.nickname),
                 nickname: profile.nickname ?? '이름 없음',
@@ -188,7 +192,11 @@ export default function TeamNewScreen() {
   }, [query, searchAttempt, user]);
 
   const addedIds = useMemo(() => new Set(members.map((member) => member.id)), [members]);
+  const ownerGender = members.find((member) => member.id === user?.id)?.gender ?? null;
+  const hasDifferentGender = (member: SearchMember) =>
+    Boolean(ownerGender && member.gender && member.gender !== ownerGender);
   const hasBusyMember = members.some((member) => member.busy);
+  const hasGenderMismatchMember = members.some((member) => hasDifferentGender(member));
   const hasCollegeIneligibleMember = isCollegeMode
     && members.some((member) => !member.collegeEligible);
   const minMembers = isCollegeMode ? COLLEGE_GWATING_MIN_MEMBERS : POLICY.team.minMembers;
@@ -197,12 +205,14 @@ export default function TeamNewScreen() {
     && members.length >= minMembers
     && members.every((member) => isUuidLike(member.id))
     && !hasBusyMember
+    && !hasGenderMismatchMember
     && !hasCollegeIneligibleMember;
 
   const addMember = (member: SearchMember) => {
     if (
       member.blocked
       || member.busy
+      || hasDifferentGender(member)
       || (isCollegeMode && !member.collegeEligible)
       || addedIds.has(member.id)
       || members.length >= POLICY.team.maxMembers
@@ -217,6 +227,8 @@ export default function TeamNewScreen() {
       setQueueFailedMessage(
         hasCollegeIneligibleMember
           ? '과팅은 팀원 모두 재학중이고 대학명을 입력해야 시작할 수 있어요.'
+          : hasGenderMismatchMember
+            ? '같은 성별 친구만 초대할 수 있어요.'
           : isCollegeMode && members.length < minMembers
             ? '과팅은 친구를 1명 이상 추가해야 시작할 수 있어요.'
           : '묶음 인원과 busy 상태를 다시 확인해주세요.',
@@ -290,6 +302,7 @@ export default function TeamNewScreen() {
   };
 
   const firstBusyMember = members.find((member) => member.busy);
+  const firstGenderMismatchMember = members.find((member) => hasDifferentGender(member));
   const firstCollegeIneligibleMember = members.find((member) => !member.collegeEligible);
 
   return (
@@ -341,6 +354,8 @@ export default function TeamNewScreen() {
                       ? '초대할 수 없는 친구예요'
                       : member.busy
                         ? '다른 방 사용 중이에요'
+                        : hasDifferentGender(member)
+                          ? '같은 성별 친구만 초대할 수 있어요'
                         : isCollegeMode && !member.collegeEligible
                           ? '대학생 프로필이 필요해요'
                           : '초대 가능'}
@@ -351,6 +366,7 @@ export default function TeamNewScreen() {
                   variant={
                     member.blocked
                     || member.busy
+                    || hasDifferentGender(member)
                     || (isCollegeMode && !member.collegeEligible)
                     || addedIds.has(member.id)
                       ? 'secondary'
@@ -359,6 +375,7 @@ export default function TeamNewScreen() {
                   disabled={
                     member.blocked
                     || member.busy
+                    || hasDifferentGender(member)
                     || (isCollegeMode && !member.collegeEligible)
                     || addedIds.has(member.id)
                   }
@@ -402,6 +419,12 @@ export default function TeamNewScreen() {
             </Banner>
           ) : null}
 
+          {hasGenderMismatchMember ? (
+            <Banner tone="warn" icon="!" title="팀원 성별 확인">
+              {firstGenderMismatchMember?.nickname ?? '친구'}는 내 팀에 초대할 수 없어요. 같은 성별 친구를 초대해주세요.
+            </Banner>
+          ) : null}
+
           {hasCollegeIneligibleMember ? (
             <Banner tone="warn" icon="!" title="과팅 팀 조건">
               {firstCollegeIneligibleMember?.nickname ?? '친구'}의 대학생 프로필이 필요해요.
@@ -414,7 +437,7 @@ export default function TeamNewScreen() {
         <Button fullWidth disabled={!canStart} onPress={startQueue}>
           {isCollegeMode && members.length < minMembers
             ? '친구를 1명 이상 추가해주세요'
-            : hasBusyMember || hasCollegeIneligibleMember
+            : hasBusyMember || hasGenderMismatchMember || hasCollegeIneligibleMember
             ? '매칭 시작 (조정 필요)'
             : `${members.length}명으로 매칭 시작`}
         </Button>

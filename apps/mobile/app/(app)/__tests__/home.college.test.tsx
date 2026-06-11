@@ -1,15 +1,21 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockAnalyticsCapture = jest.fn();
 const mockAnalyticsRegister = jest.fn();
+const mockGetCachedProfileSnapshot = jest.fn(() => null);
+const mockMergeCachedProfileSnapshot = jest.fn();
 const mockSupabaseFrom = jest.fn();
 
 let mockProfile: Record<string, unknown> | null;
+let capturedFocusEffect: (() => void | (() => void)) | null;
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    capturedFocusEffect = effect;
+  },
 }));
 
 jest.mock('@/providers/auth-provider', () => ({
@@ -17,8 +23,8 @@ jest.mock('@/providers/auth-provider', () => ({
 }));
 
 jest.mock('@/lib/profile-session-cache', () => ({
-  getCachedProfileSnapshot: jest.fn(() => null),
-  mergeCachedProfileSnapshot: jest.fn(),
+  getCachedProfileSnapshot: (...args: unknown[]) => mockGetCachedProfileSnapshot(...args),
+  mergeCachedProfileSnapshot: (...args: unknown[]) => mockMergeCachedProfileSnapshot(...args),
 }));
 
 jest.mock('@/lib/auth-flow', () => ({
@@ -155,6 +161,8 @@ function makePassChain() {
 describe('HomeScreen — college gwating entry', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetCachedProfileSnapshot.mockReturnValue(null);
+    capturedFocusEffect = null;
     mockProfile = {
       birth_year: 2001,
       gender: 'female',
@@ -199,6 +207,40 @@ describe('HomeScreen — college gwating entry', () => {
       expect(screen.getByText('혼자 참여')).toBeTruthy();
       expect(screen.queryByText('대학생 과팅')).toBeNull();
     });
+  });
+
+  it('refreshes the college entry from profile cache when the screen is focused again', async () => {
+    mockProfile = {
+      ...mockProfile,
+      is_student: false,
+      university_name: null,
+    };
+
+    render(<HomeScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('혼자 참여')).toBeTruthy();
+      expect(screen.queryByText('대학생 과팅')).toBeNull();
+    });
+    await waitFor(() =>
+      expect(mockMergeCachedProfileSnapshot).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ isStudent: false, universityName: null }),
+      ),
+    );
+
+    mockGetCachedProfileSnapshot.mockReturnValue({
+      isStudent: true,
+      universityName: '한국대학교',
+      userId: 'user-1',
+    });
+
+    expect(capturedFocusEffect).toBeTruthy();
+    act(() => {
+      capturedFocusEffect?.();
+    });
+
+    await waitFor(() => expect(screen.getByText('대학생 과팅')).toBeTruthy());
   });
 
   it('opens team creation in college mode from the college entry', async () => {
