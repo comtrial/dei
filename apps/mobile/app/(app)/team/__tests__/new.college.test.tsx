@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const FRIEND_ID = '22222222-2222-4222-8222-222222222222';
@@ -157,6 +157,14 @@ function makeProfileChain() {
   };
 }
 
+async function flushSearchDebounce() {
+  await act(async () => {
+    jest.advanceTimersByTime(500);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 describe('TeamNewScreen — college gwating mode', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -190,6 +198,7 @@ describe('TeamNewScreen — college gwating mode', () => {
   });
 
   it('does not allow adding a friend without a completed college profile', async () => {
+    jest.useFakeTimers();
     mockSearchProfiles = [
       {
         is_in_active_room: false,
@@ -200,17 +209,23 @@ describe('TeamNewScreen — college gwating mode', () => {
       },
     ];
 
-    render(<TeamNewScreen />);
+    try {
+      render(<TeamNewScreen />);
 
-    fireEvent.changeText(screen.getByPlaceholderText('닉네임으로 검색'), '민준');
+      fireEvent.changeText(screen.getByPlaceholderText('닉네임으로 검색'), '민준');
+      await flushSearchDebounce();
 
-    await waitFor(() => expect(screen.getByText('대학생 프로필이 필요해요')).toBeTruthy(), {
-      timeout: 1500,
-    });
-    expect(hasDisabledAncestor(screen.getByText('+ 추가'))).toBe(true);
+      await waitFor(() => expect(screen.getByText('대학생 프로필이 필요해요')).toBeTruthy(), {
+        timeout: 1500,
+      });
+      expect(hasDisabledAncestor(screen.getByText('+ 추가'))).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('enqueues eligible college teams with college mode', async () => {
+    jest.useFakeTimers();
     mockSearchProfiles = [
       {
         is_in_active_room: false,
@@ -221,32 +236,37 @@ describe('TeamNewScreen — college gwating mode', () => {
       },
     ];
 
-    render(<TeamNewScreen />);
+    try {
+      render(<TeamNewScreen />);
 
-    fireEvent.changeText(screen.getByPlaceholderText('닉네임으로 검색'), '민준');
-    await waitFor(() => expect(screen.getByText('초대 가능')).toBeTruthy(), {
-      timeout: 1500,
-    });
-
-    fireEvent.press(screen.getByText('+ 추가'));
-    await waitFor(() => expect(screen.getByText('2명으로 매칭 시작')).toBeTruthy());
-
-    fireEvent.press(screen.getByText('2명으로 매칭 시작'));
-
-    await waitFor(() => {
-      expect(mockEnqueueMatchQueue).toHaveBeenCalledWith([USER_ID, FRIEND_ID], {
-        mode: 'college',
+      fireEvent.changeText(screen.getByPlaceholderText('닉네임으로 검색'), '민준');
+      await flushSearchDebounce();
+      await waitFor(() => expect(screen.getByText('초대 가능')).toBeTruthy(), {
+        timeout: 1500,
       });
-      expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/(app)/queue',
-        params: { entrypoint: 'college', mode: 'college' },
+
+      fireEvent.press(screen.getByText('+ 추가'));
+      await waitFor(() => expect(screen.getByText('2명으로 매칭 시작')).toBeTruthy());
+
+      fireEvent.press(screen.getByText('2명으로 매칭 시작'));
+
+      await waitFor(() => {
+        expect(mockEnqueueMatchQueue).toHaveBeenCalledWith([USER_ID, FRIEND_ID], {
+          mode: 'college',
+        });
+        expect(mockReplace).toHaveBeenCalledWith({
+          pathname: '/(app)/queue',
+          params: { entrypoint: 'college', mode: 'college' },
+        });
+        expect(mockAnalyticsCapture).toHaveBeenCalledWith('S3:team_queue_registered', {
+          entry_point: 'college',
+          member_count: 2,
+          mode: 'college',
+          source: 'team-new',
+        });
       });
-      expect(mockAnalyticsCapture).toHaveBeenCalledWith('S3:team_queue_registered', {
-        entry_point: 'college',
-        member_count: 2,
-        mode: 'college',
-        source: 'team-new',
-      });
-    });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
