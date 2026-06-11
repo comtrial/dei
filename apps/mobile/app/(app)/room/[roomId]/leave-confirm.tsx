@@ -7,8 +7,8 @@ import {
   AlertDialog,
   Banner,
   BottomSheet,
+  Button,
   ChoiceList,
-  SlideToConfirm,
   Text,
   Textarea,
 } from '@dei/ui';
@@ -108,14 +108,18 @@ export default function RoomLeaveConfirmScreen() {
           ) : null}
 
           <View className="pb-[22px] pt-[18px]">
-            <SlideToConfirm
-              testID="room-leave-slide-confirm"
-              tone="ink"
+            <Button
+              testID="room-leave-submit"
+              fullWidth
+              variant="ink"
               disabled={!canLeave || isLeaving}
-              onConfirm={handleLeave}
-              label={isLeaving ? '나가는 중' : undefined}
-              className={!canLeave || isLeaving ? 'opacity-40' : undefined}
-            />
+              onPress={handleLeave}
+              accessibilityLabel="방 나가기"
+              className="rounded-full bg-danger"
+              textClassName="text-[15px] font-extrabold"
+            >
+              {isLeaving ? '나가는 중' : '방 나가기'}
+            </Button>
           </View>
         </ScrollView>
       </BottomSheet>
