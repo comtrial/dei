@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { BackHandler } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, BackHandler } from 'react-native';
 
 import { analytics, logger, toMatchQueueMode } from '@dei/shared';
 
@@ -17,6 +17,8 @@ type QueueState = {
   expiresAt: string | null;
   id: string;
 } | null;
+
+const ACTIVE_ROOM_FALLBACK_MS = 3000;
 
 export default function QueueScreen() {
   const router = useRouter();
@@ -36,6 +38,45 @@ export default function QueueScreen() {
   const [showFreeRematchNotice, setShowFreeRematchNotice] = useState(
     notice === 'free-rematch',
   );
+  const routedRoomIdRef = useRef<string | null>(null);
+
+  const routeToRoom = useCallback((roomId: string) => {
+    if (routedRoomIdRef.current) {
+      return;
+    }
+
+    routedRoomIdRef.current = roomId;
+    analytics.capture(ANALYTICS_EVENTS.room_matched, {
+      ...(entrypoint ? { entry_point: entrypoint, mode } : {}),
+      room_id: roomId,
+    });
+    router.replace(roomRoutes.index(roomId));
+  }, [entrypoint, mode, router]);
+
+  const routeToActiveRoom = useCallback(async () => {
+    if (!user?.id || routedRoomIdRef.current) {
+      return false;
+    }
+
+    const { data, error } = await supabase
+      .from('room_member')
+      .select('room_id')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data?.room_id) {
+      return false;
+    }
+
+    routeToRoom(data.room_id);
+    return true;
+  }, [routeToRoom, user?.id]);
 
   // Android 하드웨어 백버튼을 삼킨다("무조건 웨이팅 화면만"). iOS 스와이프는
   // (app)/_layout 의 gestureEnabled:false 가 막는다. 큐 이탈은 "매칭 취소"(S08)로만.
@@ -75,7 +116,10 @@ export default function QueueScreen() {
 
         const teamIds = teamMembers?.map((team) => team.team_id) ?? [];
         if (teamIds.length === 0) {
-          router.replace(ROUTES.home);
+          const routed = await routeToActiveRoom();
+          if (!routed) {
+            router.replace(ROUTES.home);
+          }
           return;
         }
 
@@ -93,7 +137,10 @@ export default function QueueScreen() {
         }
 
         if (!data) {
-          router.replace(ROUTES.home);
+          const routed = await routeToActiveRoom();
+          if (!routed) {
+            router.replace(ROUTES.home);
+          }
           return;
         }
 
@@ -120,7 +167,7 @@ export default function QueueScreen() {
         tags: { screen: 'queue', action: 'load-catch' },
       });
     });
-  }, [router, user]);
+  }, [routeToActiveRoom, router, user]);
 
   useEffect(() => {
     if (!user) {
@@ -130,34 +177,12 @@ export default function QueueScreen() {
     const userId = user.id;
     let cancelled = false;
 
-    const routeToRoom = (roomId: string) => {
-      if (cancelled) {
-        return;
-      }
-      analytics.capture(ANALYTICS_EVENTS.room_matched, {
-        ...(entrypoint ? { entry_point: entrypoint, mode } : {}),
-        room_id: roomId,
-      });
-      router.replace(roomRoutes.index(roomId));
-    };
-
     // 진입 직전에 이미 매칭이 성사됐다면(구독 전 발생) 즉시 방으로 보낸다.
     void logger.withErrorCapture(
       'queue.match-race-check',
       async () => {
-        const { data, error } = await supabase
-          .from('room_member')
-          .select('room_id')
-          .eq('user_id', userId)
-          .eq('status', 'active')
-          .maybeSingle();
-
-        if (error) {
-          throw error;
-        }
-
-        if (data?.room_id) {
-          routeToRoom(data.room_id);
+        if (!cancelled) {
+          await routeToActiveRoom();
         }
       },
       { tags: { screen: 'queue', action: 'match-race-check' } },
@@ -194,7 +219,9 @@ export default function QueueScreen() {
               status?: string | null;
             };
             if (next.status === 'active' && next.room_id) {
-              routeToRoom(next.room_id);
+              if (!cancelled) {
+                routeToRoom(next.room_id);
+              }
             }
           },
         )
@@ -214,7 +241,47 @@ export default function QueueScreen() {
       cancelled = true;
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [entrypoint, mode, router, user]);
+  }, [routeToActiveRoom, routeToRoom, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    let cancelled = false;
+    const checkActiveRoom = () => {
+      if (cancelled) {
+        return;
+      }
+
+      void logger.withErrorCapture(
+        'queue.match-fallback-check',
+        async () => {
+          if (!cancelled) {
+            await routeToActiveRoom();
+          }
+        },
+        { tags: { screen: 'queue', action: 'match-fallback-check' } },
+      ).catch((error) => {
+        logger.captureException(error, {
+          tags: { screen: 'queue', action: 'match-fallback-check-catch' },
+        });
+      });
+    };
+
+    const intervalId = setInterval(checkActiveRoom, ACTIVE_ROOM_FALLBACK_MS);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkActiveRoom();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+      subscription.remove();
+    };
+  }, [routeToActiveRoom, user]);
 
   return (
     <MatchingWaitingView
