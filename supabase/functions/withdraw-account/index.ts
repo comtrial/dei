@@ -15,8 +15,6 @@ type WithdrawBody = {
 type StorageBucket = 'profile-photos' | 'room-videos';
 type AdminSupabase = Awaited<ReturnType<typeof getAuthenticatedUser>>['supabase'];
 
-const RECENT_REAUTH_WINDOW_MS = 10 * 60 * 1000;
-
 function isStorageObjectPath(value?: string | null) {
   if (!value) return false;
   return !/^https?:\/\//i.test(value) && !value.startsWith('file:');
@@ -149,17 +147,15 @@ Deno.serve(async (req) => {
     const reason = typeof body.reason === 'string' ? body.reason.trim() : null;
     const detail = typeof body.detail === 'string' ? body.detail.trim() : null;
     capturedReason = reason;
-    const verifiedAfter = new Date(Date.now() - RECENT_REAUTH_WINDOW_MS).toISOString();
     const withdrawnAt = new Date().toISOString();
 
-    const { data: recentVerification, error: verificationError } = await supabase
+    const { data: identityVerification, error: verificationError } = await supabase
       .from('auth_verification')
       .select('ci_hash, id, verified_at')
       .eq('user_id', user.id)
       .eq('provider', IDENTITY_PROVIDER)
       .eq('status', 'verified')
-      .eq('provider_metadata->>purpose', 'withdraw')
-      .gte('verified_at', verifiedAfter)
+      .not('ci_hash', 'is', null)
       .order('verified_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -168,15 +164,15 @@ Deno.serve(async (req) => {
       throw verificationError;
     }
 
-    if (!recentVerification) {
+    if (!identityVerification) {
       return codedErrorResponse(
         'BAD_REQUEST',
-        '본인인증 재확인이 필요해요.',
-        403,
+        '가입 본인인증 정보를 확인할 수 없어요. 고객센터로 문의해주세요.',
+        400,
       );
     }
 
-    if (!recentVerification.ci_hash) {
+    if (!identityVerification.ci_hash) {
       return codedErrorResponse(
         'BAD_REQUEST',
         '탈퇴 제한 정보를 저장할 수 없어요. 고객센터로 문의해주세요.',
@@ -285,7 +281,7 @@ Deno.serve(async (req) => {
 
     const { error: lockError } = await supabase.from('identity_rejoin_lock').upsert(
       {
-        ci_hash: recentVerification.ci_hash,
+        ci_hash: identityVerification.ci_hash,
         locked_until: rejoinLockedUntil,
         reason: 'withdraw',
         user_id: user.id,
@@ -302,9 +298,9 @@ Deno.serve(async (req) => {
       actor_user_id: user.id,
       detail: {
         detail,
+        identityVerificationId: identityVerification.id,
         reason,
         rejoinLockedUntil,
-        reauthVerificationId: recentVerification.id,
       },
       target: user.id,
     });
