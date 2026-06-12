@@ -17,9 +17,35 @@ export function createAdminClient() {
   });
 }
 
+function getBearerToken(req: Request) {
+  return req.headers.get('Authorization')?.replace('Bearer ', '').trim() ?? null;
+}
+
+function decodeBase64Url(value: string) {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+  return atob(base64);
+}
+
+function getJwtRole(token: string | null) {
+  if (!token) return null;
+
+  const [, payload] = token.split('.');
+  if (!payload) return null;
+
+  try {
+    const decoded = JSON.parse(decodeBase64Url(payload));
+    return typeof decoded?.role === 'string' ? decoded.role : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isServiceRoleRequest(req: Request) {
+  return getJwtRole(getBearerToken(req)) === 'service_role';
+}
+
 export async function getAuthenticatedUser(req: Request) {
-  const authorization = req.headers.get('Authorization');
-  const token = authorization?.replace('Bearer ', '').trim();
+  const token = getBearerToken(req);
 
   if (!token) {
     throw new Error('authentication required');

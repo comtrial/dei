@@ -197,6 +197,21 @@ export async function uploadClip(
 
   onProgress?.(1.0);
 
+  void supabase.functions.invoke('notify-video-uploaded', {
+    body: { room_id: roomId, video_id: videoId },
+  }).then(({ error: notifyErr }) => {
+    if (!notifyErr) return;
+    logger.captureException(notifyErr, {
+      tags: { feature: 'video-upload', step: 'notify-video-uploaded' },
+      extra: { roomId, videoId },
+    });
+  }).catch((notifyErr) => {
+    logger.captureException(notifyErr, {
+      tags: { feature: 'video-upload', step: 'notify-video-uploaded' },
+      extra: { roomId, videoId },
+    });
+  });
+
   const { data: signedData, error: signedErr } = await supabase.storage
     .from(BUCKET)
     .createSignedUrl(thumbPath, 3600);

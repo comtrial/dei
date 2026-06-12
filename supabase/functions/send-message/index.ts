@@ -2,33 +2,52 @@
 import { getAuthenticatedUser } from '../_shared/auth.ts';
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
 import { captureEdgeError } from '../_shared/log.ts';
+import { getProfileNickname, sendPushToRoomMembers, sendPushToUsers } from '../_shared/push.ts';
 
 function codePointLength(s: string): number {
   return [...s].length;
 }
 
-async function dispatchWhisperPush(admin: any, message: { whisper_to_user_id: string; user_id: string; room_id: string }) {
-  const target = message.whisper_to_user_id;
-  // 조건: chat_mention + push_enabled
-  const { data: setting } = await admin.from('notification_setting').select('chat_mention, push_enabled').eq('user_id', target).maybeSingle();
-  if (setting && (setting.chat_mention === false || setting.push_enabled === false)) return;
-  // 대상 active 멤버 재확인
-  const { data: rm } = await admin.from('room_member').select('status').eq('room_id', message.room_id).eq('user_id', target).maybeSingle();
-  if (!rm || rm.status !== 'active') return;
-  // 발신자 닉네임
-  const { data: sender } = await admin.from('profile').select('nickname').eq('user_id', message.user_id).maybeSingle();
-  // 대상 토큰
-  const { data: tokens } = await admin.from('push_token').select('token').eq('user_id', target);
-  if (!tokens?.length) return;
-  // quiet-hours(0~7 KST)는 whisper_mention exempt → 시간 무시하고 발송
-  await fetch('https://exp.host/--/api/v2/push/send', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(tokens.map((t: { token: string }) => ({
-      to: t.token, title: sender?.nickname ?? '귓속말', body: '귓속말이 도착했어요',
-      sound: 'default',
-      channelId: 'default',
-      data: { roomId: message.room_id, type: 'whisper_mention' },
-    }))),
+type SentMessage = {
+  body: string;
+  id: string;
+  room_id: string;
+  user_id: string;
+  whisper_to_user_id: string | null;
+};
+
+async function dispatchMessagePush(admin: any, message: SentMessage) {
+  const senderNickname = await getProfileNickname(admin, message.user_id).catch(() => null);
+
+  if (message.whisper_to_user_id) {
+    return sendPushToUsers(admin, {
+      body: '귓속말이 도착했어요',
+      category: 'chat_mention',
+      data: {
+        messageId: message.id,
+        roomId: message.room_id,
+        senderUserId: message.user_id,
+        type: 'whisper_mention',
+      },
+      quietHoursMode: 'exempt',
+      title: senderNickname ?? '귓속말',
+      userIds: [message.whisper_to_user_id],
+    });
+  }
+
+  return sendPushToRoomMembers(admin, {
+    body: '새 메시지가 도착했어요',
+    category: 'chat_mention',
+    data: {
+      messageId: message.id,
+      roomId: message.room_id,
+      senderUserId: message.user_id,
+      type: 'room_message',
+    },
+    excludeUserIds: [message.user_id],
+    quietHoursMode: 'respect',
+    roomId: message.room_id,
+    title: senderNickname ?? '새 메시지',
   });
 }
 function data_is_dedup_echo(deduped: boolean) { return deduped; }
@@ -114,15 +133,18 @@ Deno.serve(async (req) => {
     created_at: data.created_at,
   };
 
-  // 멘션 푸시 (귓속말만, best-effort — 실패가 send 실패를 만들지 않음)
-  if (message.whisper_to_user_id && !data_is_dedup_echo(deduped)) {
-    void dispatchWhisperPush(auth.supabase, message).catch((err) =>
+  // 메시지 푸시(best-effort) — 실패가 채팅 전송 실패를 만들지 않는다.
+  if (!data_is_dedup_echo(deduped)) {
+    void dispatchMessagePush(auth.supabase, message).catch((err) =>
       captureEdgeError('send-message', err, {
-        stage: 'whisper_push',
+        stage: message.whisper_to_user_id ? 'whisper_push' : 'room_message_push',
         status: 200,
         userId: auth.user.id,
         level: 'warning',
-        tags: { feature: 'chat-push', code: 'whisper_push_failed' },
+        tags: {
+          feature: 'chat-push',
+          code: message.whisper_to_user_id ? 'whisper_push_failed' : 'room_message_push_failed',
+        },
         extra: { roomId: message.room_id, targetUserId: message.whisper_to_user_id },
       })
     );
