@@ -652,6 +652,71 @@ describe.skipIf(!SHOULD_RUN)('try_match — tier-relaxed pairing + solo merge', 
     expect(after?.status).toBe('active');
   });
 
+  it('남성 팀원 쿨다운은 주최자 pass 1장으로 매칭 허용하고 팀원 pass는 요구하지 않는다', async () => {
+    const host = await makeUser('male', 'rphost');
+    const member = await makeUser('male', 'rpmember');
+    const females = await makeUsers('female', 2, 'rpfteam');
+    await admin
+      .from('profile')
+      .update({ last_room_leave_at: new Date().toISOString() })
+      .in('user_id', [host.id, member.id]);
+    const { data: pass, error: passErr } = await admin
+      .from('pass')
+      .insert({
+        granted: 3,
+        kind: 'booster',
+        remaining: 3,
+        source: 'purchase',
+        status: 'active',
+        user_id: host.id,
+      })
+      .select('id')
+      .single();
+    expect(passErr).toBeNull();
+
+    const b = await mkTeamQueue(females, 'female');
+    const a = await mkTeamQueue([host, member], 'male');
+    const { data: ret, error } = await admin.rpc('try_match', { p_queue_id: a.queueId });
+    expect(error).toBeNull();
+    const gm = await resolveMatch(ret as string | null);
+    expect(gm).not.toBeNull();
+    expect(await roomMemberCount(gm!.room_id!)).toBe(4);
+    expect(await queueStatusByTeam(a.teamId)).toBe('matched');
+    expect(await queueStatusByTeam(b.teamId)).toBe('matched');
+
+    const { data: hostPassAfter } = await admin
+      .from('pass')
+      .select('remaining, status')
+      .eq('id', pass!.id)
+      .single();
+    expect(hostPassAfter?.remaining).toBe(2);
+    expect(hostPassAfter?.status).toBe('active');
+  });
+
+  it('남성 주최자가 12시간 제한 밖이면 쿨다운 중인 팀원이 있어도 pass 없이 매칭한다', async () => {
+    const host = await makeUser('male', 'rpoldhost');
+    const member = await makeUser('male', 'rphotmember');
+    const females = await makeUsers('female', 2, 'rpoldf');
+    await admin
+      .from('profile')
+      .update({ last_room_leave_at: new Date(Date.now() - 13 * 3600_000).toISOString() })
+      .eq('user_id', host.id);
+    await admin
+      .from('profile')
+      .update({ last_room_leave_at: new Date().toISOString() })
+      .eq('user_id', member.id);
+
+    const b = await mkTeamQueue(females, 'female');
+    const a = await mkTeamQueue([host, member], 'male');
+    const { data: ret, error } = await admin.rpc('try_match', { p_queue_id: a.queueId });
+    expect(error).toBeNull();
+    const gm = await resolveMatch(ret as string | null);
+    expect(gm).not.toBeNull();
+    expect(await roomMemberCount(gm!.room_id!)).toBe(4);
+    expect(await queueStatusByTeam(a.teamId)).toBe('matched');
+    expect(await queueStatusByTeam(b.teamId)).toBe('matched');
+  });
+
   it('Tier1 진입(backdate) 후 1↔3 비대칭 성사 → room_member 4', async () => {
     const m1 = await makeUser('male', 't1m');
     const females = await makeUsers('female', 3, 't1f');
