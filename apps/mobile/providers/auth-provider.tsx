@@ -35,8 +35,23 @@ function isInvalidRefreshTokenError(error: unknown) {
   return error instanceof Error && error.message.includes('Invalid Refresh Token');
 }
 
+function isMissingAuthUserError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes('User not found')
+    || error.message.includes('User from sub claim in JWT does not exist')
+  );
+}
+
 async function clearLocalAuthSession() {
   await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+}
+
+async function clearSignedOutState() {
+  analytics.reset();
+  logger.setUser(null);
+  clearCachedProfileSnapshot();
+  await resetPurchasesUser();
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -63,6 +78,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await clearLocalAuthSession();
           setSession(null);
           return;
+        }
+
+        if (data.session) {
+          const { data: userData, error: userError } = await supabase.auth.getUser();
+          if (userError || !userData.user) {
+            if (userError && !isMissingAuthUserError(userError)) {
+              logger.captureException(userError, {
+                tags: { feature: 'auth', action: 'validate-restored-session' },
+              });
+            }
+            await clearLocalAuthSession();
+            setSession(null);
+            return;
+          }
         }
 
         setSession(data.session);
@@ -206,14 +235,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.signOut();
 
     if (error) {
-      throw error;
+      await clearLocalAuthSession();
+      if (!isInvalidRefreshTokenError(error) && !isMissingAuthUserError(error)) {
+        throw error;
+      }
     }
 
     // 로그아웃 → analytics·logger 사용자 컨텍스트 초기화.
-    analytics.reset();
-    logger.setUser(null);
-    clearCachedProfileSnapshot();
-    await resetPurchasesUser();
+    setSession(null);
+    await clearSignedOutState();
   }, []);
 
   const value = useMemo<AuthContextValue>(
