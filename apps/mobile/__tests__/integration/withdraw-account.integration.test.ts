@@ -33,7 +33,7 @@ async function countRows(table: string, column: string, userId: string) {
   return count ?? 0;
 }
 
-async function createVerifiedWithdrawUser() {
+async function createIdentityVerifiedUser() {
   const email = uniqueEmail();
   const { data, error } = await admin.auth.admin.createUser({
     email,
@@ -77,7 +77,7 @@ async function createVerifiedWithdrawUser() {
   const { error: verificationError } = await admin.from('auth_verification').insert({
     ci_hash: `ci-withdraw-${userId}`,
     provider: 'portone',
-    provider_metadata: { purpose: 'withdraw' },
+    provider_metadata: { purpose: 'signup' },
     status: 'verified',
     user_id: userId,
     verified_at: new Date().toISOString(),
@@ -224,9 +224,9 @@ afterEach(async () => {
 });
 
 describe.skipIf(!SHOULD_RUN)('withdraw-account Edge Function', () => {
-  it('hard-deletes the auth user and clears app data needed for a clean re-entry signup flow', async () => {
+  it('uses the existing identity verification and clears app data for a clean re-entry signup flow', async () => {
     if (!run) return;
-    const { client, roomId, teamId, userId } = await createVerifiedWithdrawUser();
+    const { client, roomId, teamId, userId } = await createIdentityVerifiedUser();
 
     const { data, error } = await client.functions.invoke<{ ok: true }>('withdraw-account', {
       body: { reason: 'not_using', detail: 'integration test' },
