@@ -487,11 +487,6 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        <View className="mt-auto border-t border-line pt-[14px]">
-          <Text className="text-center text-[14.5px] leading-[19px] text-ink-3">
-            우상단 아바타 dot = <Text className="font-semibold text-ink-2">프로필 미완성</Text>. 탭 = 프로필 수정 진입.
-          </Text>
-        </View>
       </View>
 
       <AlertDialog
