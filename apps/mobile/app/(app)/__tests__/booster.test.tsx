@@ -10,6 +10,9 @@ const mockIsPurchaseCancelled = jest.fn();
 const mockPurchaseInstantRematchPackage = jest.fn();
 const mockSyncPurchasesUser = jest.fn();
 const mockSupabaseFrom = jest.fn();
+const mockEnqueueMatchQueue = jest.fn();
+const mockNeedsNotificationConsent = jest.fn();
+const mockRegisterPushToken = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace, back: mockBack, push: mockPush }),
@@ -39,13 +42,13 @@ jest.mock('@/lib/purchases', () => ({
 }));
 
 jest.mock('@/lib/matching', () => ({
-  enqueueMatchQueue: jest.fn().mockResolvedValue(undefined),
+  enqueueMatchQueue: (...args: unknown[]) => mockEnqueueMatchQueue(...args),
 }));
 
 jest.mock('@/lib/notifications.stub', () => ({
   getAppNotificationEnabled: jest.fn().mockResolvedValue(true),
-  needsNotificationConsent: jest.fn().mockResolvedValue(false),
-  registerPushToken: jest.fn().mockResolvedValue(undefined),
+  needsNotificationConsent: (...args: unknown[]) => mockNeedsNotificationConsent(...args),
+  registerPushToken: (...args: unknown[]) => mockRegisterPushToken(...args),
 }));
 
 jest.mock('@/lib/permissions', () => ({
@@ -151,11 +154,16 @@ describe('BoosterScreen — booster 결제 신호 계측', () => {
     mockGetBoosterPackageOptions.mockResolvedValue(new Map());
     mockIsPurchaseCancelled.mockReturnValue(false);
     mockSyncPurchasesUser.mockResolvedValue(undefined);
+    mockEnqueueMatchQueue.mockResolvedValue(undefined);
+    mockNeedsNotificationConsent.mockResolvedValue(false);
+    mockRegisterPushToken.mockResolvedValue(undefined);
     mockPurchaseInstantRematchPackage.mockResolvedValue({
-      appUserId: 'u1',
-      customerInfoRequestDate: '2026-06-10T00:00:00.000Z',
-      productId: 'booster_instant_rematch_v1_pack3',
-      revenueCatProductId: 'rc_booster_pack3',
+      environment: 'Sandbox',
+      productId: 'booster_instant_rematch_v1',
+      purchase: { id: 'tx-1', productId: 'booster_instant_rematch_v1' },
+      signedTransactionInfo: 'signed-jws',
+      storeProductId: 'booster_instant_rematch_v1',
+      transactionDate: 1_786_000_000_000,
       transactionId: 'tx-1',
     });
     mockConfirmInstantRematchPurchase.mockResolvedValue(undefined);
@@ -204,6 +212,92 @@ describe('BoosterScreen — booster 결제 신호 계측', () => {
     // press 가 트리거한 async 결제 시작 state 업데이트를 flush 해 act 경고 방지.
     await waitFor(() => {
       expect(mockPurchaseInstantRematchPackage).toHaveBeenCalled();
+    });
+  });
+
+  it('결제 성공 시 purchase → confirm → success analytics → 큐 진입 순서로 진행된다', async () => {
+    render(<BoosterScreen />);
+
+    await waitFor(() => {
+      expect(mockAnalyticsCapture).toHaveBeenCalledWith(
+        'F3:booster_paywall_shown',
+        expect.anything(),
+      );
+    });
+
+    fireEvent.press(screen.getByTestId('booster-pay-button'));
+
+    await waitFor(() => {
+      expect(mockPurchaseInstantRematchPackage).toHaveBeenCalledWith(
+        expect.any(String),
+      );
+      expect(mockConfirmInstantRematchPurchase).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storeProductId: 'booster_instant_rematch_v1',
+          transactionId: 'tx-1',
+        }),
+      );
+      expect(mockAnalyticsCapture).toHaveBeenCalledWith(
+        'F3:booster_purchase_succeeded',
+        expect.objectContaining({ product_id: expect.any(String) }),
+      );
+      expect(mockEnqueueMatchQueue).toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/(app)/queue',
+        params: { mode: 'normal' },
+      });
+    });
+  });
+
+  it('사용자 결제 취소는 cancelled 실패 화면으로 보낸다', async () => {
+    mockPurchaseInstantRematchPackage.mockRejectedValueOnce({ code: 'user-cancelled' });
+    mockIsPurchaseCancelled.mockReturnValueOnce(true);
+
+    render(<BoosterScreen />);
+
+    await waitFor(() => {
+      expect(mockAnalyticsCapture).toHaveBeenCalledWith(
+        'F3:booster_paywall_shown',
+        expect.anything(),
+      );
+    });
+
+    fireEvent.press(screen.getByTestId('booster-pay-button'));
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/(app)/booster-failed',
+        params: {
+          code: 'purchase_cancelled',
+          message: '스토어 결제가 취소됐어요.',
+        },
+      });
+    });
+    expect(mockConfirmInstantRematchPurchase).not.toHaveBeenCalled();
+  });
+
+  it('결제 실패는 failure 화면으로 보낸다', async () => {
+    mockPurchaseInstantRematchPackage.mockRejectedValueOnce(new Error('store down'));
+
+    render(<BoosterScreen />);
+
+    await waitFor(() => {
+      expect(mockAnalyticsCapture).toHaveBeenCalledWith(
+        'F3:booster_paywall_shown',
+        expect.anything(),
+      );
+    });
+
+    fireEvent.press(screen.getByTestId('booster-pay-button'));
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/(app)/booster-failed',
+        params: {
+          code: 'purchase_failed',
+          message: 'store down',
+        },
+      });
     });
   });
 });

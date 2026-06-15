@@ -151,10 +151,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         await resetPurchasesUser();
       },
-      { tags: { feature: 'payment', provider: 'revenuecat', action: 'sync-user' } },
+      { tags: { feature: 'payment', provider: 'apple_iap', action: 'sync-user' } },
     ).catch((error) => {
       logger.captureException(error, {
-        tags: { feature: 'payment', provider: 'revenuecat', action: 'sync-user-catch' },
+        tags: { feature: 'payment', provider: 'apple_iap', action: 'sync-user-catch' },
       });
     });
   }, [session?.user.id]);

@@ -85,5 +85,5 @@ QA 빌드용 env 는 **EAS 서버 `preview` 환경**에 보관(anon key 는
 앱 바이너리에도 들어가는 식별자)라 git 에 안 남기는 것 외 추가
 민감도는 없다. anon key 보유자는 RLS 가 허용하는 범위의 원격 dev DB
 에 접근 가능 → dev DB 에 민감 실데이터를 쌓지 말 것. service_role
-키·DB 비번·PortOne/RevenueCat 시크릿은 **없고 있어서도 안 된다**
+키·DB 비번·PortOne/App Store Server API 시크릿은 **없고 있어서도 안 된다**
 (QA 빌드에 불필요). 확인: `eas env:list preview`.

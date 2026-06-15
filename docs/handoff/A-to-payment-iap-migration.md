@@ -1,5 +1,9 @@
 # A→결제담당 핸드오프 — 부스터(바로 매치) 결제 PortOne → Apple IAP(RevenueCat) 전환
 
+> Obsolete: 이 문서는 RevenueCat 검토 당시의 과거 핸드오프입니다. 현재 구현 기준은
+> `docs/handoff/payment-iap-implementation-checklist.md` 의 Apple IAP 직접 검증
+> 흐름을 따릅니다.
+
 > 작성: A(출시 준비). 대상: 결제 담당자. 상태: **인계 대기 — 결제 담당이 IAP 전환 착수.**
 > 근거: 현재 브랜치 실제 코드 라인 인용(아래 전부 파일:라인 명시).
 > 우선순위: **HIGH — App Store 제출 blocker.** PortOne 그대로 제출 = Guideline 3.1.1 확정 리젝.

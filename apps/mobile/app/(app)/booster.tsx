@@ -208,13 +208,7 @@ export default function BoosterScreen() {
 
         await syncPurchasesUser(user.id);
         const purchase = await purchaseInstantRematchPackage(selectedPack.id);
-        await confirmInstantRematchPurchase({
-          appUserId: purchase.appUserId,
-          customerInfoRequestDate: purchase.customerInfoRequestDate,
-          productId: purchase.productId,
-          revenueCatProductId: purchase.revenueCatProductId,
-          transactionId: purchase.transactionId,
-        });
+        await confirmInstantRematchPurchase(purchase);
         analytics.capture(ANALYTICS_EVENTS.booster_purchase_succeeded, {
           product_id: selectedPack.id,
         });
@@ -303,7 +297,7 @@ export default function BoosterScreen() {
 
           <Card className="mt-[24px] px-[16px] py-[16px]">
             <View className="flex-row flex-wrap gap-[6px]">
-              {['App Store', 'Apple IAP', 'RevenueCat'].map((label) => (
+              {['App Store', 'Apple IAP', '1회 결제'].map((label) => (
                 <Badge key={label} variant="count">{label}</Badge>
               ))}
             </View>
