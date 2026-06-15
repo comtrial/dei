@@ -43,6 +43,7 @@
       "expo-router",
       "expo-notifications",
       "@portone/react-native-sdk/plugin",
+      "expo-iap",
       [
         "expo-splash-screen",
         {

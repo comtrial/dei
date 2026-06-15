@@ -1,10 +1,17 @@
 import { Platform } from 'react-native';
-import Purchases, {
-  LOG_LEVEL,
-  type CustomerInfo,
-  type PurchasesPackage,
-  type PurchasesStoreTransaction,
-} from 'react-native-purchases';
+import {
+  ErrorCode,
+  fetchProducts,
+  finishTransaction,
+  getTransactionJwsIOS,
+  initConnection,
+  purchaseErrorListener,
+  purchaseUpdatedListener,
+  requestPurchase,
+  type Product,
+  type ProductOrSubscription,
+  type Purchase,
+} from 'expo-iap';
 
 import { logger, POLICY } from '@dei/shared';
 
@@ -12,18 +19,20 @@ import type { PaymentPackId } from '@/lib/b-flow';
 import { supabase } from '@/lib/supabase';
 
 export type BoosterPackageOption = {
-  package: PurchasesPackage;
   packageId: string;
   price: string;
+  product: Product;
   productId: PaymentPackId;
-  revenueCatProductId: string;
+  storeProductId: string;
 };
 
 export type ConfirmInstantRematchPurchasePayload = {
-  appUserId: string;
-  customerInfoRequestDate: string;
+  environment?: string | null;
   productId: PaymentPackId;
-  revenueCatProductId: string;
+  purchase?: Purchase;
+  signedTransactionInfo?: string | null;
+  storeProductId: string;
+  transactionDate?: number | null;
   transactionId: string;
 };
 
@@ -33,19 +42,25 @@ export type ConfirmInstantRematchPurchaseResponse = {
   ok: true;
   paymentId: string;
   productId: string;
-  provider: 'revenuecat';
-  revenueCatProductId: string;
+  provider: 'apple_iap';
+  storeProductId: string;
   transactionId: string;
 };
 
 export type PurchaseInstantRematchResult = ConfirmInstantRematchPurchasePayload & {
-  customerInfo: CustomerInfo;
+  purchase: Purchase;
 };
 
-type PurchasesErrorLike = {
+type PendingPurchaseRequest = {
+  productId: string;
+  reject: (error: unknown) => void;
+  resolve: (purchase: Purchase) => void;
+  timeoutId: ReturnType<typeof setTimeout>;
+};
+
+type PurchaseErrorLike = {
   code?: unknown;
   message?: unknown;
-  readableErrorCode?: unknown;
   userCancelled?: unknown;
 };
 
@@ -55,45 +70,32 @@ const DEFAULT_BOOSTER_PRODUCT_IDS = {
   pack10: `${POLICY.payment.instantRematchProductId}_pack10`,
 } as const;
 
-const BOOSTER_PACK_CONFIG = [
+const BOOSTER_STORE_PRODUCT_CONFIG = [
   {
-    packageEnv: 'EXPO_PUBLIC_REVENUECAT_BOOSTER_PACKAGE_ID_1',
-    packageId: 'booster_1',
-    productEnv: 'EXPO_PUBLIC_REVENUECAT_BOOSTER_PRODUCT_ID_1',
+    env: 'EXPO_PUBLIC_APP_STORE_BOOSTER_PRODUCT_ID_1',
     productId: DEFAULT_BOOSTER_PRODUCT_IDS.pack1,
   },
   {
-    packageEnv: 'EXPO_PUBLIC_REVENUECAT_BOOSTER_PACKAGE_ID_3',
-    packageId: 'booster_pack3',
-    productEnv: 'EXPO_PUBLIC_REVENUECAT_BOOSTER_PRODUCT_ID_3',
+    env: 'EXPO_PUBLIC_APP_STORE_BOOSTER_PRODUCT_ID_3',
     productId: DEFAULT_BOOSTER_PRODUCT_IDS.pack3,
   },
   {
-    packageEnv: 'EXPO_PUBLIC_REVENUECAT_BOOSTER_PACKAGE_ID_10',
-    packageId: 'booster_pack10',
-    productEnv: 'EXPO_PUBLIC_REVENUECAT_BOOSTER_PRODUCT_ID_10',
+    env: 'EXPO_PUBLIC_APP_STORE_BOOSTER_PRODUCT_ID_10',
     productId: DEFAULT_BOOSTER_PRODUCT_IDS.pack10,
   },
 ] as const;
 
-const BOOSTER_OFFERING_ID =
-  process.env.EXPO_PUBLIC_REVENUECAT_BOOSTER_OFFERING_ID?.trim() || 'booster';
+const PURCHASE_TIMEOUT_MS = 120_000;
 
-let configured = false;
-let configuredApiKey: string | null = null;
-let currentRevenueCatUserId: string | null = null;
-
-function getRevenueCatApiKey() {
-  const iosKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY?.trim();
-  const androidKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY?.trim();
-
-  if (Platform.OS === 'ios') return iosKey ?? '';
-  if (Platform.OS === 'android') return androidKey ?? '';
-  return '';
-}
+let connectionPromise: Promise<boolean> | null = null;
+let connected = false;
+let currentAppAccountToken: string | null = null;
+let pendingPurchase: PendingPurchaseRequest | null = null;
+let purchaseErrorSubscription: { remove: () => void } | null = null;
+let purchaseUpdatedSubscription: { remove: () => void } | null = null;
 
 function getPackConfig(productId: string) {
-  const config = BOOSTER_PACK_CONFIG.find((pack) => pack.productId === productId);
+  const config = BOOSTER_STORE_PRODUCT_CONFIG.find((pack) => pack.productId === productId);
   if (!config) {
     throw new Error('지원하지 않는 바로 매치 상품이에요.');
   }
@@ -105,185 +107,277 @@ function getEnvValue(name: string) {
   return process.env[name]?.trim() || '';
 }
 
-export function getRevenueCatProductId(productId: PaymentPackId) {
+export function getAppStoreProductId(productId: PaymentPackId) {
   const config = getPackConfig(productId);
-  return getEnvValue(config.productEnv) || config.productId;
-}
-
-export function getRevenueCatPackageId(productId: PaymentPackId) {
-  const config = getPackConfig(productId);
-  return getEnvValue(config.packageEnv) || config.packageId;
+  return getEnvValue(config.env) || config.productId;
 }
 
 export function isPurchasesConfigured() {
-  return configured;
+  return connected || connectionPromise !== null;
+}
+
+function isIosIapSupported() {
+  return Platform.OS === 'ios';
+}
+
+function clearPendingPurchase() {
+  if (!pendingPurchase) return;
+  clearTimeout(pendingPurchase.timeoutId);
+  pendingPurchase = null;
+}
+
+function findMatchingPurchase(
+  purchase: Purchase | Purchase[] | null | undefined,
+  storeProductId: string,
+) {
+  const purchases = Array.isArray(purchase) ? purchase : purchase ? [purchase] : [];
+  return purchases.find((candidate) => candidate.productId === storeProductId) ?? null;
+}
+
+function isInAppStoreProduct(product: ProductOrSubscription): product is Product {
+  return product.type === 'in-app';
+}
+
+function resolvePendingPurchase(purchase: Purchase) {
+  const request = pendingPurchase;
+  if (!request || purchase.productId !== request.productId) {
+    return;
+  }
+
+  clearPendingPurchase();
+  request.resolve(purchase);
+}
+
+function rejectPendingPurchase(error: unknown) {
+  const request = pendingPurchase;
+  if (!request) {
+    return;
+  }
+
+  clearPendingPurchase();
+  request.reject(error);
+}
+
+function createPendingPurchase(productId: string) {
+  if (pendingPurchase) {
+    throw new Error('이미 진행 중인 스토어 결제가 있어요.');
+  }
+
+  return new Promise<Purchase>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      rejectPendingPurchase(new Error('스토어 결제 응답 시간이 초과됐어요.'));
+    }, PURCHASE_TIMEOUT_MS);
+
+    pendingPurchase = {
+      productId,
+      reject,
+      resolve,
+      timeoutId,
+    };
+  });
+}
+
+function setupPurchaseListeners() {
+  if (purchaseUpdatedSubscription || purchaseErrorSubscription) {
+    return;
+  }
+
+  purchaseUpdatedSubscription = purchaseUpdatedListener((purchase) => {
+    resolvePendingPurchase(purchase);
+  });
+  purchaseErrorSubscription = purchaseErrorListener((error) => {
+    rejectPendingPurchase(error);
+  });
 }
 
 export function initPurchases() {
-  const apiKey = getRevenueCatApiKey();
-
-  if (!apiKey) {
-    configured = false;
-    logger.captureMessage('RevenueCat SDK key is not configured', 'warning', {
-      tags: { feature: 'payment', provider: 'revenuecat', action: 'init' },
+  if (!isIosIapSupported()) {
+    logger.captureMessage('Apple IAP is only enabled on iOS builds', 'warning', {
+      tags: { feature: 'payment', provider: 'apple_iap', action: 'init' },
       extra: { platform: Platform.OS },
     });
+    connected = false;
+    connectionPromise = null;
     return false;
   }
 
-  if (configured && configuredApiKey === apiKey) {
-    return true;
-  }
+  setupPurchaseListeners();
 
-  Purchases.configure({ apiKey });
-  configured = true;
-  configuredApiKey = apiKey;
-
-  if (__DEV__) {
-    void Purchases.setLogLevel(LOG_LEVEL.DEBUG).catch(() => undefined);
+  if (!connectionPromise) {
+    connectionPromise = initConnection()
+      .then((result) => {
+        connected = result === true;
+        return connected;
+      })
+      .catch((error) => {
+        connected = false;
+        connectionPromise = null;
+        logger.captureException(error, {
+          tags: { feature: 'payment', provider: 'apple_iap', action: 'init' },
+        });
+        return false;
+      });
   }
 
   return true;
 }
 
-function requirePurchasesConfigured() {
-  if (!configured && !initPurchases()) {
-    throw new Error('스토어 결제 설정이 아직 완료되지 않았어요.');
+async function requirePurchasesConfigured() {
+  if (!initPurchases() || !connectionPromise) {
+    throw new Error('iOS 인앱결제는 네이티브 iOS 빌드에서만 사용할 수 있어요.');
+  }
+
+  const ready = await connectionPromise;
+  if (!ready) {
+    throw new Error('스토어 결제 연결을 시작하지 못했어요.');
   }
 }
 
 export async function syncPurchasesUser(userId: string) {
-  if (!configured && !initPurchases()) {
-    return;
-  }
-
-  if (currentRevenueCatUserId === userId) {
-    return;
-  }
-
-  await Purchases.logIn(userId);
-  currentRevenueCatUserId = userId;
+  currentAppAccountToken = userId;
 }
 
 export async function resetPurchasesUser() {
-  if (!configured || !currentRevenueCatUserId) {
-    currentRevenueCatUserId = null;
-    return;
-  }
-
-  try {
-    await Purchases.logOut();
-  } catch (error) {
-    logger.captureMessage('RevenueCat logout skipped', 'warning', {
-      tags: { feature: 'payment', provider: 'revenuecat', action: 'logout' },
-      extra: { reason: error instanceof Error ? error.message : String(error) },
-    });
-  } finally {
-    currentRevenueCatUserId = null;
-  }
-}
-
-function findPackageForProduct(
-  packages: PurchasesPackage[],
-  productId: PaymentPackId,
-) {
-  const expectedPackageId = getRevenueCatPackageId(productId);
-  const expectedProductId = getRevenueCatProductId(productId);
-
-  return packages.find((candidate) =>
-    candidate.identifier === expectedPackageId
-    || candidate.identifier === productId
-    || candidate.product.identifier === expectedProductId
-    || candidate.product.identifier === productId
-  ) ?? null;
+  currentAppAccountToken = null;
 }
 
 export async function getBoosterPackageOptions() {
-  requirePurchasesConfigured();
+  await requirePurchasesConfigured();
 
-  const offerings = await Purchases.getOfferings();
-  const offering = offerings.all[BOOSTER_OFFERING_ID] ?? offerings.current;
-
-  if (!offering) {
-    throw new Error('바로 매치 스토어 상품을 찾을 수 없어요.');
-  }
-
+  const storeProductIds = BOOSTER_STORE_PRODUCT_CONFIG.map((config) =>
+    getAppStoreProductId(config.productId as PaymentPackId)
+  );
+  const products = await fetchProducts({
+    skus: storeProductIds,
+    type: 'in-app',
+  });
+  const inAppProducts = (products ?? []).filter(isInAppStoreProduct);
   const options = new Map<PaymentPackId, BoosterPackageOption>();
 
-  for (const config of BOOSTER_PACK_CONFIG) {
+  for (const config of BOOSTER_STORE_PRODUCT_CONFIG) {
     const productId = config.productId as PaymentPackId;
-    const purchasesPackage = findPackageForProduct(offering.availablePackages, productId);
+    const storeProductId = getAppStoreProductId(productId);
+    const product = inAppProducts.find((candidate) => candidate.id === storeProductId);
 
-    if (!purchasesPackage) {
+    if (!product) {
       continue;
     }
 
     options.set(productId, {
-      package: purchasesPackage,
-      packageId: purchasesPackage.identifier,
-      price: purchasesPackage.product.priceString,
+      packageId: product.id,
+      price: product.displayPrice,
+      product,
       productId,
-      revenueCatProductId: purchasesPackage.product.identifier,
+      storeProductId: product.id,
     });
   }
 
   if (options.size === 0) {
-    throw new Error('바로 매치 상품 구성이 비어 있어요.');
+    throw new Error('바로 매치 App Store 상품 구성이 비어 있어요.');
   }
 
   return options;
 }
 
-function findPurchasedTransaction(customerInfo: CustomerInfo, revenueCatProductId: string) {
-  const transactions = customerInfo.nonSubscriptionTransactions
-    .filter((transaction) => transaction.productIdentifier === revenueCatProductId)
-    .sort((a, b) => Date.parse(b.purchaseDate) - Date.parse(a.purchaseDate));
-
-  return transactions[0] ?? null;
-}
-
-function requireTransaction(
-  transaction: PurchasesStoreTransaction | null,
-  revenueCatProductId: string,
-) {
-  if (!transaction?.transactionIdentifier) {
-    throw new Error(`스토어 거래 식별자를 확인할 수 없어요. (${revenueCatProductId})`);
+function requireTransactionId(purchase: Purchase) {
+  const transactionId = purchase.transactionId || purchase.id;
+  if (!transactionId) {
+    throw new Error(`스토어 거래 식별자를 확인할 수 없어요. (${purchase.productId})`);
   }
 
-  return transaction;
+  return transactionId;
+}
+
+async function getSignedTransactionInfo(purchase: Purchase, transactionId: string) {
+  const purchaseToken = purchase.purchaseToken?.trim();
+  if (purchaseToken) {
+    return purchaseToken;
+  }
+
+  try {
+    return await getTransactionJwsIOS(transactionId);
+  } catch (error) {
+    logger.captureMessage('App Store transaction JWS lookup skipped', 'warning', {
+      tags: { feature: 'payment', provider: 'apple_iap', action: 'get-transaction-jws' },
+      extra: { reason: error instanceof Error ? error.message : String(error), transactionId },
+    });
+    return null;
+  }
+}
+
+export async function createInstantRematchConfirmPayload(
+  productId: PaymentPackId,
+  purchase: Purchase,
+) {
+  const expectedStoreProductId = getAppStoreProductId(productId);
+  if (purchase.productId !== expectedStoreProductId) {
+    throw new Error('구매한 App Store 상품과 선택한 바로 매치 상품이 달라요.');
+  }
+
+  const transactionId = requireTransactionId(purchase);
+  const signedTransactionInfo = await getSignedTransactionInfo(purchase, transactionId);
+
+  return {
+    environment: 'environmentIOS' in purchase ? purchase.environmentIOS ?? null : null,
+    productId,
+    purchase,
+    signedTransactionInfo,
+    storeProductId: purchase.productId,
+    transactionDate: purchase.transactionDate,
+    transactionId,
+  } satisfies PurchaseInstantRematchResult;
 }
 
 export async function purchaseInstantRematchPackage(productId: PaymentPackId) {
+  await requirePurchasesConfigured();
+
   const options = await getBoosterPackageOptions();
   const option = options.get(productId);
 
   if (!option) {
-    throw new Error('선택한 바로 매치 상품을 스토어에서 찾을 수 없어요.');
+    throw new Error('선택한 바로 매치 상품을 App Store에서 찾을 수 없어요.');
   }
 
-  const result = await Purchases.purchasePackage(option.package);
-  const transaction = requireTransaction(
-    findPurchasedTransaction(result.customerInfo, option.revenueCatProductId),
-    option.revenueCatProductId,
-  );
+  const purchasePromise = createPendingPurchase(option.storeProductId);
 
-  return {
-    appUserId: currentRevenueCatUserId ?? result.customerInfo.originalAppUserId,
-    customerInfo: result.customerInfo,
-    customerInfoRequestDate: result.customerInfo.requestDate,
-    productId,
-    revenueCatProductId: option.revenueCatProductId,
-    transactionId: transaction.transactionIdentifier,
-  } satisfies PurchaseInstantRematchResult;
+  try {
+    const result = await requestPurchase({
+      request: {
+        apple: {
+          appAccountToken: currentAppAccountToken ?? undefined,
+          sku: option.storeProductId,
+        },
+      },
+      type: 'in-app',
+    });
+    const immediatePurchase = findMatchingPurchase(result, option.storeProductId);
+    if (immediatePurchase) {
+      resolvePendingPurchase(immediatePurchase);
+    }
+  } catch (error) {
+    clearPendingPurchase();
+    throw error;
+  }
+
+  const purchase = await purchasePromise;
+  return createInstantRematchConfirmPayload(productId, purchase);
 }
 
 export async function confirmInstantRematchPurchase(
   payload: ConfirmInstantRematchPurchasePayload,
 ) {
+  const body = {
+    environment: payload.environment ?? null,
+    productId: payload.productId,
+    signedTransactionInfo: payload.signedTransactionInfo ?? null,
+    storeProductId: payload.storeProductId,
+    transactionDate: payload.transactionDate ?? null,
+    transactionId: payload.transactionId,
+  };
   const { data, error } = await supabase.functions.invoke<ConfirmInstantRematchPurchaseResponse>(
     'confirm-instant-rematch-payment',
     {
-      body: payload,
+      body,
     },
   );
 
@@ -291,12 +385,24 @@ export async function confirmInstantRematchPurchase(
     throw new Error(error?.message || '스토어 결제를 확인할 수 없어요.');
   }
 
+  if (payload.purchase) {
+    try {
+      await finishTransaction({ isConsumable: true, purchase: payload.purchase });
+    } catch (finishError) {
+      logger.captureException(finishError, {
+        tags: { feature: 'payment', provider: 'apple_iap', action: 'finish-transaction' },
+        extra: { productId: payload.productId, transactionId: payload.transactionId },
+      });
+    }
+  }
+
   return data;
 }
 
 export function isPurchaseCancelled(error: unknown) {
-  const purchasesError = error as PurchasesErrorLike;
-  return purchasesError.userCancelled === true
-    || purchasesError.code === Purchases.PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR
-    || purchasesError.readableErrorCode === 'PURCHASE_CANCELLED';
+  const purchaseError = error as PurchaseErrorLike;
+  return purchaseError.userCancelled === true
+    || purchaseError.code === ErrorCode.UserCancelled
+    || purchaseError.code === 'user-cancelled'
+    || String(purchaseError.message ?? '').toLowerCase().includes('cancel');
 }

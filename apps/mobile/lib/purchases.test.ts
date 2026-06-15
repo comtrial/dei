@@ -1,14 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  captureException: vi.fn(),
   captureMessage: vi.fn(),
-  configure: vi.fn(),
+  fetchProducts: vi.fn(),
+  finishTransaction: vi.fn(),
   functionsInvoke: vi.fn(),
-  getOfferings: vi.fn(),
-  logIn: vi.fn(),
-  logOut: vi.fn(),
-  purchasePackage: vi.fn(),
-  setLogLevel: vi.fn(),
+  getTransactionJwsIOS: vi.fn(),
+  initConnection: vi.fn(),
+  purchaseErrorCallback: undefined as ((error: unknown) => void) | undefined,
+  purchaseErrorListener: vi.fn(),
+  purchaseUpdatedCallback: undefined as ((purchase: unknown) => void) | undefined,
+  purchaseUpdatedListener: vi.fn(),
+  requestPurchase: vi.fn(),
 }));
 
 vi.mock('@dei/shared', () => ({
@@ -18,6 +22,7 @@ vi.mock('@dei/shared', () => ({
     },
   },
   logger: {
+    captureException: mocks.captureException,
     captureMessage: mocks.captureMessage,
   },
 }));
@@ -26,19 +31,23 @@ vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
-vi.mock('react-native-purchases', () => ({
-  default: {
-    PURCHASES_ERROR_CODE: {
-      PURCHASE_CANCELLED_ERROR: '1',
-    },
-    configure: (...args: unknown[]) => mocks.configure(...args),
-    getOfferings: (...args: unknown[]) => mocks.getOfferings(...args),
-    logIn: (...args: unknown[]) => mocks.logIn(...args),
-    logOut: (...args: unknown[]) => mocks.logOut(...args),
-    purchasePackage: (...args: unknown[]) => mocks.purchasePackage(...args),
-    setLogLevel: (...args: unknown[]) => mocks.setLogLevel(...args),
+vi.mock('expo-iap', () => ({
+  ErrorCode: { UserCancelled: 'user-cancelled' },
+  fetchProducts: (...args: unknown[]) => mocks.fetchProducts(...args),
+  finishTransaction: (...args: unknown[]) => mocks.finishTransaction(...args),
+  getTransactionJwsIOS: (...args: unknown[]) => mocks.getTransactionJwsIOS(...args),
+  initConnection: (...args: unknown[]) => mocks.initConnection(...args),
+  purchaseErrorListener: (listener: (error: unknown) => void) => {
+    mocks.purchaseErrorCallback = listener;
+    mocks.purchaseErrorListener(listener);
+    return { remove: vi.fn() };
   },
-  LOG_LEVEL: { DEBUG: 'debug' },
+  purchaseUpdatedListener: (listener: (purchase: unknown) => void) => {
+    mocks.purchaseUpdatedCallback = listener;
+    mocks.purchaseUpdatedListener(listener);
+    return { remove: vi.fn() };
+  },
+  requestPurchase: (...args: unknown[]) => mocks.requestPurchase(...args),
 }));
 
 vi.mock('@/lib/supabase', () => ({
@@ -52,6 +61,8 @@ vi.mock('@/lib/supabase', () => ({
 // eslint-disable-next-line import/first
 import {
   confirmInstantRematchPurchase,
+  createInstantRematchConfirmPayload,
+  getAppStoreProductId,
   getBoosterPackageOptions,
   initPurchases,
   isPurchaseCancelled,
@@ -59,126 +70,174 @@ import {
   syncPurchasesUser,
 } from './purchases';
 
-const booster1Package = {
-  identifier: 'booster_1',
-  product: {
-    identifier: 'booster_instant_rematch_v1',
-    priceString: '₩1,000',
-  },
-};
+const booster1Product = {
+  currency: 'KRW',
+  description: '바로 매치 1회',
+  displayPrice: '₩1,000',
+  id: 'booster_instant_rematch_v1',
+  isFamilyShareableIOS: false,
+  isAutoRenewing: false,
+  jsonRepresentationIOS: '{}',
+  platform: 'ios',
+  price: 1000,
+  productId: 'booster_instant_rematch_v1',
+  title: '바로 매치 1회',
+  type: 'in-app',
+  typeIOS: 'consumable',
+} as const;
 
-const booster3Package = {
-  identifier: 'booster_pack3',
-  product: {
-    identifier: 'booster_instant_rematch_v1_pack3',
-    priceString: '₩2,700',
-  },
-};
+const booster3Product = {
+  ...booster1Product,
+  displayPrice: '₩2,700',
+  id: 'booster_instant_rematch_v1_pack3',
+  productId: 'booster_instant_rematch_v1_pack3',
+  title: '바로 매치 3회',
+} as const;
+
+const boosterPurchase = {
+  environmentIOS: 'Sandbox',
+  id: 'tx-1',
+  isAutoRenewing: false,
+  platform: 'ios',
+  productId: 'booster_instant_rematch_v1',
+  purchaseState: 'purchased',
+  purchaseToken: 'signed-jws',
+  quantity: 1,
+  store: 'apple',
+  transactionDate: 1_786_000_000_000,
+  transactionId: 'tx-1',
+} as const;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY = 'appl_test_key';
-  delete process.env.EXPO_PUBLIC_REVENUECAT_BOOSTER_PRODUCT_ID_1;
-  delete process.env.EXPO_PUBLIC_REVENUECAT_BOOSTER_PACKAGE_ID_1;
-  mocks.getOfferings.mockResolvedValue({
-    all: {
-      booster: {
-        availablePackages: [booster1Package, booster3Package],
-        identifier: 'booster',
-      },
-    },
-    current: null,
-  });
-  mocks.logIn.mockResolvedValue({ customerInfo: {} });
-  mocks.setLogLevel.mockResolvedValue(undefined);
+  delete process.env.EXPO_PUBLIC_APP_STORE_BOOSTER_PRODUCT_ID_1;
+  mocks.initConnection.mockResolvedValue(true);
+  mocks.fetchProducts.mockResolvedValue([booster1Product, booster3Product]);
+  mocks.finishTransaction.mockResolvedValue(undefined);
 });
 
-describe('RevenueCat purchases client', () => {
-  it('configures RevenueCat with the iOS SDK key', () => {
+describe('direct Apple IAP purchases client', () => {
+  it('initializes expo-iap store connection for iOS native builds', async () => {
     expect(initPurchases()).toBe(true);
-    expect(mocks.configure).toHaveBeenCalledWith({ apiKey: 'appl_test_key' });
+    await expect(mocks.initConnection.mock.results[0]?.value).resolves.toBe(true);
+    expect(mocks.purchaseUpdatedListener).toHaveBeenCalled();
+    expect(mocks.purchaseErrorListener).toHaveBeenCalled();
   });
 
-  it('maps RevenueCat offering packages to booster product ids and prices', async () => {
-    initPurchases();
+  it('maps logical booster product ids to App Store product ids', () => {
+    expect(getAppStoreProductId('booster_instant_rematch_v1')).toBe(
+      'booster_instant_rematch_v1',
+    );
 
+    process.env.EXPO_PUBLIC_APP_STORE_BOOSTER_PRODUCT_ID_1 = 'ios.booster.1';
+    expect(getAppStoreProductId('booster_instant_rematch_v1')).toBe('ios.booster.1');
+  });
+
+  it('loads App Store products and uses localized display prices', async () => {
     const options = await getBoosterPackageOptions();
 
+    expect(mocks.fetchProducts).toHaveBeenCalledWith({
+      skus: [
+        'booster_instant_rematch_v1',
+        'booster_instant_rematch_v1_pack3',
+        'booster_instant_rematch_v1_pack10',
+      ],
+      type: 'in-app',
+    });
     expect(options.get('booster_instant_rematch_v1')).toMatchObject({
-      packageId: 'booster_1',
+      packageId: 'booster_instant_rematch_v1',
       price: '₩1,000',
-      revenueCatProductId: 'booster_instant_rematch_v1',
+      storeProductId: 'booster_instant_rematch_v1',
     });
     expect(options.get('booster_instant_rematch_v1_pack3')).toMatchObject({
-      packageId: 'booster_pack3',
       price: '₩2,700',
-      revenueCatProductId: 'booster_instant_rematch_v1_pack3',
+      storeProductId: 'booster_instant_rematch_v1_pack3',
     });
   });
 
   it('returns a server confirmation payload from a purchased consumable transaction', async () => {
-    initPurchases();
-    await syncPurchasesUser('user-1');
-    mocks.purchasePackage.mockResolvedValueOnce({
-      customerInfo: {
-        nonSubscriptionTransactions: [
-          {
-            productIdentifier: 'booster_instant_rematch_v1',
-            purchaseDate: '2026-06-07T00:00:00Z',
-            transactionIdentifier: 'tx-1',
-          },
-        ],
-        originalAppUserId: '$RCAnonymousID:old',
-        requestDate: '2026-06-07T00:00:01Z',
-      },
-      productIdentifier: 'booster_instant_rematch_v1',
+    await syncPurchasesUser('user-uuid');
+    mocks.requestPurchase.mockImplementation(async () => {
+      mocks.purchaseUpdatedCallback?.(boosterPurchase);
+      return null;
     });
 
     await expect(purchaseInstantRematchPackage('booster_instant_rematch_v1')).resolves.toMatchObject({
-      appUserId: 'user-1',
-      customerInfoRequestDate: '2026-06-07T00:00:01Z',
+      environment: 'Sandbox',
       productId: 'booster_instant_rematch_v1',
-      revenueCatProductId: 'booster_instant_rematch_v1',
+      signedTransactionInfo: 'signed-jws',
+      storeProductId: 'booster_instant_rematch_v1',
+      transactionDate: 1_786_000_000_000,
       transactionId: 'tx-1',
+    });
+    expect(mocks.requestPurchase).toHaveBeenCalledWith({
+      request: {
+        apple: {
+          appAccountToken: 'user-uuid',
+          sku: 'booster_instant_rematch_v1',
+        },
+      },
+      type: 'in-app',
     });
   });
 
-  it('calls the Supabase confirm Edge Function with RevenueCat purchase identifiers', async () => {
+  it('falls back to StoreKit transaction JWS lookup when purchaseToken is absent', async () => {
+    mocks.getTransactionJwsIOS.mockResolvedValueOnce('lookup-jws');
+
+    await expect(createInstantRematchConfirmPayload(
+      'booster_instant_rematch_v1',
+      { ...boosterPurchase, purchaseToken: null },
+    )).resolves.toMatchObject({
+      signedTransactionInfo: 'lookup-jws',
+      transactionId: 'tx-1',
+    });
+    expect(mocks.getTransactionJwsIOS).toHaveBeenCalledWith('tx-1');
+  });
+
+  it('calls the Supabase confirm Edge Function without leaking the native purchase object', async () => {
     mocks.functionsInvoke.mockResolvedValueOnce({
       data: {
         granted: 1,
         ok: true,
         paymentId: 'payment-1',
         productId: 'booster_instant_rematch_v1',
-        provider: 'revenuecat',
-        revenueCatProductId: 'booster_instant_rematch_v1',
+        provider: 'apple_iap',
+        storeProductId: 'booster_instant_rematch_v1',
         transactionId: 'tx-1',
       },
       error: null,
     });
 
     await confirmInstantRematchPurchase({
-      appUserId: 'user-1',
-      customerInfoRequestDate: '2026-06-07T00:00:01Z',
+      environment: 'Sandbox',
       productId: 'booster_instant_rematch_v1',
-      revenueCatProductId: 'booster_instant_rematch_v1',
+      purchase: boosterPurchase,
+      signedTransactionInfo: 'signed-jws',
+      storeProductId: 'booster_instant_rematch_v1',
+      transactionDate: 1_786_000_000_000,
       transactionId: 'tx-1',
     });
 
     expect(mocks.functionsInvoke).toHaveBeenCalledWith('confirm-instant-rematch-payment', {
       body: {
-        appUserId: 'user-1',
-        customerInfoRequestDate: '2026-06-07T00:00:01Z',
+        environment: 'Sandbox',
         productId: 'booster_instant_rematch_v1',
-        revenueCatProductId: 'booster_instant_rematch_v1',
+        signedTransactionInfo: 'signed-jws',
+        storeProductId: 'booster_instant_rematch_v1',
+        transactionDate: 1_786_000_000_000,
         transactionId: 'tx-1',
       },
     });
+    expect(mocks.finishTransaction).toHaveBeenCalledWith({
+      isConsumable: true,
+      purchase: boosterPurchase,
+    });
   });
 
-  it('detects RevenueCat purchase cancellation errors', () => {
-    expect(isPurchaseCancelled({ code: '1' })).toBe(true);
+  it('detects Apple IAP purchase cancellation errors', () => {
+    expect(isPurchaseCancelled({ code: 'user-cancelled' })).toBe(true);
     expect(isPurchaseCancelled({ userCancelled: true })).toBe(true);
-    expect(isPurchaseCancelled({ code: '2' })).toBe(false);
+    expect(isPurchaseCancelled({ message: 'User cancelled the purchase' })).toBe(true);
+    expect(isPurchaseCancelled({ code: 'network-error' })).toBe(false);
   });
 });

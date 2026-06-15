@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 
 import { POLICY } from "../../../packages/shared/src/policy.ts";
 import {
+  getAppStoreProductId,
   getInstantRematchProduct,
-  getInstantRematchProductForRevenueCat,
-  getRevenueCatProductId,
+  getInstantRematchProductForAppStore,
 } from "./instant-rematch-payment.ts";
 
 const AMOUNT_ENV_NAMES = [
@@ -12,10 +12,10 @@ const AMOUNT_ENV_NAMES = [
   "PORTONE_INSTANT_REMATCH_AMOUNT_3",
   "PORTONE_INSTANT_REMATCH_AMOUNT_10",
 ] as const;
-const REVENUECAT_PRODUCT_ENV_NAMES = [
-  "REVENUECAT_INSTANT_REMATCH_PRODUCT_ID_1",
-  "REVENUECAT_INSTANT_REMATCH_PRODUCT_ID_3",
-  "REVENUECAT_INSTANT_REMATCH_PRODUCT_ID_10",
+const APP_STORE_PRODUCT_ENV_NAMES = [
+  "APP_STORE_INSTANT_REMATCH_PRODUCT_ID_1",
+  "APP_STORE_INSTANT_REMATCH_PRODUCT_ID_3",
+  "APP_STORE_INSTANT_REMATCH_PRODUCT_ID_10",
 ] as const;
 
 function withAmountEnv(
@@ -48,15 +48,15 @@ function withAmountEnv(
   }
 }
 
-function withRevenueCatProductEnv(
+function withAppStoreProductEnv(
   values: Partial<
-    Record<(typeof REVENUECAT_PRODUCT_ENV_NAMES)[number], string>
+    Record<(typeof APP_STORE_PRODUCT_ENV_NAMES)[number], string>
   >,
   run: () => void,
 ) {
   const previous = new Map<string, string | undefined>();
 
-  for (const name of REVENUECAT_PRODUCT_ENV_NAMES) {
+  for (const name of APP_STORE_PRODUCT_ENV_NAMES) {
     previous.set(name, Deno.env.get(name));
     const value = values[name];
     if (value === undefined) {
@@ -69,7 +69,7 @@ function withRevenueCatProductEnv(
   try {
     run();
   } finally {
-    for (const name of REVENUECAT_PRODUCT_ENV_NAMES) {
+    for (const name of APP_STORE_PRODUCT_ENV_NAMES) {
       const value = previous.get(name);
       if (value === undefined) {
         Deno.env.delete(name);
@@ -139,65 +139,65 @@ Deno.test("instant rematch payment amount env is required and validated", () => 
   );
 });
 
-Deno.test("instant rematch RevenueCat product ids default to logical product ids", () => {
-  withRevenueCatProductEnv(
+Deno.test("instant rematch App Store product ids default to logical product ids", () => {
+  withAppStoreProductEnv(
     {},
     () => {
       assert.equal(
-        getRevenueCatProductId(POLICY.payment.instantRematchProductId),
+        getAppStoreProductId(POLICY.payment.instantRematchProductId),
         POLICY.payment.instantRematchProductId,
       );
       assert.deepEqual(
-        getInstantRematchProductForRevenueCat({
-          logicalProductId: `${POLICY.payment.instantRematchProductId}_pack10`,
-          revenueCatProductId:
+        getInstantRematchProductForAppStore({
+          appStoreProductId:
             `${POLICY.payment.instantRematchProductId}_pack10`,
+          logicalProductId: `${POLICY.payment.instantRematchProductId}_pack10`,
         }),
         {
+          appStoreProductId:
+            `${POLICY.payment.instantRematchProductId}_pack10`,
           granted: 10,
           id: `${POLICY.payment.instantRematchProductId}_pack10`,
           label: "바로 매치 10회 팩",
-          revenueCatProductId:
-            `${POLICY.payment.instantRematchProductId}_pack10`,
         },
       );
     },
   );
 });
 
-Deno.test("instant rematch RevenueCat product ids can be configured separately", () => {
-  withRevenueCatProductEnv(
+Deno.test("instant rematch App Store product ids can be configured separately", () => {
+  withAppStoreProductEnv(
     {
-      REVENUECAT_INSTANT_REMATCH_PRODUCT_ID_1: "ios.booster.1",
-      REVENUECAT_INSTANT_REMATCH_PRODUCT_ID_3: "ios.booster.3",
-      REVENUECAT_INSTANT_REMATCH_PRODUCT_ID_10: "ios.booster.10",
+      APP_STORE_INSTANT_REMATCH_PRODUCT_ID_1: "ios.booster.1",
+      APP_STORE_INSTANT_REMATCH_PRODUCT_ID_3: "ios.booster.3",
+      APP_STORE_INSTANT_REMATCH_PRODUCT_ID_10: "ios.booster.10",
     },
     () => {
       assert.equal(
-        getRevenueCatProductId(
+        getAppStoreProductId(
           `${POLICY.payment.instantRematchProductId}_pack3`,
         ),
         "ios.booster.3",
       );
       assert.deepEqual(
-        getInstantRematchProductForRevenueCat({
+        getInstantRematchProductForAppStore({
+          appStoreProductId: "ios.booster.10",
           logicalProductId: null,
-          revenueCatProductId: "ios.booster.10",
         }),
         {
+          appStoreProductId: "ios.booster.10",
           granted: 10,
           id: `${POLICY.payment.instantRematchProductId}_pack10`,
           label: "바로 매치 10회 팩",
-          revenueCatProductId: "ios.booster.10",
         },
       );
       assert.throws(
         () =>
-          getInstantRematchProductForRevenueCat({
+          getInstantRematchProductForAppStore({
+            appStoreProductId: "ios.booster.3",
             logicalProductId: POLICY.payment.instantRematchProductId,
-            revenueCatProductId: "ios.booster.3",
           }),
-        /RevenueCat product id does not match/,
+        /App Store product id does not match/,
       );
     },
   );
