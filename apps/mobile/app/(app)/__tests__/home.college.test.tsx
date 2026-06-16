@@ -149,13 +149,16 @@ function makeVerificationChain() {
 }
 
 function makePassChain() {
-  return {
-    select: jest.fn(() => ({
-      eq: jest.fn(() => ({
-        eq: jest.fn(() => Promise.resolve({ data: [], error: null })),
-      })),
-    })),
+  const result = { data: [], error: null };
+  const promise = Promise.resolve(result);
+  const chain: Record<string, unknown> = {
+    select: jest.fn(() => chain),
+    eq: jest.fn(() => chain),
+    then: (...args: Parameters<Promise<typeof result>['then']>) => promise.then(...args),
+    catch: (...args: Parameters<Promise<typeof result>['catch']>) => promise.catch(...args),
+    finally: (...args: Parameters<Promise<typeof result>['finally']>) => promise.finally(...args),
   };
+  return chain;
 }
 
 describe('HomeScreen — college gwating entry', () => {
