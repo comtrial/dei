@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -188,7 +188,7 @@ export default function MyProfileScreen() {
     universityName: null,
   });
 
-  useEffect(() => {
+  const applyCachedProfileSnapshot = useCallback(() => {
     const cached = getCachedProfileSnapshot(user?.id);
     if (!cached) return;
 
@@ -223,6 +223,16 @@ export default function MyProfileScreen() {
       setPhotoImageFailed(false);
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    applyCachedProfileSnapshot();
+  }, [applyCachedProfileSnapshot]);
+
+  useFocusEffect(
+    useCallback(() => {
+      applyCachedProfileSnapshot();
+    }, [applyCachedProfileSnapshot]),
+  );
 
   useEffect(() => {
     analytics.capture(ANALYTICS_EVENTS.profile_hub_opened);
@@ -260,6 +270,7 @@ export default function MyProfileScreen() {
               .from('pass')
               .select('remaining')
               .eq('user_id', user.id)
+              .eq('kind', 'booster')
               .eq('status', 'active'),
             supabase
               .from('notification_setting')

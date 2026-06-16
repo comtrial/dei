@@ -13,6 +13,7 @@ const mockSupabaseFrom = jest.fn();
 const mockEnqueueMatchQueue = jest.fn();
 const mockNeedsNotificationConsent = jest.fn();
 const mockRegisterPushToken = jest.fn();
+const mockMergeCachedProfileSnapshot = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace, back: mockBack, push: mockPush }),
@@ -49,6 +50,10 @@ jest.mock('@/lib/notifications.stub', () => ({
   getAppNotificationEnabled: jest.fn().mockResolvedValue(true),
   needsNotificationConsent: (...args: unknown[]) => mockNeedsNotificationConsent(...args),
   registerPushToken: (...args: unknown[]) => mockRegisterPushToken(...args),
+}));
+
+jest.mock('@/lib/profile-session-cache', () => ({
+  mergeCachedProfileSnapshot: (...args: unknown[]) => mockMergeCachedProfileSnapshot(...args),
 }));
 
 jest.mock('@/lib/permissions', () => ({
@@ -127,22 +132,14 @@ function makeProfileChain(rows: { data: unknown; error?: unknown }) {
 }
 
 function makePassChain(rows: { data: unknown; error?: unknown }) {
-  // pass 조회는 maybeSingle 없이 .select().eq().eq() thenable 로 끝난다.
   const result = { data: rows.data, error: rows.error ?? null };
+  const promise = Promise.resolve(result);
   const chain: Record<string, unknown> = {
-    select: jest.fn().mockReturnThis(),
-    // 첫 .eq() 는 체인 유지, 두 번째 .eq() 가 결과를 resolve.
-    eq: jest.fn(function eqImpl(this: unknown, ..._args: unknown[]) {
-      // 두 번째 eq 호출에서만 Promise 반환하도록 토글.
-      if ((chain as { _eqCalls?: number })._eqCalls === undefined) {
-        (chain as { _eqCalls?: number })._eqCalls = 0;
-      }
-      (chain as { _eqCalls: number })._eqCalls += 1;
-      if ((chain as { _eqCalls: number })._eqCalls >= 2) {
-        return Promise.resolve(result);
-      }
-      return chain;
-    }),
+    select: jest.fn(() => chain),
+    eq: jest.fn(() => chain),
+    then: (...args: Parameters<Promise<typeof result>['then']>) => promise.then(...args),
+    catch: (...args: Parameters<Promise<typeof result>['catch']>) => promise.catch(...args),
+    finally: (...args: Parameters<Promise<typeof result>['finally']>) => promise.finally(...args),
   };
   return chain;
 }
@@ -154,7 +151,15 @@ describe('BoosterScreen — booster 결제 신호 계측', () => {
     mockGetBoosterPackageOptions.mockResolvedValue(new Map());
     mockIsPurchaseCancelled.mockReturnValue(false);
     mockSyncPurchasesUser.mockResolvedValue(undefined);
-    mockEnqueueMatchQueue.mockResolvedValue(undefined);
+    mockEnqueueMatchQueue.mockResolvedValue({
+      enqueuedAt: '2026-06-16T00:00:00.000Z',
+      expiresAt: '2026-06-16T12:00:00.000Z',
+      memberCount: 1,
+      passConsumed: false,
+      queueId: 'queue-1',
+      reused: false,
+      teamId: 'team-1',
+    });
     mockNeedsNotificationConsent.mockResolvedValue(false);
     mockRegisterPushToken.mockResolvedValue(undefined);
     mockPurchaseInstantRematchPackage.mockResolvedValue({
@@ -166,7 +171,16 @@ describe('BoosterScreen — booster 결제 신호 계측', () => {
       transactionDate: 1_786_000_000_000,
       transactionId: 'tx-1',
     });
-    mockConfirmInstantRematchPurchase.mockResolvedValue(undefined);
+    mockConfirmInstantRematchPurchase.mockResolvedValue({
+      duplicate: false,
+      granted: 1,
+      ok: true,
+      paymentId: 'payment-1',
+      productId: 'booster_instant_rematch_v1',
+      provider: 'apple_iap',
+      storeProductId: 'booster_instant_rematch_v1',
+      transactionId: 'tx-1',
+    });
 
     mockSupabaseFrom.mockImplementation((table: string) => {
       if (table === 'profile') {
@@ -216,6 +230,20 @@ describe('BoosterScreen — booster 결제 신호 계측', () => {
   });
 
   it('결제 성공 시 purchase → confirm → success analytics → 큐 진입 순서로 진행된다', async () => {
+    const passResponses = [
+      [],
+      [{ remaining: 3 }],
+    ];
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'profile') {
+        return makeProfileChain({ data: { last_room_leave_at: null } });
+      }
+      if (table === 'pass') {
+        return makePassChain({ data: passResponses.shift() ?? [{ remaining: 3 }] });
+      }
+      return makeProfileChain({ data: null });
+    });
+
     render(<BoosterScreen />);
 
     await waitFor(() => {
@@ -241,6 +269,7 @@ describe('BoosterScreen — booster 결제 신호 계측', () => {
         'F3:booster_purchase_succeeded',
         expect.objectContaining({ product_id: expect.any(String) }),
       );
+      expect(mockMergeCachedProfileSnapshot).toHaveBeenCalledWith('u1', { passCount: 3 });
       expect(mockEnqueueMatchQueue).toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith({
         pathname: '/(app)/queue',
