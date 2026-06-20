@@ -99,6 +99,7 @@ jest.mock('@dei/ui', () => {
   return {
     AlertDialog: () => null,
     Avatar: () => null,
+    Spinner: () => null,
     Banner: ({
       children,
       title,
