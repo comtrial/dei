@@ -140,6 +140,7 @@ export default function HomeScreen() {
               .from('pass')
               .select('remaining')
               .eq('user_id', user.id)
+              .eq('kind', 'booster')
               .eq('status', 'active'),
           ]);
 

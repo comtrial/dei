@@ -51,7 +51,7 @@ production 빌드에 **반드시 임베드돼야 하는 EXPO_PUBLIC_* 키** (없
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 - `EXPO_PUBLIC_POSTHOG_KEY` (`phc_...`) / `EXPO_PUBLIC_POSTHOG_HOST` (`https://us.i.posthog.com`)
 - `EXPO_PUBLIC_SENTRY_DSN` / `EXPO_PUBLIC_SENTRY_ENV` (**production 빌드에선 `production` 으로 등록 — 로컬 `.env` 는 `development` 임**)
-- (RevenueCat 실결제 붙이면) `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` 등
+- (App Store product id 기본값과 다르게 등록한 경우) `EXPO_PUBLIC_APP_STORE_BOOSTER_PRODUCT_ID_*`
 
 등록 예시 (값은 사람이 채움):
 ```bash

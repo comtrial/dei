@@ -1,8 +1,5 @@
-import { IdentityVerification } from '@portone/react-native-sdk';
-import type { IdentityVerificationRequest, IdentityVerificationResponse } from '@portone/browser-sdk/v2';
 import { useRouter } from 'expo-router';
-import { X } from 'lucide-react-native';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,9 +10,6 @@ import {
   BottomActionBar,
   Button,
   ChoiceList,
-  IconButton,
-  SlideToConfirm,
-  Spinner,
   Text,
   Textarea,
   TopNav,
@@ -23,11 +17,7 @@ import {
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { WITHDRAW_REASONS } from '@/lib/b-flow';
-import {
-  confirmWithdrawIdentityVerification,
-  startWithdrawIdentityVerification,
-  withdrawAccount,
-} from '@/lib/portone.stub';
+import { withdrawAccount } from '@/lib/portone.stub';
 import { ROUTES } from '@/lib/routes';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -36,11 +26,9 @@ export default function WithdrawScreen() {
   const { signOut } = useAuth();
   const [reason, setReason] = useState<string | null>(null);
   const [detail, setDetail] = useState('');
-  const [identityConfirmed, setIdentityConfirmed] = useState(false);
-  const [identityRequest, setIdentityRequest] = useState<IdentityVerificationRequest | null>(null);
-  const [isIdentityBusy, setIsIdentityBusy] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [failure, setFailure] = useState<{ description: string; title: string } | null>(null);
-  const identityRequestRef = useRef<IdentityVerificationRequest | null>(null);
 
   useEffect(() => {
     analytics.capture(ANALYTICS_EVENTS.withdraw_screen_entered);
@@ -48,94 +36,16 @@ export default function WithdrawScreen() {
 
   const canRequest = !!reason && (reason !== 'other' || detail.trim().length > 0);
 
-  const closeIdentityVerification = useCallback(() => {
-    identityRequestRef.current = null;
-    setIdentityRequest(null);
-    setIsIdentityBusy(false);
-  }, []);
-
-  const confirmIdentity = () => {
-    if (isIdentityBusy) {
-      return;
-    }
-
-    void logger.withErrorCapture(
-      'withdraw.identity-start',
-      async () => {
-        setIsIdentityBusy(true);
-        const request = await startWithdrawIdentityVerification();
-        identityRequestRef.current = request;
-        setIdentityRequest(request);
-      },
-      { tags: { screen: 'withdraw', action: 'identity-start' } },
-    )
-      .catch((error) => {
-        logger.captureException(error, {
-          tags: { screen: 'withdraw', action: 'identity-start-catch' },
-        });
-        setFailure({
-          title: '본인인증 재확인을 시작하지 못했어요',
-          description: '잠시 후 다시 시도해주세요.',
-        });
-      })
-      .finally(() => setIsIdentityBusy(false));
-  };
-
-  const handleIdentityComplete = useCallback(
-    (response: IdentityVerificationResponse) => {
-      const request = identityRequestRef.current;
-
-      void logger.withErrorCapture(
-        'withdraw.identity-confirm',
-        async () => {
-          setIsIdentityBusy(true);
-          await confirmWithdrawIdentityVerification(
-            response,
-            request?.identityVerificationId,
-          );
-          identityRequestRef.current = null;
-          setIdentityRequest(null);
-          setIdentityConfirmed(true);
-        },
-        { tags: { screen: 'withdraw', action: 'identity-confirm' } },
-      )
-        .catch((error) => {
-          logger.captureException(error, {
-            tags: { screen: 'withdraw', action: 'identity-confirm-catch' },
-          });
-          closeIdentityVerification();
-          setFailure({
-            title: '본인인증 재확인을 완료하지 못했어요',
-            description: '인증 도중 취소되었거나 시간이 초과됐어요. 다시 시도해주세요.',
-          });
-        })
-        .finally(() => setIsIdentityBusy(false));
-    },
-    [closeIdentityVerification],
-  );
-
-  const handleIdentityError = useCallback(
-    (error: Error) => {
-      logger.captureException(error, {
-        tags: { screen: 'withdraw', action: 'identity-sdk-error' },
-      });
-      closeIdentityVerification();
-      setFailure({
-        title: '본인인증 재확인을 완료하지 못했어요',
-        description: '인증 도중 취소되었거나 시간이 초과됐어요. 다시 시도해주세요.',
-      });
-    },
-    [closeIdentityVerification],
-  );
-
   const withdraw = () => {
-    if (!canRequest || !identityConfirmed) {
+    if (!canRequest || isWithdrawing) {
       return;
     }
 
     void logger.withErrorCapture(
       'withdraw.confirm',
       async () => {
+        setIsConfirmOpen(false);
+        setIsWithdrawing(true);
         analytics.capture(ANALYTICS_EVENTS.withdraw_confirmed, {
           reason,
         });
@@ -151,47 +61,18 @@ export default function WithdrawScreen() {
         router.replace(ROUTES.splash);
       },
       { tags: { screen: 'withdraw', action: 'confirm' } },
-    ).catch(() => {
-      setFailure({
-        title: '탈퇴 처리에 실패했어요',
-        description: '잠시 후 다시 시도해주세요.',
-      });
-    });
+    )
+      .catch((error) => {
+        logger.captureException(error, {
+          tags: { screen: 'withdraw', action: 'confirm-catch' },
+        });
+        setFailure({
+          title: '탈퇴 처리에 실패했어요',
+          description: '잠시 후 다시 시도해주세요.',
+        });
+      })
+      .finally(() => setIsWithdrawing(false));
   };
-
-  if (identityRequest) {
-    return (
-      <SafeAreaView className="flex-1 bg-bg">
-        <View className="items-end px-[18px] pt-[8px]">
-          <IconButton
-            glyph={X}
-            variant="filled-circle"
-            size={36}
-            accessibilityLabel="본인인증 재확인 닫기"
-            onPress={closeIdentityVerification}
-          />
-        </View>
-        <View className="flex-1">
-          <IdentityVerification
-            request={identityRequest}
-            onComplete={handleIdentityComplete}
-            onError={handleIdentityError}
-            javaScriptCanOpenWindowsAutomatically
-            setSupportMultipleWindows={false}
-          />
-        </View>
-
-        {isIdentityBusy ? (
-          <View className="absolute inset-0 items-center justify-center bg-bg/80 px-[32px]">
-            <Spinner size={80} accessibilityLabel="본인인증 재확인 중" />
-            <Text variant="body" tone="ink-3" className="mt-[18px] text-center">
-              본인인증 정보를 다시 확인하고 있어요
-            </Text>
-          </View>
-        ) : null}
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
@@ -229,31 +110,50 @@ export default function WithdrawScreen() {
             }))}
             className="mt-[24px]"
           />
-
-          <Button
-            fullWidth
-            variant={identityConfirmed ? 'secondary' : 'ink'}
-            disabled={isIdentityBusy}
-            onPress={confirmIdentity}
-            className="mt-[20px]"
-          >
-            {isIdentityBusy
-              ? '본인인증 재확인 중'
-              : identityConfirmed
-                ? '본인인증 재확인 완료'
-                : '본인인증 재확인 필요 · 인증하기 ›'}
-          </Button>
         </View>
       </ScrollView>
 
       <BottomActionBar fixed>
-        <SlideToConfirm
-          disabled={!canRequest || !identityConfirmed}
-          label="밀어서 탈퇴하기"
-          onConfirm={withdraw}
-          className={!canRequest || !identityConfirmed ? 'opacity-40' : undefined}
-        />
+        <Button
+          testID="withdraw-submit"
+          fullWidth
+          variant="ink"
+          disabled={!canRequest || isWithdrawing}
+          onPress={() => setIsConfirmOpen(true)}
+          accessibilityLabel="회원 탈퇴하기"
+          className="rounded-full bg-danger"
+          textClassName="text-[15px] font-extrabold"
+        >
+          {isWithdrawing ? '탈퇴 처리 중' : '회원 탈퇴하기'}
+        </Button>
       </BottomActionBar>
+
+      <AlertDialog
+        visible={isConfirmOpen}
+        tone="danger"
+        icon="!"
+        title="정말 탈퇴할까요?"
+        description="탈퇴하면 프로필과 매칭 정보가 영구 삭제되고, 같은 번호로는 30일 동안 다시 가입할 수 없어요."
+        actions={[
+          {
+            label: '계속 이용할게요',
+            variant: 'secondary',
+            testID: 'withdraw-cancel',
+            onPress: () => setIsConfirmOpen(false),
+          },
+          {
+            label: isWithdrawing ? '탈퇴 처리 중' : '네, 탈퇴할게요',
+            variant: 'ink',
+            testID: 'withdraw-confirm',
+            onPress: withdraw,
+          },
+        ]}
+        onDismiss={() => {
+          if (!isWithdrawing) {
+            setIsConfirmOpen(false);
+          }
+        }}
+      />
 
       <AlertDialog
         visible={Boolean(failure)}

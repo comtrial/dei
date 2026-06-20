@@ -8,7 +8,7 @@
  * 무중단 변경되는 게 목표다(spec §7). 이번 핸드오프에서는 *타입 고정 + 기본값*
  * 까지만 제공한다. 후속에 config 테이블이 생기면 이 상수는 "기본값/폴백" 으로
  * 강등되고, 런타임은 서버 값을 우선한다. **하드코딩 가격 금지**(D11): 부스터
- * 실제 가격은 스토어/RevenueCat 콘솔이 SSOT — 여기엔 product id 만 둔다.
+ * 실제 가격은 App Store 콘솔이 SSOT — 여기엔 product id 만 둔다.
  *
  * 근거 매핑: 각 항목 주석의 D번호 = dei-ver2 docs/rooms-spec/decisions.md.
  */

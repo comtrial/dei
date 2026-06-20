@@ -5,6 +5,7 @@ const mockAnalyticsCapture = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn() }),
+  useFocusEffect: (effect: () => void | (() => void)) => effect(),
 }));
 
 jest.mock('expo-image-picker', () => ({

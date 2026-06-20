@@ -4,6 +4,7 @@ import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
 import { getAuthenticatedUser } from '../_shared/auth.ts';
 import { captureEdgeError, captureEdgeMessage } from '../_shared/log.ts';
 import { getCollegeEligibilityFailure } from '../_shared/college-eligibility.ts';
+import { sendPushToRoomMembers } from '../_shared/push.ts';
 
 type EnqueueBody = {
   memberIds?: unknown;
@@ -27,17 +28,6 @@ type ProfileRow = {
 type PassRow = {
   id: string;
   remaining: number;
-};
-
-type MatchPushSettingRow = {
-  match_alert: boolean | null;
-  push_enabled: boolean | null;
-  user_id: string;
-};
-
-type MatchPushTokenRow = {
-  token: string;
-  user_id: string;
 };
 
 // 표준 UUID(8-4-4-4-12). 직전 패턴은 variant 그룹의 dash·길이가 빠져
@@ -78,62 +68,6 @@ function getRematchRestriction(lastRoomLeaveAt?: string | null) {
     remainingMs,
     restricted: remainingMs > 0,
   };
-}
-
-async function dispatchMatchPush(admin: any, roomId: string) {
-  const { data: members, error: membersError } = await admin
-    .from('room_member')
-    .select('user_id')
-    .eq('room_id', roomId)
-    .eq('status', 'active');
-  if (membersError) throw membersError;
-
-  const userIds = [
-    ...new Set(
-      (members ?? [])
-        .map((member: { user_id?: string | null }) => member.user_id)
-        .filter((id: string | null | undefined): id is string => typeof id === 'string' && id.length > 0),
-    ),
-  ];
-  if (userIds.length === 0) return;
-
-  const { data: settings, error: settingsError } = await admin
-    .from('notification_setting')
-    .select('user_id, push_enabled, match_alert')
-    .in('user_id', userIds);
-  if (settingsError) throw settingsError;
-
-  const pushEnabledUserIds = new Set(userIds);
-  for (const setting of (settings ?? []) as MatchPushSettingRow[]) {
-    if (setting.push_enabled === false || setting.match_alert === false) {
-      pushEnabledUserIds.delete(setting.user_id);
-    }
-  }
-  if (pushEnabledUserIds.size === 0) return;
-
-  const { data: tokens, error: tokensError } = await admin
-    .from('push_token')
-    .select('user_id, token')
-    .in('user_id', [...pushEnabledUserIds]);
-  if (tokensError) throw tokensError;
-
-  const messages = ((tokens ?? []) as MatchPushTokenRow[])
-    .filter((token) => pushEnabledUserIds.has(token.user_id))
-    .map((token) => ({
-      to: token.token,
-      title: '매칭이 성사됐어요',
-      body: '새 룸에서 오늘의 일상을 시작해보세요',
-      sound: 'default',
-      channelId: 'default',
-      data: { roomId, type: 'match_created' },
-    }));
-  if (messages.length === 0) return;
-
-  await fetch('https://exp.host/--/api/v2/push/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(messages),
-  });
 }
 
 Deno.serve(async (req) => {
@@ -464,7 +398,14 @@ Deno.serve(async (req) => {
         .maybeSingle();
       const roomId = gm?.room_id ?? null;
       if (roomId) {
-        await dispatchMatchPush(supabase, roomId).catch((error) => {
+        await sendPushToRoomMembers(supabase, {
+          body: '새 룸에서 오늘의 일상을 시작해보세요',
+          category: 'match_alert',
+          data: { roomId, type: 'room_matched' },
+          quietHoursMode: 'exempt',
+          roomId,
+          title: '매칭이 성사됐어요',
+        }).catch((error) => {
           captureEdgeError('enqueue-match-queue', error, {
             stage: 'match_push',
             status: 200,

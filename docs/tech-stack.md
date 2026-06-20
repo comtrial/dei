@@ -15,7 +15,7 @@ Last updated: 2026-04-30
 | 카메라 | react-native-vision-camera | 정확히 2초 녹화, H.264 강제 |
 | 본인인증 | PortOne | Day 1 계약 신청 필수 |
 | 모더레이션 | 운영자 수동 + Slack 웹훅 | 자동 모더레이션은 정식 출시 직전 도입 |
-| 결제 (IAP) | RevenueCat + StoreKit 2 + Play Billing | 정식 출시에 포함 |
+| 결제 (IAP) | expo-iap + Apple IAP 직접 검증 | iOS 우선, 정식 출시에 포함 |
 | 푸시 | Expo Push | 인증 사용자 기준으로 토큰 등록 |
 | 에러 추적 | Sentry | React Native + Edge Functions + Next.js 통합 |
 | 제품 분석 | PostHog | 퍼널, 리텐션, 결제 전환 |
@@ -37,14 +37,14 @@ Last updated: 2026-04-30
 
 ## MVP 이후 또는 정식 출시 포함
 
-- RevenueCat + StoreKit 2 + Play Billing 기반 IAP
+- expo-iap + Apple App Store Server API 기반 iOS IAP
 - 자동 모더레이션
 - App Attest
 - EAS Pro 전환 여부 결정
 
 ## 운영 메모
 
-- Expo Go는 사용하지 않는다. 카메라, 푸시, RevenueCat 같은 네이티브 기능을 고려해 Dev Client를 기준으로 개발한다.
+- Expo Go는 사용하지 않는다. 카메라, 푸시, Apple IAP 같은 네이티브 기능을 고려해 Dev Client를 기준으로 개발한다.
 - EAS 요금제는 Week 3 시점에 실제 빌드 빈도, 팀 역할, 로컬 장비 부담을 보고 다시 판단한다.
 - 비디오는 Cloudflare Stream 없이 Supabase Storage에 저장하고 signed URL로 접근한다.
 - 본인인증은 외부 계약이 필요한 영역이므로 Day 1에 PortOne 계약 신청을 진행한다.

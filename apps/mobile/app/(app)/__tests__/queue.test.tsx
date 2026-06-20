@@ -1,4 +1,5 @@
 import { render, waitFor } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
@@ -6,7 +7,10 @@ const mockAnalyticsCapture = jest.fn();
 const mockSupabaseFrom = jest.fn();
 const mockChannel = jest.fn();
 const mockRemoveChannel = jest.fn();
+const mockAppStateAddEventListener = jest.fn();
+let mockFallbackIntervalCallback: (() => void | Promise<void>) | null = null;
 let mockSearchParams: Record<string, string | undefined> = {};
+let mockRoomMemberResponses: ({ room_id: string } | null)[] = [{ room_id: 'room-xyz' }];
 
 // expo-router: useFocusEffect 는 콜백을 실행하지 않는 noop(=BackHandler 미호출).
 jest.mock('expo-router', () => ({
@@ -62,6 +66,17 @@ function makeChain(rows: { data: unknown; error?: unknown }) {
   };
 }
 
+function makePendingChain() {
+  return {
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    in: jest.fn().mockReturnThis(),
+    order: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    maybeSingle: jest.fn(() => new Promise(() => {})),
+  };
+}
+
 function makeListChain(rows: { data: unknown; error?: unknown }) {
   // team_member 조회는 maybeSingle 없이 awaited thenable 로 끝난다.
   const result = { data: rows.data, error: rows.error ?? null };
@@ -76,6 +91,12 @@ describe('QueueScreen — room_matched 계측', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSearchParams = {};
+    mockRoomMemberResponses = [{ room_id: 'room-xyz' }];
+    mockFallbackIntervalCallback = null;
+    mockAppStateAddEventListener.mockReturnValue({ remove: jest.fn() });
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((...args) =>
+      mockAppStateAddEventListener(...args) as ReturnType<typeof AppState.addEventListener>
+    );
 
     // realtime 구독 빌더: .on().subscribe() 체인이 깨지지 않게.
     mockChannel.mockReturnValue({
@@ -90,23 +111,21 @@ describe('QueueScreen — room_matched 계측', () => {
       }
 
       if (table === 'match_queue') {
-        return makeChain({
-          data: {
-            desired_size: 4,
-            enqueued_at: '2026-06-07T00:00:00.000Z',
-            expires_at: '2026-06-07T06:00:00.000Z',
-            id: 'queue-1',
-          },
-        });
+        return makePendingChain();
       }
 
       if (table === 'room_member') {
         // 진입 직전 이미 매칭됨 → routeToRoom 즉시 발동.
-        return makeChain({ data: { room_id: 'room-xyz' } });
+        return makeChain({ data: mockRoomMemberResponses.shift() ?? null });
       }
 
       return makeChain({ data: null });
     });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
   it('진입 직전 매칭(room_member race-check) 감지 시 room_matched capture + 방으로 replace', async () => {
@@ -131,6 +150,43 @@ describe('QueueScreen — room_matched 계측', () => {
         mode: 'college',
         room_id: 'room-xyz',
       });
+    });
+  });
+
+  it('room_member realtime 을 놓쳐도 fallback 재조회에서 active room 감지 시 방으로 replace', async () => {
+    mockRoomMemberResponses = [null, { room_id: 'room-late' }];
+    const realSetInterval = global.setInterval;
+    const realClearInterval = global.clearInterval;
+    jest.spyOn(global, 'setInterval').mockImplementation((callback, timeout, ...args) => {
+      if (timeout === 3000) {
+        mockFallbackIntervalCallback = () => {
+          if (typeof callback === 'function') {
+            return callback(...args);
+          }
+        };
+        return 1 as unknown as ReturnType<typeof setInterval>;
+      }
+      return realSetInterval(callback, timeout, ...args);
+    });
+    jest.spyOn(global, 'clearInterval').mockImplementation((intervalId) => {
+      if (intervalId === (1 as unknown as ReturnType<typeof setInterval>)) {
+        return;
+      }
+      return realClearInterval(intervalId);
+    });
+
+    render(<QueueScreen />);
+    await waitFor(() => {
+      expect(mockFallbackIntervalCallback).not.toBeNull();
+    });
+
+    void mockFallbackIntervalCallback?.();
+
+    await waitFor(() => {
+      expect(mockAnalyticsCapture).toHaveBeenCalledWith('F1:room_matched', {
+        room_id: 'room-late',
+      });
+      expect(mockReplace).toHaveBeenCalledWith('/(app)/room/room-late');
     });
   });
 });

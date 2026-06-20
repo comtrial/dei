@@ -9,30 +9,32 @@ export type InstantRematchProduct = {
 
 type InstantRematchProductConfig = Omit<InstantRematchProduct, "amount"> & {
   amountEnv: string;
-  revenueCatProductEnv: string;
+  appStoreProductEnv: string;
 };
+
+type EnvGetter = (name: string) => string | undefined;
 
 const INSTANT_REMATCH_PRODUCT_CONFIGS: InstantRematchProductConfig[] = [
   {
     amountEnv: "PORTONE_INSTANT_REMATCH_AMOUNT_1",
+    appStoreProductEnv: "APP_STORE_INSTANT_REMATCH_PRODUCT_ID_1",
     granted: 1,
     id: POLICY.payment.instantRematchProductId,
     label: "바로 매치 1회",
-    revenueCatProductEnv: "REVENUECAT_INSTANT_REMATCH_PRODUCT_ID_1",
   },
   {
     amountEnv: "PORTONE_INSTANT_REMATCH_AMOUNT_3",
+    appStoreProductEnv: "APP_STORE_INSTANT_REMATCH_PRODUCT_ID_3",
     granted: 3,
     id: `${POLICY.payment.instantRematchProductId}_pack3`,
     label: "바로 매치 3회 팩",
-    revenueCatProductEnv: "REVENUECAT_INSTANT_REMATCH_PRODUCT_ID_3",
   },
   {
     amountEnv: "PORTONE_INSTANT_REMATCH_AMOUNT_10",
+    appStoreProductEnv: "APP_STORE_INSTANT_REMATCH_PRODUCT_ID_10",
     granted: 10,
     id: `${POLICY.payment.instantRematchProductId}_pack10`,
     label: "바로 매치 10회 팩",
-    revenueCatProductEnv: "REVENUECAT_INSTANT_REMATCH_PRODUCT_ID_10",
   },
 ];
 
@@ -65,24 +67,33 @@ export function getInstantRematchProductConfig(productId?: string | null) {
     INSTANT_REMATCH_PRODUCT_CONFIGS[0];
 }
 
-export function getRevenueCatProductId(productId?: string | null) {
-  const config = getInstantRematchProductConfig(productId);
-  return Deno.env.get(config.revenueCatProductEnv) || config.id;
+function getDenoEnv(name: string) {
+  return Deno.env.get(name);
 }
 
-export function getInstantRematchProductForRevenueCat({
+export function getAppStoreProductId(
+  productId?: string | null,
+  getEnv: EnvGetter = getDenoEnv,
+) {
+  const config = getInstantRematchProductConfig(productId);
+  return getEnv(config.appStoreProductEnv) || config.id;
+}
+
+export function getInstantRematchProductForAppStore({
+  appStoreProductId,
+  getEnv = getDenoEnv,
   logicalProductId,
-  revenueCatProductId,
 }: {
+  appStoreProductId?: string | null;
+  getEnv?: EnvGetter;
   logicalProductId?: string | null;
-  revenueCatProductId?: string | null;
 }) {
   const expectedConfig = logicalProductId
     ? INSTANT_REMATCH_PRODUCT_CONFIGS.find((product) =>
       product.id === logicalProductId
     )
     : null;
-  const normalizedRevenueCatProductId = revenueCatProductId?.trim() || null;
+  const normalizedAppStoreProductId = appStoreProductId?.trim() || null;
 
   if (logicalProductId && !expectedConfig) {
     throw new Error("unsupported instant rematch product id");
@@ -90,30 +101,30 @@ export function getInstantRematchProductForRevenueCat({
 
   const config = expectedConfig ??
     INSTANT_REMATCH_PRODUCT_CONFIGS.find((product) => {
-      const configuredId = Deno.env.get(product.revenueCatProductEnv) ||
+      const configuredId = getEnv(product.appStoreProductEnv) ||
         product.id;
-      return configuredId === normalizedRevenueCatProductId ||
-        product.id === normalizedRevenueCatProductId;
+      return configuredId === normalizedAppStoreProductId ||
+        product.id === normalizedAppStoreProductId;
     }) ??
     INSTANT_REMATCH_PRODUCT_CONFIGS[0];
-  const configuredRevenueCatProductId =
-    Deno.env.get(config.revenueCatProductEnv) || config.id;
+  const configuredAppStoreProductId =
+    getEnv(config.appStoreProductEnv) || config.id;
 
   if (
-    normalizedRevenueCatProductId &&
-    normalizedRevenueCatProductId !== configuredRevenueCatProductId &&
-    normalizedRevenueCatProductId !== config.id
+    normalizedAppStoreProductId &&
+    normalizedAppStoreProductId !== configuredAppStoreProductId &&
+    normalizedAppStoreProductId !== config.id
   ) {
     throw new Error(
-      "RevenueCat product id does not match the requested booster product",
+      "App Store product id does not match the requested booster product",
     );
   }
 
   return {
+    appStoreProductId: configuredAppStoreProductId,
     granted: config.granted,
     id: config.id,
     label: config.label,
-    revenueCatProductId: configuredRevenueCatProductId,
   };
 }
 

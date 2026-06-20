@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -20,6 +20,7 @@ import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { PAYMENT_PACKS, type PaymentPackId } from '@/lib/b-flow';
 import { enqueueMatchQueue } from '@/lib/matching';
 import { needsNotificationConsent, registerPushToken } from '@/lib/notifications.stub';
+import { mergeCachedProfileSnapshot } from '@/lib/profile-session-cache';
 import {
   confirmInstantRematchPurchase,
   getBoosterPackageOptions,
@@ -56,6 +57,10 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function sumRemainingPasses(passes?: { remaining: number | null }[] | null) {
+  return passes?.reduce((sum, pass) => sum + (pass.remaining ?? 0), 0) ?? 0;
+}
+
 export default function BoosterScreen() {
   const router = useRouter();
   const { memberIds, mode: rawMode } = useLocalSearchParams<{ memberIds?: string; mode?: string }>();
@@ -87,6 +92,39 @@ export default function BoosterScreen() {
     ? formatAvailableAt(rematchRestriction.remainingMs)
     : '방 이탈 후 제한 시간';
 
+  const refreshBoosterPassCount = useCallback(async () => {
+    if (!user?.id) {
+      return null;
+    }
+
+    const { data: passes, error } = await supabase
+      .from('pass')
+      .select('remaining')
+      .eq('user_id', user.id)
+      .eq('kind', 'booster')
+      .eq('status', 'active');
+
+    if (error) {
+      throw error;
+    }
+
+    const nextPassCount = sumRemainingPasses(passes);
+    setPassCount(nextPassCount);
+    mergeCachedProfileSnapshot(user.id, { passCount: nextPassCount });
+    return nextPassCount;
+  }, [user?.id]);
+
+  const safelyRefreshBoosterPassCount = useCallback(async (action: string) => {
+    try {
+      return await refreshBoosterPassCount();
+    } catch (error) {
+      logger.captureException(error, {
+        tags: { screen: 'booster', action },
+      });
+      return null;
+    }
+  }, [refreshBoosterPassCount]);
+
   useEffect(() => {
     if (!user) {
       return;
@@ -106,6 +144,7 @@ export default function BoosterScreen() {
               .from('pass')
               .select('remaining')
               .eq('user_id', user.id)
+              .eq('kind', 'booster')
               .eq('status', 'active'),
           ]);
 
@@ -113,7 +152,9 @@ export default function BoosterScreen() {
         if (passError) throw passError;
 
         setLastRoomLeaveAt(profile?.last_room_leave_at ?? null);
-        setPassCount(passes?.reduce((sum, pass) => sum + pass.remaining, 0) ?? 0);
+        const nextPassCount = sumRemainingPasses(passes);
+        setPassCount(nextPassCount);
+        mergeCachedProfileSnapshot(user.id, { passCount: nextPassCount });
       },
       { tags: { screen: 'booster', action: 'load-state' } },
     );
@@ -187,7 +228,10 @@ export default function BoosterScreen() {
         extra: { reason: getErrorMessage(error) },
       });
     });
-    await enqueueMatchQueue(queueMemberIds, { mode });
+    const registration = await enqueueMatchQueue(queueMemberIds, { mode });
+    if (registration.passConsumed) {
+      await safelyRefreshBoosterPassCount('refresh-pass-count-after-queue');
+    }
     router.replace({
       pathname: '/(app)/queue',
       params: { mode },
@@ -208,13 +252,8 @@ export default function BoosterScreen() {
 
         await syncPurchasesUser(user.id);
         const purchase = await purchaseInstantRematchPackage(selectedPack.id);
-        await confirmInstantRematchPurchase({
-          appUserId: purchase.appUserId,
-          customerInfoRequestDate: purchase.customerInfoRequestDate,
-          productId: purchase.productId,
-          revenueCatProductId: purchase.revenueCatProductId,
-          transactionId: purchase.transactionId,
-        });
+        await confirmInstantRematchPurchase(purchase);
+        await safelyRefreshBoosterPassCount('refresh-pass-count-after-purchase');
         analytics.capture(ANALYTICS_EVENTS.booster_purchase_succeeded, {
           product_id: selectedPack.id,
         });
@@ -303,7 +342,7 @@ export default function BoosterScreen() {
 
           <Card className="mt-[24px] px-[16px] py-[16px]">
             <View className="flex-row flex-wrap gap-[6px]">
-              {['App Store', 'Apple IAP', 'RevenueCat'].map((label) => (
+              {['App Store', 'Apple IAP', '1회 결제'].map((label) => (
                 <Badge key={label} variant="count">{label}</Badge>
               ))}
             </View>
