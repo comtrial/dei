@@ -240,6 +240,7 @@ export default function MyProfileScreen() {
     analytics.capture(ANALYTICS_EVENTS.profile_hub_opened);
 
     if (!user) {
+      setIsLoadingProfile(false);
       return;
     }
 
