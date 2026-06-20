@@ -161,6 +161,7 @@ function formatDateLabel(date: Date) {
 export default function MyProfileScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [editor, setEditor] = useState<ProfileEditor>(null);
   const [draft, setDraft] = useState<ProfileDraft>(EMPTY_DRAFT);
   const [isSaving, setIsSaving] = useState(false);
@@ -222,6 +223,7 @@ export default function MyProfileScreen() {
     if (cached.photoDisplayUrl) {
       setPhotoImageFailed(false);
     }
+    setIsLoadingProfile(false);
   }, [user?.id]);
 
   useEffect(() => {
@@ -328,9 +330,12 @@ export default function MyProfileScreen() {
           region: nextProfile.region,
           universityName: nextProfile.universityName,
         });
+        setIsLoadingProfile(false);
       },
       { tags: { screen: 'my-profile', action: 'load' } },
-    );
+    ).catch(() => {
+      setIsLoadingProfile(false);
+    });
   }, [router, user]);
 
   const nicknameNextChangeAt = nextNicknameChangeDate(profile.nicknameChangedAt);
@@ -582,6 +587,11 @@ export default function MyProfileScreen() {
         )}
       />
 
+      {isLoadingProfile ? (
+        <View className="flex-1 items-center justify-center">
+          <Spinner />
+        </View>
+      ) : (
       <ScrollView className="flex-1 bg-bg">
         <View className="pb-[42px]">
           <View className="px-[24px] pt-[26px]">
@@ -767,6 +777,7 @@ export default function MyProfileScreen() {
           ) : null}
         </View>
       </ScrollView>
+      )}
 
       <BottomSheet
         visible={editor !== null}

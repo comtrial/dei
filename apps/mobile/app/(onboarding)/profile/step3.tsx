@@ -193,7 +193,7 @@ export default function ProfilePreferenceStepScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <TopNav className="border-b-0 bg-bg" onLeftPress={() => router.back()} />
+      <TopNav className="border-b-0 bg-bg" onLeftPress={() => router.replace(ROUTES.profileStep2)} />
 
       <ScrollView className="flex-1 bg-bg">
         <View className="px-[24px] pb-[128px] pt-[18px]">

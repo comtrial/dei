@@ -139,7 +139,7 @@ export default function ProfilePhotoStepScreen() {
           step: 2,
         });
 
-        router.push(ROUTES.profileStep3);
+        router.replace(ROUTES.profileStep3);
       },
       { tags: { screen: 'onboarding-step2', action: 'save' } },
     )
@@ -154,7 +154,7 @@ export default function ProfilePhotoStepScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <TopNav className="border-b-0 bg-bg" onLeftPress={() => router.back()} />
+      <TopNav className="border-b-0 bg-bg" onLeftPress={() => router.replace(ROUTES.profileStep1)} />
 
       <ScrollView className="flex-1 bg-bg">
         <View className="px-[24px] pb-[128px] pt-[18px]">
