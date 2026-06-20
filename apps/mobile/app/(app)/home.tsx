@@ -12,7 +12,7 @@ import {
   logger,
   POLICY,
 } from '@dei/shared';
-import { AlertDialog, Avatar, Banner, Card, Text, color } from '@dei/ui';
+import { AlertDialog, Avatar, Banner, Card, Spinner, Text, color } from '@dei/ui';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics-taxonomy';
 import { getAuthGateRoute } from '@/lib/auth-flow';
@@ -57,6 +57,7 @@ function getErrorMessage(error: unknown) {
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [queueFailed, setQueueFailed] = useState(false);
   const [photoImageFailed, setPhotoImageFailed] = useState(false);
   const [profile, setProfile] = useState<HomeProfile>({
@@ -92,6 +93,7 @@ export default function HomeScreen() {
     if (cached.photoDisplayUrl) {
       setPhotoImageFailed(false);
     }
+    setIsLoadingProfile(false);
   }, [user?.id]);
 
   useEffect(() => {
@@ -208,9 +210,12 @@ export default function HomeScreen() {
         setProfile(nextProfile);
         mergeCachedProfileSnapshot(user.id, nextProfile);
         setPhotoImageFailed(false);
+        setIsLoadingProfile(false);
       },
       { tags: { screen: 'home', action: 'load-profile' } },
-    );
+    ).catch(() => {
+      setIsLoadingProfile(false);
+    });
   }, [router, user]);
 
   const rematchRestriction = getRematchRestriction(profile.lastRoomLeaveAt);
@@ -404,28 +409,34 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        <View className="mt-[36px]">
-          <Text variant="h1" className="text-[28px] leading-[36px]">
-            오늘은 어떤{'\n'}일상을 공유할까요?
-          </Text>
-          <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
-            혼자 또는 친구와 함께 · 방은 마지막 1명이 남을 때까지 유지돼요
-          </Text>
-        </View>
+        {isLoadingProfile ? (
+          <View className="flex-1 items-center justify-center">
+            <Spinner />
+          </View>
+        ) : (
+          <>
+            <View className="mt-[36px]">
+              <Text variant="h1" className="text-[28px] leading-[36px]">
+                오늘은 어떤{'\n'}일상을 공유할까요?
+              </Text>
+              <Text className="mt-[8px] text-[15.5px] leading-[20px] text-ink-3">
+                혼자 또는 친구와 함께 · 방은 마지막 1명이 남을 때까지 유지돼요
+              </Text>
+            </View>
 
-        {rematchRestriction.restricted ? (
-          <Banner
-            tone="accent"
-            icon="⏱"
-            title={`다음 매칭까지 ${formatRematchCountdown(rematchRestriction.remainingMs)}`}
-            countdown={restrictionDescription}
-            cta={needsPaidRematch ? '바로 매치' : '매칭 시작'}
-            onCtaPress={startSolo}
-            className="mt-[22px]"
-          />
-        ) : null}
+            {rematchRestriction.restricted ? (
+              <Banner
+                tone="accent"
+                icon="⏱"
+                title={`다음 매칭까지 ${formatRematchCountdown(rematchRestriction.remainingMs)}`}
+                countdown={restrictionDescription}
+                cta={needsPaidRematch ? '바로 매치' : '매칭 시작'}
+                onCtaPress={startSolo}
+                className="mt-[22px]"
+              />
+            ) : null}
 
-        <View className={`${rematchRestriction.restricted ? 'mt-[24px]' : 'mt-[34px]'} gap-[12px]`}>
+            <View className={`${rematchRestriction.restricted ? 'mt-[24px]' : 'mt-[34px]'} gap-[12px]`}>
           {hasCollegeProfile ? (
             <>
               <Banner
@@ -486,7 +497,9 @@ export default function HomeScreen() {
               <ChevronRight color={color['ink-4']} size={18} />
             </Card>
           </Pressable>
-        </View>
+            </View>
+          </>
+        )}
 
       </View>
 

@@ -268,7 +268,7 @@ export default function ProfileStep1Screen() {
           step: 1,
         });
 
-        router.push(ROUTES.profileStep2);
+        router.replace(ROUTES.profileStep2);
       },
       { tags: { screen: 'onboarding-step1', action: 'save' } },
     )

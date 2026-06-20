@@ -222,7 +222,7 @@ export default function TermsScreen() {
           return;
         }
 
-        router.push(ROUTES.verify);
+        router.replace(ROUTES.verify);
       },
       { tags: { screen: 'terms', action: 'save-agreement' } },
     )
