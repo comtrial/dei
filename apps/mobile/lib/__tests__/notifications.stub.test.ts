@@ -118,17 +118,23 @@ describe('notifications.stub registerPushToken', () => {
     });
   });
 
-  it('requires consent when OS notification permission is not granted', async () => {
+  it('prompts for consent while OS notification permission is undetermined', async () => {
     mocks.getPermissionsAsync.mockResolvedValue({ status: 'undetermined' });
 
     await expect(needsNotificationConsent('user-1')).resolves.toBe(true);
   });
 
-  it('requires consent when the in-app notification setting is off', async () => {
+  it('does not require consent when OS notification permission was denied', async () => {
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'denied' });
+
+    await expect(needsNotificationConsent('user-1')).resolves.toBe(false);
+  });
+
+  it('does not require consent when the in-app notification setting is off', async () => {
     mocks.notificationMaybeSingle.mockResolvedValue({ data: { push_enabled: false }, error: null });
     mocks.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
 
-    await expect(needsNotificationConsent('user-1')).resolves.toBe(true);
+    await expect(needsNotificationConsent('user-1')).resolves.toBe(false);
     expect(mocks.getPermissionsAsync).not.toHaveBeenCalled();
   });
 

@@ -143,15 +143,16 @@ export async function getAppNotificationEnabled(userId: string): Promise<boolean
 }
 
 /**
- * 매칭/부스터 큐 진입 전에 안내 화면이 필요한지 판정한다.
+ * 매칭/부스터 큐 진입 전에 선택 안내 화면을 보여줄지 판정한다.
  * 권한이 아직 미정이어도 OS 다이얼로그를 바로 띄우지 않고 앱 설명 화면을 먼저 보여준다.
+ * 이미 거부했거나 앱 내부 알림을 껐다면 핵심 플로우를 막지 않는다.
  */
 export async function needsNotificationConsent(userId: string): Promise<boolean> {
   const appNotificationEnabled = await getAppNotificationEnabled(userId);
-  if (!appNotificationEnabled) return true;
+  if (!appNotificationEnabled) return false;
 
   const permission = await getNotificationPermissionState();
-  return permission !== 'granted';
+  return permission === 'undetermined';
 }
 
 export async function setAppNotificationEnabled(userId: string, enabled: boolean): Promise<void> {
