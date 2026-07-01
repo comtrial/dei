@@ -12,9 +12,11 @@ import {
   registerPushToken,
   setAppNotificationEnabled,
 } from '@/lib/notifications.stub';
-import { getPermissionState, openSystemSettings, requestPermission } from '@/lib/permissions';
+import { getPermissionState, requestPermission } from '@/lib/permissions';
 import { ROUTES } from '@/lib/routes';
 import { useAuth } from '@/providers/auth-provider';
+
+type NotificationQueueChoice = 'enabled' | 'skipped';
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -59,15 +61,19 @@ export default function NotificationPermissionScreen() {
       params: { entrypoint, mode },
     });
   }, [entrypoint, mode, router]);
-  const completeRegistration = useCallback(async () => {
+  const completeRegistration = useCallback(async (notificationChoice: NotificationQueueChoice) => {
     if (user?.id) {
-      await setAppNotificationEnabled(user.id, true);
-      await registerPushToken(user.id).catch((error) => {
-        logger.captureMessage('push token registration skipped', 'warning', {
-          tags: { screen: 'permission-notification', action: 'register-push-token' },
-          extra: { reason: getErrorMessage(error) },
+      const notificationsEnabled = notificationChoice === 'enabled';
+      await setAppNotificationEnabled(user.id, notificationsEnabled);
+
+      if (notificationsEnabled) {
+        await registerPushToken(user.id).catch((error) => {
+          logger.captureMessage('push token registration skipped', 'warning', {
+            tags: { screen: 'permission-notification', action: 'register-push-token' },
+            extra: { reason: getErrorMessage(error) },
+          });
         });
-      });
+      }
     }
 
     const registration = await enqueueMatchQueue(memberIdList, { mode });
@@ -96,7 +102,7 @@ export default function NotificationPermissionScreen() {
         ]);
 
         if (mounted && appNotificationEnabled && osPermission === 'granted') {
-          await completeRegistration();
+          await completeRegistration('enabled');
         }
       },
       { tags: { screen: 'permission-notification', action: 'autopass' } },
@@ -123,7 +129,7 @@ export default function NotificationPermissionScreen() {
             return;
           }
 
-          await completeRegistration();
+          await completeRegistration('enabled');
         })
         .catch((error) => {
           if (isMatchQueueErrorCode(error, 'REMATCH_RESTRICTED')) {
@@ -144,37 +150,50 @@ export default function NotificationPermissionScreen() {
     };
   }, [completeRegistration, router, user?.id]);
 
+  const handleQueueError = useCallback((error: unknown, action: string) => {
+    if (isMatchQueueErrorCode(error, 'REMATCH_RESTRICTED')) {
+      router.replace(ROUTES.booster);
+      return;
+    }
+
+    logger.captureException(error, {
+      tags: { screen: 'permission-notification', action },
+    });
+    setQueueFailed(true);
+  }, [router]);
+
   const handlePrimary = () => {
     void logger.withErrorCapture(
       'notification-permission.request',
       async () => {
         setIsRequesting(true);
-        if (user?.id) {
-          await setAppNotificationEnabled(user.id, true);
-        }
         const status = await requestPermission('notification');
 
         if (status === 'granted') {
-          await completeRegistration();
+          await completeRegistration('enabled');
           return;
         }
 
         if (status === 'denied' || status === 'undetermined') {
-          await openSystemSettings();
+          await completeRegistration('skipped');
         }
       },
       { tags: { screen: 'permission-notification', action: 'request' } },
     )
-      .catch((error) => {
-        if (isMatchQueueErrorCode(error, 'REMATCH_RESTRICTED')) {
-          router.replace(ROUTES.booster);
-          return;
-        }
+      .catch((error) => handleQueueError(error, 'request-catch'))
+      .finally(() => setIsRequesting(false));
+  };
 
-        logger.captureException(error, {
-          tags: { screen: 'permission-notification', action: 'request-catch' },
-        });
-      })
+  const handleSecondary = () => {
+    void logger.withErrorCapture(
+      'notification-permission.skip',
+      async () => {
+        setIsRequesting(true);
+        await completeRegistration('skipped');
+      },
+      { tags: { screen: 'permission-notification', action: 'skip' } },
+    )
+      .catch((error) => handleQueueError(error, 'skip-catch'))
       .finally(() => setIsRequesting(false));
   };
 
@@ -182,17 +201,17 @@ export default function NotificationPermissionScreen() {
     <>
       <PermissionGate
         icon="🔔"
-        heading={isRequesting ? '알림 권한을 확인 중이에요' : '알림이 꺼져 있어요'}
-        description="매칭 결과를 알려드리려면 알림이 필요해요. 설정에서 켜주세요."
+        heading={isRequesting ? '매칭을 시작하고 있어요' : '알림을 켜면 더 빨리 확인할 수 있어요'}
+        description="알림은 선택 사항이에요. 꺼도 매칭과 기본 기능은 계속 이용할 수 있어요."
         reasons={[
           { text: '매칭이 성사되면 바로 알려드려요' },
           { text: '매시간 일상 업로드 시간 안내' },
           { text: '방 멤버가 귓속말을 보냈을 때' },
         ]}
-        primaryLabel={isRequesting ? '확인 중' : '설정에서 알림 켜기'}
+        primaryLabel={isRequesting ? '시작 중' : '알림 켜고 계속'}
         onPrimary={handlePrimary}
-        secondaryLabel="나중에 하기"
-        onSecondary={returnHome}
+        secondaryLabel="알림 없이 계속하기"
+        onSecondary={handleSecondary}
         onClose={returnHome}
       />
       <AlertDialog
