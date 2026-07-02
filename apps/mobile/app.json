@@ -6,11 +6,11 @@
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "dei",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "kr.cmdsoftware.dei",
-      "supportsTablet": true,
+      "supportsTablet": false,
       "entitlements": {
         "aps-environment": "production"
       },
@@ -48,7 +48,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "imageWidth": 240,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
